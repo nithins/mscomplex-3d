@@ -431,8 +431,6 @@ void GridMSComplex::simplify(crit_idx_pair_list_t & canc_pairs_list,
 
   max_persistence = max_val - min_val;
 
-  _LOG_VAR(max_persistence);
-
   uint num_cancellations = 0;
 
   while (canc_pair_priq.size() !=0)
@@ -508,7 +506,6 @@ void GridMSComplex::simplify(crit_idx_pair_list_t & canc_pairs_list,
     resubmit_strangulations_list.clear();
 
   }
-  _LOG_VAR(num_cancellations);
 }
 
 void GridMSComplex::un_simplify(const crit_idx_pair_list_t &canc_pairs_list)

@@ -59,6 +59,7 @@ class GridDataManager
   typedef GridDataset::rect_t rect_t;
   typedef GridDataset::cell_coord_t cell_coord_t;
   typedef GridDataset::cellid_t cellid_t;
+  typedef GridDataset::cell_fn_t cell_fn_t;
   typedef GridDataset::rect_point_t rect_point_t;
   typedef GridDataset::rect_size_t rect_size_t;
   typedef std::vector<GridDataPiece *> pieces_list_t;
@@ -67,68 +68,34 @@ public:
 
   pieces_list_t                m_pieces;
 
+  cellid_t                     m_size;
   std::string                  m_filename;
-  u_int                        m_size_x;
-  u_int                        m_size_y;
-  u_int                        m_num_levels;
   double                       m_simp_tresh;
-  bool                         m_single_threaded_mode;
   bool                         m_use_ocl;
-  bool                         m_compute_out_of_core;
-
-  boost::thread **             m_threads;
-
-public:
-
-  uint num_parallel;
-
+  cell_fn_t                   *m_pData;
 
   GridDataManager
       ( std::string filename,
-        u_int        size_x,
-        u_int        size_y,
-        u_int        num_levels,
-        bool         threaded_mode,
+        cellid_t     size,
         bool         use_ocl,
-        double       simp_tresh,
-        bool         compute_out_of_core,
-        uint         np);
+        double       simp_tresh
+        );
+
+  void work();
 
   virtual ~GridDataManager ();
 
-  void createPieces_quadtree(rect_t r,rect_t e,u_int level );
-
   void createDataPieces();
 
-  void readDataAndInit(std::ifstream &data_stream,GridDataset::cell_fn_t *,uint start_offset);
-
-  uint getMaxDataBufItems();
-
-  void waitForThreadsInRange(uint,uint);
+  void destoryDataPieces();
 
   void computeMsGraph ( GridDataPiece  * );
 
-  void computeMsGraphInRange(uint ,uint );
-
-  void finalMergeDownPiecesInRange(uint start,uint end);
-
   void collectManifold( GridDataPiece  * );
 
-  void collectManifoldsInRange(uint start,uint end);
-
-  void writeManifoldsInRange(uint start,uint end);
-
-  void computeSubdomainMsgraphs ();
-
-  void mergePiecesUp( );
-
-  void mergePiecesDown( );
-
-  void collectSubdomainManifolds( );
+  void readDataToMem();
 
   void logAllConnections(const std::string &prefix);
-
-  void logAllCancelPairs(const std::string &prefix);
 
 };
 

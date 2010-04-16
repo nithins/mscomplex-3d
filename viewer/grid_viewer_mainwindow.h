@@ -6,6 +6,7 @@
 #include <QModelIndex>
 #include <QVariant>
 #include <QItemSelectionModel>
+#include <grid_datamanager.h>
 
 #include <ui_grid_viewer_mainwindow.h>
 
@@ -23,9 +24,12 @@ class grid_viewer_mainwindow:
 public:
 
   grid_glviewer    *m_viewer;
+  GridDataManager  *m_gdm;
 
   grid_viewer_mainwindow
-      (std::vector<GridDataPiece *> * p ,uint size_x,uint size_y);
+      (GridDataManager *gdm);
+
+  ~grid_viewer_mainwindow();
 
   Q_OBJECT
 

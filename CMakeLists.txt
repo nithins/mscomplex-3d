@@ -1,5 +1,5 @@
 #Define the project we are working on
-project(mscomplex-2d)
+project(mscomplex-3d)
 
 # Look for various software we need
 cmake_minimum_required(VERSION 2.6)

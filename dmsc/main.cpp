@@ -18,19 +18,11 @@ int main(int ac , char **av)
 {
   string filename;
 
-  two_tuple_t<int> dim;
-
-  bool   single_thread = false;
+  grid_types_t::cellid_t size;
 
   bool   use_ocl = false;
 
-  bool   out_of_core_flag = false;
-
-  uint   num_levels  = 1;
-
   double   simp_tresh= 0.0;
-
-  uint   num_parallel  = 1;
 
   bool   gui = false;
 
@@ -38,13 +30,9 @@ int main(int ac , char **av)
   desc.add_options()
       ("help,h", "produce help message")
       ("file,f",bpo::value<std::string >(), "grid file name")
-      ("dim,d", bpo::value<two_tuple_t<int> >(), "dim of grid entered as (x,y)")
-      ("single-thread-mode,s", "single threaded mode")
+      ("size,d", bpo::value<grid_types_t::cellid_t >(), "size of grid entered as [x,y]")
       ("cl","use OpenCL ")
-      ("out-of-core-mode,o", "Compute out of Core")
-      ("num-levels,n",bpo::value<int>(),"num levels to partition into")
       ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
-      ("num-parallel,p",bpo::value<int>(),"num subdomains to process in parallel")
       ("gui,g","show gui")
       ;
 
@@ -59,8 +47,8 @@ int main(int ac , char **av)
     return 1;
   }
 
-  if (vm.count("dim"))
-    dim = vm["dim"].as<two_tuple_t<int> >();
+  if (vm.count("size"))
+    size = vm["size"].as<grid_types_t::cellid_t >();
   else
     throw std::invalid_argument("no dim specified");
 
@@ -72,43 +60,30 @@ int main(int ac , char **av)
   if (vm.count("cl"))
     use_ocl = true;
 
-  if (vm.count("single-thread-mode"))
-    single_thread = true;
-
-  if (vm.count("out-of-core-mode"))
-    out_of_core_flag = true;
-
-  if (vm.count("num-levels"))
-    num_levels = vm["num-levels"].as<int>();
-
   if (vm.count("simp-tresh"))
     simp_tresh = vm["simp-tresh"].as<double>();
-
-  if (vm.count("num-parallel"))
-    num_parallel = vm["num-parallel"].as<int>();
 
   if (vm.count("gui"))
     gui = true;
 
   GridDataManager * gdm = new GridDataManager
-      (filename,dim[0],dim[1],
-       num_levels,
-       single_thread,use_ocl,
-       simp_tresh,
-       out_of_core_flag,
-       num_parallel);
+                          (filename,size,
+                           use_ocl,
+                           simp_tresh);
+
+  gdm->work();
 
   if(gui)
   {
-      QApplication application(ac,av);
+    QApplication application(ac,av);
 
-      grid_viewer_mainwindow gvmw(&gdm->m_pieces,dim[0],dim[1]);
+    grid_viewer_mainwindow gvmw(gdm);
 
-      gvmw.setWindowTitle("ms complex vis");
+    gvmw.setWindowTitle("ms complex vis");
 
-      gvmw.show();
+    gvmw.show();
 
-      application.exec();
+    application.exec();
   }
   else
   {

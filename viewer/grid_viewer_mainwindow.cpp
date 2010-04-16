@@ -105,13 +105,11 @@ void grid_viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( 
 
 
 grid_viewer_mainwindow::grid_viewer_mainwindow
-    (std::vector<GridDataPiece *> * p ,
-     uint size_x,
-     uint size_y)
+    (GridDataManager * gdm):m_gdm(gdm)
 {
   setupUi (this);
 
-  m_viewer = new grid_glviewer(p,size_x,size_y);
+  m_viewer = new grid_glviewer(&gdm->m_pieces,gdm->m_size[0],gdm->m_size[1]);
 
   m_viewer->setParent(glviewer);
 
@@ -126,6 +124,11 @@ grid_viewer_mainwindow::grid_viewer_mainwindow
 
   datapiece_treeView->setSelectionModel ( sel_model );
 
+}
+
+grid_viewer_mainwindow::~grid_viewer_mainwindow()
+{
+  delete m_gdm;
 }
 
 
