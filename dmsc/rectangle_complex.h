@@ -30,89 +30,119 @@
 #include <logutil.h>
 
 
-template <typename coord_type>
-    class rectangle_complex
+template <typename coord_type,coord_type invalid_value = -1>
+    class   rectangle_complex
 {
 
 public:
 
-  typedef three_tuple_t<coord_type> size_def;
-
   struct point_def:public three_tuple_t<coord_type>
   {
+    typedef three_tuple_t<coord_type> base_t;
+
     point_def ( const coord_type &x,
                 const coord_type &y,
-                const coord_type &z,) :
+                const coord_type &z) :
     three_tuple_t<coord_type>(x,y,z){}
 
-    point_def () :three_tuple_t<coord_type>(-1,-1,-1){}
+    point_def () :
+        three_tuple_t<coord_type>(invalid_value,invalid_value,invalid_value){}
 
     inline point_def operator/(const coord_type s) const
     {
       point_def ret;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret[i] = (*this)[i]/s;
 
       return ret;
     }
 
-    inline size_def operator-(const point_def & o) const
+    inline point_def operator-(const point_def & o) const
     {
       point_def ret;
 
-      for(size_t i = 0 ; i < static_size;++i )
-        ret[i] = (*this)[i]-s[i];
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        ret[i] = (*this)[i]-o[i];
 
       return ret;
     }
-  };
 
-  struct range_def:public two_tuple_t
-  {
-    point_def ( const coord_type &x,
-                const coord_type &y)
+    inline point_def operator+(const point_def & o) const
     {
+      point_def ret;
 
-      (*this)[0] = std::min ( x,y);
-      (*this)[1] = std::max ( x,y);
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        ret[i] = (*this)[i]-o[i];
+
+      return ret;
     }
 
-    inline bool isInOpen(const coord_type &c)
+    inline coord_type operator*(const point_def & o) const
+    {
+      coord_type ret = 0;
+
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        ret += (*this)[i] * o[i];
+
+      return ret;
+
+    }
+  };
+
+  struct range_def:public two_tuple_t<coord_type>
+  {
+    range_def ( const coord_type &l,const coord_type &u)
+    {
+
+      (*this)[0] = std::min ( l,u);
+      (*this)[1] = std::max ( l,u);
+    }
+
+    range_def ():two_tuple_t<coord_type>(invalid_value,invalid_value){}
+
+    inline bool isInOpen(const coord_type &c) const
     {
       return (( (*this)[0] < c ) && (  c < (*this)[1] ));
     }
 
-    inline bool isInClosed(const coord_type &c)
+    inline bool isInClosed(const coord_type &c) const
     {
       return (( (*this)[0] <= c ) && (  c <= (*this)[1] ));
     }
 
-    inline bool isOnBndry(const coord_type &c)
+    inline bool isOnBndry(const coord_type &c) const
     {
       return (( (*this)[0] == c ) || (  c == (*this)[1] ));
     }
 
-    inline bool contains(const range_def & r)
+    inline bool contains(const range_def & r) const
     {
       return isInOpen(r[0]) && isInOpen(r[1]);
     }
 
-    inline bool intersects(const range_def & r)
+    inline bool intersects(const range_def & r) const
     {
       return !((r[0] > (*this)[1]) || ((*this)[0] > r[1]));
     }
 
-    inline bool intersection(const range_def & r,range_def & i)
+    inline bool intersection(const range_def & r,range_def & i) const
     {
       i = range_def(std::max(r[0],(*this)[0]),std::min(r[1],(*this)[1]));
 
       return intersects(r);
     }
+
+    inline range_def range_union(const range_def & r) const
+    {
+      return range_def(std::min(r[0],(*this)[0]),std::max(r[1],(*this)[1]));
+    }
   };
 
   struct rectangle_def:public three_tuple_t<range_def>
   {
+    typedef three_tuple_t<range_def> base_t;
+
     rectangle_def
         (
             const coord_type & start_x,
@@ -120,7 +150,7 @@ public:
             const coord_type & start_y,
             const coord_type & end_y,
             const coord_type & start_z,
-            const coord_type & end_z,
+            const coord_type & end_z
             )
 
     {
@@ -155,11 +185,11 @@ public:
 
     rectangle_def(){}
 
-    inline size_def size() const
+    inline point_def size() const
     {
-      size_def ret;
+      point_def ret;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret[i] = (*this)[i][1]-(*this)[i][0];
 
       return ret;
@@ -170,7 +200,7 @@ public:
     {
       bool ret = true;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret &= (*this)[i].isInOpen(p[i]);
 
       return ret;
@@ -180,7 +210,7 @@ public:
     {
       bool ret = true;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret &= (*this)[i].isInClosed(p[i]);
 
       return ret;
@@ -195,7 +225,7 @@ public:
     {
       bool ret = true;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret &= (*this)[i].contains(r[i]);
 
       return ret;
@@ -205,7 +235,7 @@ public:
     {
       bool ret = true;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret &= (*this)[i].intersects(r[i]);
 
       return ret;
@@ -215,50 +245,41 @@ public:
     {
       bool ret = true;
 
-      for(size_t i = 0 ; i < static_size;++i )
+      for(size_t i = 0 ; i < base_t::static_size;++i )
         ret &= (*this)[i].intersection(r[i],ixn[i]);
 
       return ret;
     }
 
-    //    coord_type left() const
-    //    {
-    //      return bl[0];
-    //    }
-    //
-    //    coord_type right() const
-    //    {
-    //      return tr[0];
-    //    }
-    //
-    //    coord_type top() const
-    //    {
-    //      return tr[1];
-    //    }
-    //
-    //    coord_type bottom() const
-    //    {
-    //      return bl[1];
-    //    }
-    //
-    //    point_def bottom_left() const
-    //    {
-    //      return point_def ( left(), bottom() );
-    //    }
-    //
-    //    point_def top_left() const
-    //    {
-    //      return point_def ( left(),top() );
-    //    }
-    //
-    //    point_def top_right() const
-    //    {
-    //      return point_def ( right(),top() );
-    //    }
-    //    point_def bottom_right() const
-    //    {
-    //      return point_def ( right(),bottom() );
-    //    }
+    rectangle_def bounding_box(const rectangle_def & r) const
+    {
+      rectangle_def ret;
+
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        ret[i] = (*this)[i].range_union(r[i]);
+
+      return ret;
+    }
+
+    point_def lower_corner() const
+    {
+      point_def c;
+
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        c[i]= (*this)[i][0];
+
+      return c;
+    }
+
+    point_def upper_corner() const
+    {
+      point_def c;
+
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        c[i]= (*this)[i][1];
+
+      return c;
+    }
 
     friend std::ostream& operator<< ( std::ostream& o, const rectangle_def& r )
     {
@@ -269,6 +290,18 @@ public:
         o<<r[i]<<"x";
 
       return o;
+    }
+
+    coord_type eff_dim() const
+    {
+      coord_type d;
+
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        d += ((*this)[i][1] != (*this)[i][0]) ?(1):(0);
+
+      return d;
+
+
     }
   };
 };
