@@ -29,8 +29,89 @@ if(_ERROR != CL_SUCCESS) throw std::runtime_error(_MESSAGE);
 
 using namespace std;
 
+#include <QFile>
+#include <logutil.h>
+
 void compile_cl_program(std::string prog_filename,std::string header_filename,
-                        std::string compile_flags,cl_program &prog,cl_context & context,cl_device_id &device_id);
+                        std::string compile_flags,cl_program &prog,cl_context & context,cl_device_id &device_id)
+{
+  std::string prog_src;
+
+  if(header_filename.size() != 0 )
+  {
+    QFile head_src_qf ( header_filename.c_str() );
+    head_src_qf.open(QIODevice::ReadOnly);
+
+    prog_src = head_src_qf.readAll().constData();
+    prog_src += "\n";
+  }
+
+  QFile prog_src_qf ( prog_filename.c_str() );
+  prog_src_qf.open(QIODevice::ReadOnly);
+
+  prog_src += prog_src_qf.readAll().constData();
+
+  int error_code;               // error code returned from api calls
+
+  const char * prog_src_cptr= prog_src.c_str();
+
+  prog = clCreateProgramWithSource
+         (context, 1, & prog_src_cptr,
+          NULL, &error_code);
+
+  _CHECKCL_ERR_CODE(error_code,"Failed to create program");
+
+  const char * comp_flags_cptr= (compile_flags.size() >0)?compile_flags.c_str():NULL;
+
+  error_code = clBuildProgram(prog, 0, NULL, comp_flags_cptr, NULL, NULL);
+
+  if(error_code != CL_SUCCESS)
+  {
+
+    const size_t def_len = 2048;
+
+    char *buffer = new char[def_len];
+
+    size_t len;
+
+    clGetProgramBuildInfo(prog, device_id, CL_PROGRAM_BUILD_LOG,
+                          def_len, buffer, &len);
+
+    if(len+1 > def_len)
+    {
+      buffer = new char[len+1];
+
+      clGetProgramBuildInfo(prog, device_id, CL_PROGRAM_BUILD_LOG,
+                            len+1, buffer, &len);
+    }
+
+    std::string buf_str(buffer);
+
+    delete []buffer;
+
+    // Log the binary generated
+
+    size_t bin_size;
+    error_code = clGetProgramInfo(prog,CL_PROGRAM_BINARY_SIZES,
+                                  sizeof(size_t),&bin_size,NULL);
+
+    if(error_code != CL_SUCCESS)
+    {
+      char * ptx_buffer = new char[bin_size];
+
+      clGetProgramInfo(prog,CL_PROGRAM_BINARIES,
+                       sizeof(ptx_buffer),&ptx_buffer,NULL);
+
+      std::string ptx_filename(prog_src_qf.fileName().toStdString());
+      ptx_filename += ".ptx";
+
+      _LOG_TO_FILE(std::string(ptx_buffer),ptx_filename.c_str());
+      delete []ptx_buffer;
+    }
+    throw std::runtime_error(buf_str);
+  }
+
+}
 
 
 static const uint LOCAL_SIZE_LIMIT = 32U;

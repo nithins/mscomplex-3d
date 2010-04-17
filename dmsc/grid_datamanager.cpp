@@ -63,18 +63,18 @@ void GridDataManager::destoryDataPieces()
 
 void GridDataManager::computeMsGraph( GridDataPiece *dp )
 {
-  if(m_use_ocl != true)
+//  if(m_use_ocl != true)
   {
     dp->dataset->work();
 
     dp->dataset->writeout_connectivity(dp->msgraph);
   }
-  else
-  {
-    dp->dataset->work_ocl();
-
-    dp->dataset->writeout_connectivity_ocl(dp->msgraph);
-  }
+//  else
+//  {
+//    dp->dataset->work_ocl();
+//
+//    dp->dataset->writeout_connectivity_ocl(dp->msgraph);
+//  }
 }
 
 void GridDataManager::collectManifold( GridDataPiece  * dp)
@@ -104,8 +104,8 @@ GridDataManager::GridDataManager
     m_simp_tresh(simp_tresh),
     m_pData(NULL)
 {
-  if(m_use_ocl)
-    GridDataset::init_opencl();
+//  if(m_use_ocl)
+//    GridDataset::init_opencl();
 
   createDataPieces();
 }
@@ -115,8 +115,8 @@ GridDataManager::~GridDataManager ()
 
   destoryDataPieces();
 
-  if(m_use_ocl)
-    GridDataset::stop_opencl();
+//  if(m_use_ocl)
+//    GridDataset::stop_opencl();
 }
 
 void GridDataManager::work()

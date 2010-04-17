@@ -78,14 +78,6 @@ public:
   cellflag_array_t  *m_cell_flags;
   cellid_list_t      m_critical_cells;
 
-  critpt_idx_list_t  m_saddle_incidence_idx_offset;
-  critpt_idx_list_t  m_saddle_incidence_idx;
-
-  cl_mem             m_cell_pair_img;
-  cl_mem             m_cell_flag_img;
-  cl_mem             m_critical_cells_buf;
-  cl_mem             m_cell_own_img;
-
   pt_comp_t          m_ptcomp;
 
 public:
@@ -104,10 +96,6 @@ public:
 
   void  set_cell_fn ( cellid_t c,cell_fn_t f );
 
-  void  create_pair_flag_imgs_ocl();
-
-  void  clear_buffers_ocl();
-
   void  init_fnref(cell_fn_t * pData);
 
   void  clear_fnref();
@@ -125,31 +113,7 @@ public:
 
   void  assignCellOwnerExtrema();
 
-
-
-  void  work_ocl(bool collect_cps = true);
-
-  void  writeout_connectivity_ocl(mscomplex_t *msgraph);
-
-  void  assignGradients_ocl(cl_command_queue &commands);
-
-  void  read_pair_img_ocl(cl_command_queue &commands);
-
-  void  read_flag_img_ocl(cl_command_queue &commands);
-
-  void  read_own_img_ocl(cl_command_queue &commands);
-
-  void  collateCritcalPoints_ocl(cl_command_queue &commands);
-
-  int   assignCellOwnerExtrema_ocl(cl_command_queue &commands);
-
-  void  collect_saddle_conn_ocl(cl_command_queue &commands);
-
-
-
   int   postMergeFillDiscs(mscomplex_t *msgraph);
-
-
 
 
   // dataset interface
@@ -192,8 +156,6 @@ public:
 
   inline uint getCellDim ( cellid_t c ) const;
 
-  uint   getMaxCellDim() const;
-
   bool   isTrueBoundryCell ( cellid_t c ) const;
 
   bool   isFakeBoundryCell ( cellid_t c ) const;
@@ -231,13 +193,6 @@ public:
   // for rendering support
 public:
   void getCellCoord ( cellid_t c,double &x,double &y,double &z );
-
-  // opencl implementations
-public:
-
-  static void init_opencl();
-
-  static void stop_opencl();
 
 };
 
