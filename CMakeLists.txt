@@ -40,15 +40,9 @@ endif(NOT OPENCL_FOUND)
 add_subdirectory(utls)
 
 set(dmsc_SRCS
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/main.cpp
-
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/discreteMorseDS.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/discreteMorseAlgorithm.h
-
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/rectangle_complex.h
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.cpp
@@ -61,6 +55,11 @@ set(dmsc_SRCS
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.cpp
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.cpp
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/main.cpp
   )
 
 QT4_ADD_RESOURCES(dmsc_RC_SRCS
