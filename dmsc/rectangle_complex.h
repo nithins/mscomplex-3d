@@ -88,6 +88,17 @@ public:
       return ret;
 
     }
+
+    inline point_def operator*(const coord_type & o) const
+    {
+      point_def ret;
+
+      for(size_t i = 0 ; i < base_t::static_size;++i )
+        ret [i]= (*this)[i] * o;
+
+      return ret;
+
+    }
   };
 
   struct range_def:public two_tuple_t<coord_type>

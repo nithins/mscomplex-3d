@@ -26,77 +26,60 @@
 
 #include <grid_dataset.h>
 
-struct GridDataPiece
+namespace grid
 {
-  typedef GridDataset::cell_fn_t cell_fn_t;
-  typedef GridDataset::mscomplex_t mscomplex_t;
-  typedef GridDataset::cell_coord_t cell_coord_t;
-  typedef GridDataset::rect_t rect_t;
-  typedef GridDataset::rect_size_t rect_size_t;
-  typedef GridDataset::cellid_t cellid_t;
-  typedef GridDataset::critpt_conn_t conn_t;
+  struct octtree_piece
+  {
+    dataset_t   *dataset;
+    mscomplex_t *msgraph;
 
-  GridDataset *dataset;
-  mscomplex_t *msgraph;
+    uint level;
 
-  uint level;
+    uint m_pieceno;
 
-  uint m_pieceno;
+    octtree_piece (uint l);
 
-  GridDataPiece (uint l);
+    std::string label();
+  };
 
-  std::string label();
-};
+  class data_manager_t
+  {
+    typedef std::vector<octtree_piece *> pieces_list_t;
 
-namespace boost
-{
-  class thread;
+  public:
+
+    pieces_list_t                m_pieces;
+
+    cellid_t                     m_size;
+    std::string                  m_filename;
+    double                       m_simp_tresh;
+    bool                         m_use_ocl;
+    cell_fn_t                   *m_pData;
+
+    data_manager_t
+        ( std::string  filename,
+          cellid_t     size,
+          bool         use_ocl,
+          double       simp_tresh
+          );
+
+    void work();
+
+    virtual ~data_manager_t ();
+
+    void createDataPieces();
+
+    void destoryDataPieces();
+
+    void computeMsGraph ( octtree_piece  * );
+
+    void collectManifold( octtree_piece  * );
+
+    void readDataToMem();
+
+    void logAllConnections(const std::string &prefix);
+
+  };
 }
-
-class GridDataManager
-{
-
-  typedef GridDataset::rect_t rect_t;
-  typedef GridDataset::cell_coord_t cell_coord_t;
-  typedef GridDataset::cellid_t cellid_t;
-  typedef GridDataset::cell_fn_t cell_fn_t;
-  typedef GridDataset::rect_point_t rect_point_t;
-  typedef GridDataset::rect_size_t rect_size_t;
-  typedef std::vector<GridDataPiece *> pieces_list_t;
-
-public:
-
-  pieces_list_t                m_pieces;
-
-  cellid_t                     m_size;
-  std::string                  m_filename;
-  double                       m_simp_tresh;
-  bool                         m_use_ocl;
-  cell_fn_t                   *m_pData;
-
-  GridDataManager
-      ( std::string filename,
-        cellid_t     size,
-        bool         use_ocl,
-        double       simp_tresh
-        );
-
-  void work();
-
-  virtual ~GridDataManager ();
-
-  void createDataPieces();
-
-  void destoryDataPieces();
-
-  void computeMsGraph ( GridDataPiece  * );
-
-  void collectManifold( GridDataPiece  * );
-
-  void readDataToMem();
-
-  void logAllConnections(const std::string &prefix);
-
-};
 
 #endif
