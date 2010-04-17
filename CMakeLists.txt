@@ -58,8 +58,6 @@ set(dmsc_SRCS
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.cpp
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/main.cpp
   )
 
 QT4_ADD_RESOURCES(dmsc_RC_SRCS
@@ -84,6 +82,10 @@ set(viewer_UIS
 
 QT4_WRAP_UI(viewer_UI_SRCS ${viewer_UIS})
 
+set(main_SRCS
+  ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+  )
+
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/
   ${CMAKE_CURRENT_SOURCE_DIR}/viewer/
@@ -101,6 +103,7 @@ add_executable(${PROJECT_NAME}
   ${viewer_SRCS}
   ${viewer_MOC_SRCS}
   ${viewer_UI_SRCS}
+  ${main_SRCS}
   )
 
 target_link_libraries(
