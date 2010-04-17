@@ -36,56 +36,109 @@ template <typename coord_type>
 
 public:
 
-  typedef two_tuple_t<coord_type> size_def;
+  typedef three_tuple_t<coord_type> size_def;
 
-  struct point_def:public two_tuple_t<coord_type>
+  struct point_def:public three_tuple_t<coord_type>
   {
-    point_def ( const coord_type &x,const coord_type &y ) :
-        two_tuple_t<coord_type>(x,y){}
+    point_def ( const coord_type &x,
+                const coord_type &y,
+                const coord_type &z,) :
+    three_tuple_t<coord_type>(x,y,z){}
 
-    point_def () :two_tuple_t<coord_type>(-1,-1){}
+    point_def () :three_tuple_t<coord_type>(-1,-1,-1){}
 
     inline point_def operator/(const coord_type s) const
     {
-      return point_def((*this)[0]/s,(*this)[1]/s);
+      point_def ret;
+
+      for(size_t i = 0 ; i < static_size;++i )
+        ret[i] = (*this)[i]/s;
+
+      return ret;
     }
 
     inline size_def operator-(const point_def & o) const
     {
-      return size_def((*this)[0]-o[0],(*this)[1]-o[1]);
+      point_def ret;
+
+      for(size_t i = 0 ; i < static_size;++i )
+        ret[i] = (*this)[i]-s[i];
+
+      return ret;
     }
   };
 
-  struct rectangle_def
+  struct range_def:public two_tuple_t
   {
-    typedef rectangle_def _SELF_NAME;
-
-    point_def bl;
-    point_def tr;
-
-
-    inline size_def size() const
+    point_def ( const coord_type &x,
+                const coord_type &y)
     {
-      return tr - bl;
+
+      (*this)[0] = std::min ( x,y);
+      (*this)[1] = std::max ( x,y);
     }
 
+    inline bool isInOpen(const coord_type &c)
+    {
+      return (( (*this)[0] < c ) && (  c < (*this)[1] ));
+    }
 
+    inline bool isInClosed(const coord_type &c)
+    {
+      return (( (*this)[0] <= c ) && (  c <= (*this)[1] ));
+    }
+
+    inline bool isOnBndry(const coord_type &c)
+    {
+      return (( (*this)[0] == c ) || (  c == (*this)[1] ));
+    }
+
+    inline bool contains(const range_def & r)
+    {
+      return isInOpen(r[0]) && isInOpen(r[1]);
+    }
+
+    inline bool intersects(const range_def & r)
+    {
+      return !((r[0] > (*this)[1]) || ((*this)[0] > r[1]));
+    }
+
+    inline bool intersection(const range_def & r,range_def & i)
+    {
+      i = range_def(std::max(r[0],(*this)[0]),std::min(r[1],(*this)[1]));
+
+      return intersects(r);
+    }
+  };
+
+  struct rectangle_def:public three_tuple_t<range_def>
+  {
     rectangle_def
         (
             const coord_type & start_x,
-            const coord_type & start_y,
             const coord_type & end_x,
-            const coord_type & end_y
+            const coord_type & start_y,
+            const coord_type & end_y,
+            const coord_type & start_z,
+            const coord_type & end_z,
             )
 
     {
+      (*this)[0] = range_def(start_x,end_x);
+      (*this)[1] = range_def(start_y,end_y);
+      (*this)[2] = range_def(start_z,end_z);
+    }
 
-      bl[0] = std::min ( start_x,end_x);
-      bl[1] = std::min ( start_y,end_y);
-
-      tr[0] = std::max ( start_x,end_x);
-      tr[1] = std::max ( start_y,end_y);
-
+    rectangle_def
+        (
+            const range_def &r1,
+            const range_def &r2,
+            const range_def &r3
+            )
+    {
+      (*this)[0] = r1;
+      (*this)[1] = r2;
+      (*this)[2] = r3;
     }
 
     rectangle_def
@@ -94,38 +147,43 @@ public:
             const point_def &p2
             )
     {
-      bl[0] = std::min ( p1[0],p2[0] );
-      bl[1] = std::min ( p1[1],p2[1] );
-
-      tr[0] = std::max ( p1[0],p2[0] );
-      tr[1] = std::max ( p1[1],p2[1] );
+      (*this)[0] = range_def(p1[0],p2[0]);
+      (*this)[1] = range_def(p1[1],p2[1]);
+      (*this)[2] = range_def(p1[2],p2[2]);
 
     }
 
     rectangle_def(){}
 
+    inline size_def size() const
+    {
+      size_def ret;
+
+      for(size_t i = 0 ; i < static_size;++i )
+        ret[i] = (*this)[i][1]-(*this)[i][0];
+
+      return ret;
+    }
+
 
     bool isInInterior ( const point_def & p ) const
     {
-      return
-          (
-              ( p[0] > bl[0] ) &&
-              ( p[1] > bl[1] ) &&
-              ( p[0] < tr[0] ) &&
-              ( p[1] < tr[1] )
-              );
+      bool ret = true;
 
+      for(size_t i = 0 ; i < static_size;++i )
+        ret &= (*this)[i].isInOpen(p[i]);
+
+      return ret;
     }
 
     bool contains ( const point_def & p ) const
     {
-      return
-          (
-              ( p[0] >= bl[0] ) &&
-              ( p[1] >= bl[1] ) &&
-              ( p[0] <= tr[0] ) &&
-              ( p[1] <= tr[1] )
-              );
+      bool ret = true;
+
+      for(size_t i = 0 ; i < static_size;++i )
+        ret &= (*this)[i].isInClosed(p[i]);
+
+      return ret;
     }
 
     bool isOnBoundry ( const point_def & p ) const
@@ -133,84 +191,84 @@ public:
       return ( contains ( p ) && !isInInterior ( p ) );
     }
 
-    bool contains ( const _SELF_NAME &rec ) const
+    bool contains ( const rectangle_def &r ) const
     {
-      return
-          (
-              ( bl[0] < rec.bl[0] ) &&
-              ( bl[1] < rec.bl[1] ) &&
-              ( tr[0] > rec.tr[0] ) &&
-              ( tr[1] > rec.tr[1] )
-              );
+      bool ret = true;
+
+      for(size_t i = 0 ; i < static_size;++i )
+        ret &= (*this)[i].contains(r[i]);
+
+      return ret;
     }
 
-    bool intersects ( const _SELF_NAME &rec ) const
+    bool intersects ( const rectangle_def &r ) const
     {
-      return
-          ! (
-              ( ( tr[0] ) < ( rec.bl[0] ) ) ||
-              ( ( rec.tr[0] ) < ( bl[0] ) ) ||
-              ( ( tr[1] ) < ( rec.bl[1] ) ) ||
-              ( ( rec.tr[1] ) < ( bl[1] ) )
-              );
+      bool ret = true;
+
+      for(size_t i = 0 ; i < static_size;++i )
+        ret &= (*this)[i].intersects(r[i]);
+
+      return ret;
     }
 
-    bool intersection(const rectangle_def & rect,rectangle_def &i) const
+    bool intersection(const rectangle_def & r,rectangle_def &ixn) const
     {
-      if(!intersects(rect))
-        return false;
+      bool ret = true;
 
-      coord_type l = std::max(rect.left(),left());
-      coord_type r = std::min(rect.right(),right());
-      coord_type b = std::max(rect.bottom(),bottom());
-      coord_type t = std::min(rect.top(),top());
+      for(size_t i = 0 ; i < static_size;++i )
+        ret &= (*this)[i].intersection(r[i],ixn[i]);
 
-      i = rectangle_def(l,b,r,t);
-      return true;
+      return ret;
     }
 
-    coord_type left() const
-    {
-      return bl[0];
-    }
-
-    coord_type right() const
-    {
-      return tr[0];
-    }
-
-    coord_type top() const
-    {
-      return tr[1];
-    }
-
-    coord_type bottom() const
-    {
-      return bl[1];
-    }
-
-    point_def bottom_left() const
-    {
-      return point_def ( left(), bottom() );
-    }
-
-    point_def top_left() const
-    {
-      return point_def ( left(),top() );
-    }
-
-    point_def top_right() const
-    {
-      return point_def ( right(),top() );
-    }
-    point_def bottom_right() const
-    {
-      return point_def ( right(),bottom() );
-    }
+    //    coord_type left() const
+    //    {
+    //      return bl[0];
+    //    }
+    //
+    //    coord_type right() const
+    //    {
+    //      return tr[0];
+    //    }
+    //
+    //    coord_type top() const
+    //    {
+    //      return tr[1];
+    //    }
+    //
+    //    coord_type bottom() const
+    //    {
+    //      return bl[1];
+    //    }
+    //
+    //    point_def bottom_left() const
+    //    {
+    //      return point_def ( left(), bottom() );
+    //    }
+    //
+    //    point_def top_left() const
+    //    {
+    //      return point_def ( left(),top() );
+    //    }
+    //
+    //    point_def top_right() const
+    //    {
+    //      return point_def ( right(),top() );
+    //    }
+    //    point_def bottom_right() const
+    //    {
+    //      return point_def ( right(),bottom() );
+    //    }
 
     friend std::ostream& operator<< ( std::ostream& o, const rectangle_def& r )
     {
-      return o<<"[ bl="<<r.bl<<" tr= "<<r.tr<<"]";
+
+      o<<r[0];
+
+      for(size_t i = 1 ; i < rectangle_def::static_size-1;++i )
+        o<<r[i]<<"x";
+
+      return o;
     }
   };
 };
