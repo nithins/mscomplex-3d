@@ -18,7 +18,7 @@ int main(int ac , char **av)
 {
   string filename;
 
-  grid_types_t::cellid_t size;
+  grid::cellid_t size;
 
   bool   use_ocl = false;
 
@@ -30,7 +30,7 @@ int main(int ac , char **av)
   desc.add_options()
       ("help,h", "produce help message")
       ("file,f",bpo::value<std::string >(), "grid file name")
-      ("size,d", bpo::value<grid_types_t::cellid_t >(), "size of grid entered as [x,y]")
+      ("size,d", bpo::value<grid::cellid_t >(), "size of grid entered as [x,y]")
       ("cl","use OpenCL ")
       ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
       ("gui,g","show gui")
@@ -48,7 +48,7 @@ int main(int ac , char **av)
   }
 
   if (vm.count("size"))
-    size = vm["size"].as<grid_types_t::cellid_t >();
+    size = vm["size"].as<grid::cellid_t >();
   else
     throw std::invalid_argument("no dim specified");
 
@@ -66,7 +66,7 @@ int main(int ac , char **av)
   if (vm.count("gui"))
     gui = true;
 
-  GridDataManager * gdm = new GridDataManager
+  grid::data_manager_t * gdm = new grid::data_manager_t
                           (filename,size,
                            use_ocl,
                            simp_tresh);
@@ -77,7 +77,7 @@ int main(int ac , char **av)
   {
     QApplication application(ac,av);
 
-    grid_viewer_mainwindow gvmw(gdm);
+    grid::viewer_mainwindow gvmw(gdm);
 
     gvmw.setWindowTitle("ms complex vis");
 

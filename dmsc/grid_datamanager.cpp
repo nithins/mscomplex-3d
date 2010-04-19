@@ -93,11 +93,11 @@ namespace grid
 
   void data_manager_t::readDataToMem()
   {
-    m_pData = new cell_fn_t[m_size[0]*m_size[1]];
+    m_pData = new cell_fn_t[m_size[0]*m_size[1]*m_size[2]];
 
     ifstream ifs(m_filename.c_str(),std::ios::in|std::ios::binary);
 
-    ifs.read((char*)(void*)m_pData,sizeof(cell_fn_t)*m_size[0]*m_size[1]);
+    ifs.read((char*)(void*)m_pData,sizeof(cell_fn_t)*m_size[0]*m_size[1]*m_size[2]);
   }
 
   data_manager_t::data_manager_t
@@ -124,6 +124,11 @@ namespace grid
 
     //  if(m_use_ocl)
     //    GridDataset::stop_opencl();
+
+    if(m_pData != NULL)
+      delete m_pData;
+
+    m_pData = NULL;
   }
 
   void data_manager_t::work()

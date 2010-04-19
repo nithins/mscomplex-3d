@@ -6,133 +6,135 @@
 #include <grid_viewer_mainwindow.h>
 #include <grid_datamanager.h>
 
-
-bool &get_tva_item_flag_ref
-    (const grid_viewer_mainwindow::eTreeViewActions &action ,
-     grid_piece_rendata *gp_rd )
+namespace grid
 {
-  switch (action)
+  bool &get_tva_item_flag_ref
+      (const viewer_mainwindow::eTreeViewActions &action ,
+       octtree_piece_rendata *gp_rd )
   {
-  case grid_viewer_mainwindow::TVA_SURF: return gp_rd->m_bShowSurface;
-  case grid_viewer_mainwindow::TVA_CPS: return gp_rd->m_bShowCps;
-  case grid_viewer_mainwindow::TVA_CPLABELS: return gp_rd->m_bShowCpLabels;
-  case grid_viewer_mainwindow::TVA_GRAPH:return gp_rd->m_bShowMsGraph;
-  case grid_viewer_mainwindow::TVA_GRAD:return gp_rd->m_bShowGrad;
-  case grid_viewer_mainwindow::TVA_CANC_CPS:return gp_rd->m_bShowCancCps;
-  case grid_viewer_mainwindow::TVA_CANC_GRAPH:return gp_rd->m_bShowCancMsGraph;
-  }
-
-  throw std::invalid_argument("undefined tva action");
-
-  return gp_rd->m_bShowSurface;
-}
-
-bool grid_viewer_mainwindow::get_tva_state ( const eTreeViewActions &action )
-{
-
-  uint num_checked_items = 0;
-  uint num_unchecked_items = 0;
-
-  QModelIndexList indexes = datapiece_treeView->selectionModel()->selectedIndexes();
-
-  for ( QModelIndexList::iterator ind_it = indexes.begin();ind_it != indexes.end(); ++ind_it )
-  {
-    GridTreeModel::tree_item *item = static_cast<GridTreeModel::tree_item*> ( ( *ind_it ).internalPointer() );
-
-    if ( get_tva_item_flag_ref(action,item->node) ) ++num_checked_items;
-    else ++num_unchecked_items;
-  }
-
-  if ( num_checked_items > num_unchecked_items )
-    return true;
-  else
-    return false;
-}
-
-
-
-void grid_viewer_mainwindow::perform_tva_action ( const eTreeViewActions &action, const bool & state )
-{
-
-  QModelIndexList indexes = datapiece_treeView->selectionModel()->selectedIndexes();
-
-  bool need_update = false;
-
-  for ( QModelIndexList::iterator ind_it = indexes.begin();ind_it != indexes.end(); ++ind_it )
-  {
-    GridTreeModel::tree_item *item = static_cast<GridTreeModel::tree_item*> ( ( *ind_it ).internalPointer() );
-
-    if(state != get_tva_item_flag_ref(action,item->node))
+    switch (action)
     {
-      get_tva_item_flag_ref(action,item->node) = state;
-      need_update = true;
+    case viewer_mainwindow::TVA_SURF: return gp_rd->m_bShowSurface;
+    case viewer_mainwindow::TVA_CPS: return gp_rd->m_bShowCps;
+    case viewer_mainwindow::TVA_CPLABELS: return gp_rd->m_bShowCpLabels;
+    case viewer_mainwindow::TVA_GRAPH:return gp_rd->m_bShowMsGraph;
+    case viewer_mainwindow::TVA_GRAD:return gp_rd->m_bShowGrad;
+    case viewer_mainwindow::TVA_CANC_CPS:return gp_rd->m_bShowCancCps;
+    case viewer_mainwindow::TVA_CANC_GRAPH:return gp_rd->m_bShowCancMsGraph;
     }
 
+    throw std::invalid_argument("undefined tva action");
+
+    return gp_rd->m_bShowSurface;
   }
 
-  if(need_update )
+  bool viewer_mainwindow::get_tva_state ( const eTreeViewActions &action )
   {
-    m_viewer->updateGL();
+
+    uint num_checked_items = 0;
+    uint num_unchecked_items = 0;
+
+    QModelIndexList indexes = datapiece_treeView->selectionModel()->selectedIndexes();
+
+    for ( QModelIndexList::iterator ind_it = indexes.begin();ind_it != indexes.end(); ++ind_it )
+    {
+      GridTreeModel::tree_item *item = static_cast<GridTreeModel::tree_item*> ( ( *ind_it ).internalPointer() );
+
+      if ( get_tva_item_flag_ref(action,item->node) ) ++num_checked_items;
+      else ++num_unchecked_items;
+    }
+
+    if ( num_checked_items > num_unchecked_items )
+      return true;
+    else
+      return false;
   }
-}
+
+
+
+  void viewer_mainwindow::perform_tva_action ( const eTreeViewActions &action, const bool & state )
+  {
+
+    QModelIndexList indexes = datapiece_treeView->selectionModel()->selectedIndexes();
+
+    bool need_update = false;
+
+    for ( QModelIndexList::iterator ind_it = indexes.begin();ind_it != indexes.end(); ++ind_it )
+    {
+      GridTreeModel::tree_item *item = static_cast<GridTreeModel::tree_item*> ( ( *ind_it ).internalPointer() );
+
+      if(state != get_tva_item_flag_ref(action,item->node))
+      {
+        get_tva_item_flag_ref(action,item->node) = state;
+        need_update = true;
+      }
+
+    }
+
+    if(need_update )
+    {
+      m_viewer->updateGL();
+    }
+  }
 
 #define ADD_MENU_ACTION(menu_ptr,action_string,start_state,recv_func_name) \
-{\
- QAction * _ama_action  = (menu_ptr)->addAction ( tr(action_string) );\
-                          _ama_action->setCheckable ( true );\
-                          _ama_action->setChecked ( (start_state));\
-                          connect ( _ama_action,SIGNAL ( toggled ( bool ) ),this,SLOT ( recv_func_name(bool) ) );\
-                        }\
+  {\
+   QAction * _ama_action  = (menu_ptr)->addAction ( tr(action_string) );\
+                            _ama_action->setCheckable ( true );\
+                            _ama_action->setChecked ( (start_state));\
+                            connect ( _ama_action,SIGNAL ( toggled ( bool ) ),this,SLOT ( recv_func_name(bool) ) );\
+                          }\
 
 
 
-void grid_viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( const QPoint &pos )
+void viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( const QPoint &pos )
 {
 
-  QMenu menu;
+    QMenu menu;
 
-  ADD_MENU_ACTION ( &menu, "show surface", get_tva_state ( TVA_SURF ), show_surf_toggled );
-  ADD_MENU_ACTION ( &menu, "show critical points", get_tva_state ( TVA_CPS ), show_cps_toggled );
-  ADD_MENU_ACTION ( &menu, "show critical point labels", get_tva_state ( TVA_CPLABELS ), show_cplabels_toggled );
-  ADD_MENU_ACTION ( &menu, "show graph", get_tva_state ( TVA_GRAPH ), show_graph_toggled );
-  ADD_MENU_ACTION ( &menu, "show grad", get_tva_state ( TVA_GRAD ), show_grad_toggled );
-  ADD_MENU_ACTION ( &menu, "show canc cps", get_tva_state ( TVA_CANC_CPS ), show_canc_cps_toggled );
-  ADD_MENU_ACTION ( &menu, "show canc graph", get_tva_state ( TVA_CANC_GRAPH ), show_canc_graph_toggled );
-  menu.exec ( datapiece_treeView->mapToGlobal ( pos ) );
+    ADD_MENU_ACTION ( &menu, "show surface", get_tva_state ( TVA_SURF ), show_surf_toggled );
+    ADD_MENU_ACTION ( &menu, "show critical points", get_tva_state ( TVA_CPS ), show_cps_toggled );
+    ADD_MENU_ACTION ( &menu, "show critical point labels", get_tva_state ( TVA_CPLABELS ), show_cplabels_toggled );
+    ADD_MENU_ACTION ( &menu, "show graph", get_tva_state ( TVA_GRAPH ), show_graph_toggled );
+    ADD_MENU_ACTION ( &menu, "show grad", get_tva_state ( TVA_GRAD ), show_grad_toggled );
+    ADD_MENU_ACTION ( &menu, "show canc cps", get_tva_state ( TVA_CANC_CPS ), show_canc_cps_toggled );
+    ADD_MENU_ACTION ( &menu, "show canc graph", get_tva_state ( TVA_CANC_GRAPH ), show_canc_graph_toggled );
+    menu.exec ( datapiece_treeView->mapToGlobal ( pos ) );
 
+  }
+
+
+
+  viewer_mainwindow::viewer_mainwindow
+      (data_manager_t * gdm):m_gdm(gdm)
+  {
+    setupUi (this);
+
+    m_viewer = new glviewer_t(&gdm->m_pieces,gdm->m_size[0],gdm->m_size[1]);
+
+    m_viewer->setParent(glviewer);
+
+    m_viewer->resize(glviewer->size());
+
+    GridTreeModel *model = new GridTreeModel ( &m_viewer->m_grid_piece_rens);
+
+    RecursiveTreeItemSelectionModel * sel_model =
+        new RecursiveTreeItemSelectionModel ( model, datapiece_treeView );
+
+    datapiece_treeView->setModel ( model );
+
+    datapiece_treeView->setSelectionModel ( sel_model );
+
+  }
+
+  viewer_mainwindow::~viewer_mainwindow()
+  {
+    delete m_gdm;
+  }
 }
 
 
-
-grid_viewer_mainwindow::grid_viewer_mainwindow
-    (GridDataManager * gdm):m_gdm(gdm)
-{
-  setupUi (this);
-
-  m_viewer = new grid_glviewer(&gdm->m_pieces,gdm->m_size[0],gdm->m_size[1]);
-
-  m_viewer->setParent(glviewer);
-
-  m_viewer->resize(glviewer->size());
-
-  GridTreeModel *model = new GridTreeModel ( &m_viewer->m_grid_piece_rens);
-
-  RecursiveTreeItemSelectionModel * sel_model =
-      new RecursiveTreeItemSelectionModel ( model, datapiece_treeView );
-
-  datapiece_treeView->setModel ( model );
-
-  datapiece_treeView->setSelectionModel ( sel_model );
-
-}
-
-grid_viewer_mainwindow::~grid_viewer_mainwindow()
-{
-  delete m_gdm;
-}
-
-
-GridTreeModel::GridTreeModel ( std::vector<grid_piece_rendata *> * dpList, QObject *parent )
+GridTreeModel::GridTreeModel ( std::vector<grid::octtree_piece_rendata *> * dpList, QObject *parent )
   : QAbstractItemModel ( parent )
 {
   setupModelData ( dpList );
@@ -172,7 +174,7 @@ Qt::ItemFlags GridTreeModel::flags ( const QModelIndex &index ) const
 }
 
 QVariant GridTreeModel::headerData ( int /*section*/, Qt::Orientation orientation,
-                                 int role ) const
+                                     int role ) const
 {
   if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
     return "Data Pieces";
@@ -231,15 +233,15 @@ int GridTreeModel::rowCount ( const QModelIndex &parent ) const
 
 }
 
-void GridTreeModel::setupModelData( std::vector<grid_piece_rendata *> * dpList)
+void GridTreeModel::setupModelData( std::vector<grid::octtree_piece_rendata *> * dpList)
 {
   m_tree = new tree_item();
 
 
-  for ( std::vector<grid_piece_rendata*>::iterator dp_it =  dpList->begin();
-          dp_it != dpList->end(); ++dp_it )
+  for ( std::vector<grid::octtree_piece_rendata *>::iterator dp_it =  dpList->begin();
+  dp_it != dpList->end(); ++dp_it )
   {
-    grid_piece_rendata *dp = *dp_it;
+    grid::octtree_piece_rendata *dp = *dp_it;
 
     tree_item *parentItem = m_tree;
 
@@ -252,7 +254,7 @@ void GridTreeModel::setupModelData( std::vector<grid_piece_rendata *> * dpList)
 }
 
 GridTreeModel::tree_item::tree_item
-    ( grid_piece_rendata * _node , tree_item * par ) :
+    ( grid::octtree_piece_rendata * _node , tree_item * par ) :
     node ( _node ),parent ( par )
 {
 }
@@ -289,7 +291,7 @@ void RecursiveTreeItemSelectionModel::select
     collect_all_children ( index,indexes_to_select );
 
     for ( QModelIndexList::iterator ind_it = indexes_to_select.begin();
-          ind_it != indexes_to_select.end();++ind_it )
+    ind_it != indexes_to_select.end();++ind_it )
     {
       QItemSelectionModel::select ( *ind_it,QItemSelectionModel::Select );
     }

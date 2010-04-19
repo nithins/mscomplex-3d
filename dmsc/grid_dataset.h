@@ -171,7 +171,7 @@ namespace grid
     {
       uint dim = 0;
 
-      for (size_t i = 0 ; i < cellid_t::static_size;++i)
+      for (size_t i = 0 ; i < gc_grid_dim;++i)
         dim += ( c[i]&0x01 );
 
       return (dim);
@@ -193,10 +193,6 @@ namespace grid
 
     // return fn at point .. averge of points for higher dims
     cell_fn_t get_cell_fn ( cellid_t c ) const;
-
-    // for rendering support
-  public:
-    void getCellCoord ( cellid_t c,double &x,double &y,double &z );
 
   };
 

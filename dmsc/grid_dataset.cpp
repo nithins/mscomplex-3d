@@ -362,15 +362,17 @@ namespace grid
 
     static_assert(((cell_coord_t)-1) < 0 && "coord_t needs to support -1 ");
 
+    uint pos = 0;
+
     cellid_t i;
 
     for(i[2] = -(c[2]&1) ; i[2] <= (c[2]&1) ;i[2]+=2)
     {
-      for(i[1] = -(c[2]&1) ; i[1] <= (c[2]&1) ;i[1]+=2)
+      for(i[1] = -(c[1]&1) ; i[1] <= (c[1]&1) ;i[1]+=2)
       {
-        for(i[0] = -(c[2]&1) ; i[0] <= (c[2]&1) ;i[0]+=2)
+        for(i[0] = -(c[0]&1) ; i[0] <= (c[0]&1) ;i[0]+=2)
         {
-          *p++ = c+i;
+          p[pos++] = c+i;
         }
       }
     }
@@ -380,12 +382,14 @@ namespace grid
 
   uint dataset_t::getCellFacets (cellid_t c,cellid_t *f) const
   {
+    uint pos = 0;
+
     for(uint d = 0; d< gc_grid_dim; ++d)
     {
-      for(uint i = 0 ; i < c[d]&1;++i)
+      for(uint i = 0 ; i < (c[d]&1);++i)
       {
-        *f = c; (*f++)[d] += 1;
-        *f = c; (*f++)[d] -= 1;
+        f[pos] = c; f[pos++][d] += 1;
+        f[pos] = c; f[pos++][d] -= 1;
       }
     }
     return getCellDim (c)*2;
@@ -395,12 +399,15 @@ namespace grid
   {
     uint cf_ct = (gc_grid_dim - getCellDim (c))*2 ;
 
+    uint pos = 0;
+
     for(uint d = 0; d< gc_grid_dim; ++d)
     {
-      for(uint i = 0 ; i < (c[d]+1)&1;++i)
+      for(uint i = 0 ; i < ((c[d]+1)&1);++i)
       {
-        *cf = c; (*cf++)[d] += 1;
-        *cf = c; (*cf++)[d] -= 1;
+
+        cf[pos] = c; cf[pos++][d] += 1;
+        cf[pos] = c; cf[pos++][d] -= 1;
       }
     }
 
@@ -541,21 +548,6 @@ namespace grid
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
 #warning "havent implemented write out connectivity"
-  }
-
-  void dataset_t::getCellCoord (cellid_t c,double &x,double &y,double &z)
-  {
-    x = c[0];
-    y = 0;
-    z = c[1];
-
-    cellid_t pts[20];
-
-    if(m_ext_rect.contains(c))
-    {
-      y= get_cell_fn(c);
-
-    }
   }
 
   void dataset_t::log_flags()
