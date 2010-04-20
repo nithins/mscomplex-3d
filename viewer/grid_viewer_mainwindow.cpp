@@ -110,7 +110,7 @@ void viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( const
   {
     setupUi (this);
 
-    m_viewer = new glviewer_t(&gdm->m_pieces,gdm->m_size[0],gdm->m_size[1]);
+    m_viewer = new glviewer_t(&gdm->m_pieces,gdm->m_size);
 
     m_viewer->setParent(glviewer);
 

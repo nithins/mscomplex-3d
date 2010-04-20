@@ -10,9 +10,8 @@ namespace grid
 {
 
   glviewer_t::glviewer_t
-      (std::vector<octtree_piece *> * p ,uint size_x,uint size_y):
-      m_size_x(size_x),
-      m_size_y(size_y)
+      (std::vector<octtree_piece *> * p ,cellid_t size):
+      m_size(size)
   {
     for(uint i = 0 ;i < p->size();++i)
       m_grid_piece_rens.push_back(new octtree_piece_rendata(p->at(i)));
@@ -33,9 +32,9 @@ namespace grid
 
     glEnable(GL_NORMALIZE);
 
-    glTranslatef(-1,0,-1);
+    glTranslatef(-0.5,-0.5,-0.5);
 
-    glScalef(0.5/(double) m_size_x,0.1,0.5/(double) m_size_y);
+    glScalef(0.5/(double) m_size[0],0.5/(double)m_size[1],0.5/(double) m_size[2]);
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
@@ -262,15 +261,14 @@ namespace grid
 
     glutils::bufobj_ptr_t cell_bo= glutils::make_buf_obj(cell_locations);
 
-    ren_grad[0] = glutils::create_buffered_lines_ren
-                  (cell_bo,
-                   glutils::make_buf_obj(pair_idxs[0]),
-                   glutils::make_buf_obj());
+    for(uint i = 0 ; i < gc_grid_dim; ++i)
 
-    ren_grad[1] = glutils::create_buffered_lines_ren
-                  (cell_bo,
-                   glutils::make_buf_obj(pair_idxs[1]),
-                   glutils::make_buf_obj());
+    {
+      ren_grad[i] = glutils::create_buffered_lines_ren
+                    (cell_bo,
+                     glutils::make_buf_obj(pair_idxs[i]),
+                     glutils::make_buf_obj());
+    }
 
 
   }
@@ -289,6 +287,21 @@ namespace grid
     glutils::color_t(0.0,0.0,1.0),
     glutils::color_t(0.0,1.0,0.0),
     glutils::color_t(1.0,0.0,0.0),
+    glutils::color_t(1.0,0.0,1.0),
+  };
+
+  glutils::color_t g_grid_grad_colors[] =
+  {
+    glutils::color_t(0.0,0.5,0.5 ),
+    glutils::color_t(0.5,0.0,0.5 ),
+    glutils::color_t(0.5,0.5,0.0 ),
+  };
+
+  glutils::color_t g_grid_cp_conn_colors[] =
+  {
+    glutils::color_t(0.0,0.5,0.5 ),
+    glutils::color_t(0.5,0.0,0.5 ),
+    glutils::color_t(0.5,0.5,0.0 ),
   };
 
 
@@ -296,9 +309,6 @@ namespace grid
   {
     glPushMatrix();
     glPushAttrib ( GL_ENABLE_BIT );
-
-    glScalef ( 2.0,2.0,2.0 );
-    glTranslatef ( -0.5,0.0,-0.5 );
 
     if ( m_bShowSurface && ren_surf)
     {
@@ -308,23 +318,24 @@ namespace grid
 
     glDisable ( GL_LIGHTING );
 
-    glTranslatef ( 0.0,0.02,0.0 );
-
-    if ( m_bShowGrad && ren_grad[0] && ren_grad[1])
+    if(m_bShowGrad)
     {
-      glColor3f ( 0.5,0.0,0.5 );
-      ren_grad[0]->render();
+      for(uint i = 0 ; i < gc_grid_dim; ++i)
+      {
+        if(ren_grad[i])
+        {
+          glColor3dv ( g_grid_grad_colors[i].data() );
 
-      glColor3f ( 0.0,0.5,0.5 );
-      ren_grad[1]->render();
-
+          ren_grad[i]->render();
+        }
+      }
     }
 
     glPointSize ( 4.0 );
 
     if ( m_bShowCps)
     {
-      for(uint i = 0 ; i < 3;++i)
+      for(uint i = 0 ; i < gc_grid_dim+1;++i)
       {
         if(ren_cp[i])
         {
@@ -340,7 +351,7 @@ namespace grid
 
     if ( m_bShowCancCps)
     {
-      for(uint i = 0 ; i < 3;++i)
+      for(uint i = 0 ; i < gc_grid_dim;++i)
       {
         if(ren_canc_cp[i])
         {
@@ -355,24 +366,30 @@ namespace grid
       }
     }
 
-    if ( m_bShowMsGraph && ren_cp_conns[0] && ren_cp_conns[1])
+    if (m_bShowMsGraph)
     {
-      glColor3f ( 0.0,0.5,1.0 );
-      ren_cp_conns[0]->render();
+      for(uint i = 0 ; i < gc_grid_dim;++i)
+      {
+        if(ren_cp_conns[i])
+        {
+          glColor3dv(g_grid_cp_conn_colors[i].data());
 
-      glColor3f ( 1.0,0.5,0.0 );
-      ren_cp_conns[1]->render();
-
+          ren_cp_conns[i]->render();
+        }
+      }
     }
 
-    if ( m_bShowCancMsGraph&& ren_canc_cp_conns[0] && ren_canc_cp_conns[1])
+    if (m_bShowCancMsGraph)
     {
-      glColor3f ( 0.0,0.5,1.0 );
-      ren_canc_cp_conns[0]->render();
+      for(uint i = 0 ; i < gc_grid_dim;++i)
+      {
+        if(ren_canc_cp_conns[i])
+        {
+          glColor3dv(g_grid_cp_conn_colors[i].data());
 
-      glColor3f ( 1.0,0.5,0.0 );
-      ren_canc_cp_conns[1]->render();
-
+          ren_canc_cp_conns[i]->render();
+        }
+      }
     }
 
     glPopAttrib();

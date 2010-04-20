@@ -54,12 +54,12 @@ namespace grid
 
     std::vector<octtree_piece_rendata * >  m_grid_piece_rens;
 
-    uint              m_size_x;
-    uint              m_size_y;
+    cellid_t                               m_size;
+
 
   public:
     glviewer_t(std::vector<octtree_piece *> * p ,
-               uint size_x,uint size_y);
+               cellid_t size);
     ~glviewer_t();
 
   protected :

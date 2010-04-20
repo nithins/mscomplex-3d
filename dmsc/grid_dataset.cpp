@@ -323,38 +323,6 @@ namespace grid
           m_ptcomp );
   }
 
-  cell_fn_t dataset_t::get_cell_fn (cellid_t c) const
-  {
-
-    if(m_vert_fns_ref == NULL)
-      return 0.0;
-
-    cell_fn_t  fn = 0.0;
-
-    cellid_t pts[20];
-
-    uint pts_ct = getCellPoints (c,pts);
-
-    for (int j = 0 ; j <pts_ct ;++j)
-      fn += (*m_vert_fns_ref) (pts[j]/2);
-
-    fn /= pts_ct;
-
-    return fn;
-  }
-
-  void dataset_t::set_cell_fn (cellid_t c,cell_fn_t f)
-  {
-    if (getCellDim (c) != 0)
-      throw std::logic_error ("values only for vertices are specified");
-
-    c[0] /=2;
-
-    c[1] /=2;
-
-    (*m_vert_fns_ref) (c) = f;
-  }
-
   uint dataset_t::getCellPoints (cellid_t c,cellid_t  *p) const
   {
 
@@ -515,8 +483,11 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          if (isCellCritical (c))
+          if (!isCellMarked (c) )
+          {
+            markCellCritical(c);
             m_critical_cells.push_back(c);
+          }
         }
       }
     }
@@ -547,6 +518,9 @@ namespace grid
 
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
+
+    addCriticalPointsToMSComplex(msgraph,m_critical_cells.begin(),m_critical_cells.end());
+
 #warning "havent implemented write out connectivity"
   }
 

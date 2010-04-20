@@ -91,8 +91,6 @@ namespace grid
 
     void  clear();
 
-    void  set_cell_fn ( cellid_t c,cell_fn_t f );
-
     void  init_fnref(cell_fn_t * pData);
 
     void  clear_fnref();
@@ -123,7 +121,7 @@ namespace grid
       static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
       cell_fn_t f1 = (*m_vert_fns_ref)[c1[0]>>1][c1[1]>>1][c1[2]>>1];
-      cell_fn_t f2 = (*m_vert_fns_ref)[c2[0]>>1][c2[1]>>1][c1[2]>>1];
+      cell_fn_t f2 = (*m_vert_fns_ref)[c2[0]>>1][c2[1]>>1][c2[2]>>1];
 
       if (f1 != f2)
         return f1 < f2;
@@ -190,10 +188,6 @@ namespace grid
     void log_flags();
 
     void log_pairs();
-
-    // return fn at point .. averge of points for higher dims
-    cell_fn_t get_cell_fn ( cellid_t c ) const;
-
   };
 
   inline uint dataset_t::getCellDim ( cellid_t c ) const
