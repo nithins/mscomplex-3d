@@ -1,12 +1,14 @@
 #include <queue>
 
-#include <boost/bind.hpp>
+#include <boost/lambda/lambda.hpp>
+#include <boost/lambda/bind.hpp>
 
 #include <logutil.h>
 
 #include <grid_dataset.h>
 #include <grid_mscomplex.h>
 
+namespace bl = boost::lambda;
 
 namespace grid
 {
@@ -483,7 +485,8 @@ namespace grid
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
 
-//    addCriticalPointsToMSComplex(msgraph,m_critical_cells.begin(),m_critical_cells.end());
+    std::for_each(m_critical_cells.begin(),m_critical_cells.end(),
+                  bl::bind(&mscomplex_t::add_critpt,msgraph,bl::_1));
 
 #warning "havent implemented write out connectivity"
   }

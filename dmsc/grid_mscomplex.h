@@ -34,59 +34,64 @@ namespace grid
   typedef std::pair<critpt_idx_t,critpt_idx_t> crit_idx_pair_t;
   typedef std::vector<crit_idx_pair_t>         crit_idx_pair_list_t;
 
+  struct critpt_t
+  {
+    typedef std::multiset<critpt_idx_t>     conn_t;
+    typedef std::vector<cellid_t>           disc_t;
+
+    cellid_t     cellid;
+    critpt_idx_t pair_idx;
+    cell_fn_t    fn;
+
+    bool isCancelled;
+    bool isOnStrangulationPath;
+    bool isBoundryCancelable;
+
+    critpt_t()
+    {
+      isCancelled           = false;
+      isOnStrangulationPath = false;
+      isBoundryCancelable   = false;
+      pair_idx              = -1;
+    }
+
+    disc_t asc_disc;
+    disc_t des_disc;
+
+    conn_t asc;
+    conn_t des;
+  };
+
+
   class mscomplex_t
   {
   public:
-    struct critical_point
-    {
-      typedef std::multiset<uint>     connection_t;
-      typedef std::vector<cellid_t>   disc_t;
 
-      cellid_t     cellid;
-      critpt_idx_t pair_idx;
-      cell_fn_t    fn;
-
-      bool isCancelled;
-      bool isOnStrangulationPath;
-      bool isBoundryCancelable;
-
-      critical_point()
-      {
-        isCancelled           = false;
-        isOnStrangulationPath = false;
-        isBoundryCancelable   = false;
-        pair_idx              = (u_int) -1;
-      }
-
-
-      disc_t asc_disc;
-      disc_t des_disc;
-
-      connection_t asc;
-      connection_t des;
-    };
-
-    typedef std::map<cellid_t,uint>           id_cp_map_t;
-    typedef std::vector<critical_point *>     critpt_list_t;
+    typedef std::map<cellid_t,critpt_idx_t>  id_cp_map_t;
+    typedef std::vector<critpt_t *>          critpt_list_t;
 
     critpt_list_t m_cps;
     id_cp_map_t   m_id_cp_map;
+
     rect_t        m_rect;
     rect_t        m_ext_rect;
 
-    // call these functions only at the highest levels
-    void simplify_un_simplify(double simplification_treshold );
+    void add_critpt(cellid_t);
 
     void simplify(crit_idx_pair_list_t &,double simplification_treshold);
 
     void un_simplify(const crit_idx_pair_list_t &);
+
+    void simplify_un_simplify(double simplification_treshold );
+
 
     void clear();
 
     static mscomplex_t * merge_up(const mscomplex_t& msc1,
                                   const mscomplex_t& msc2);
 
-    void merge_down(mscomplex_t& msc1,mscomplex_t& msc2);
+    void merge_down(mscomplex_t& msc1,
+                    mscomplex_t& msc2);
 
     mscomplex_t(rect_t r,rect_t e):m_rect(r),m_ext_rect(e){}
 
@@ -99,11 +104,10 @@ namespace grid
     void print_connections(std::ostream & os);
   };
 
-  typedef mscomplex_t::critical_point                                critpt_t;
-  typedef mscomplex_t::critical_point::connection_t                 conn_t;
-  typedef mscomplex_t::critical_point::disc_t                       critpt_disc_t;
-  typedef mscomplex_t::critical_point::connection_t::iterator       conn_iter_t;
-  typedef mscomplex_t::critical_point::connection_t::const_iterator const_conn_iter_t;
+  typedef critpt_t::conn_t                 conn_t;
+  typedef critpt_t::disc_t                 critpt_disc_t;
+  typedef critpt_t::conn_t::iterator       conn_iter_t;
+  typedef critpt_t::conn_t::const_iterator const_conn_iter_t;
 
 }
 

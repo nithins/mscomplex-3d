@@ -8,6 +8,14 @@
 
 namespace grid
 {
+  void mscomplex_t::add_critpt(cellid_t c)
+  {
+    critpt_t * cp = new critpt_t;
+    cp->cellid    = c;
+    m_id_cp_map.insert(std::make_pair(c,m_cps.size()));
+    m_cps.push_back(cp);
+  }
+
   void cancelPairs ( mscomplex_t *msc,uint cp0_ind,uint cp1_ind ,
                      std::vector<uint> * new_edges = NULL)
   {
@@ -204,11 +212,7 @@ namespace grid
 
   mscomplex_t::~mscomplex_t()
   {
-    std::for_each(m_cps.begin(),m_cps.end(),delete_ftor<critical_point>);
-
-    m_cps.clear();
-    m_id_cp_map.clear();
-
+    clear();
   }
 
   void shallow_replicate_cp(mscomplex_t &msc,const critpt_t &cp)
