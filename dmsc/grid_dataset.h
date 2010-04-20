@@ -71,7 +71,6 @@ namespace grid
     varray_ref_t      *m_vert_fns_ref;
 
     cellpair_array_t  *m_cell_pairs;
-    cellpair_array_t  *m_cell_own;
     cellflag_array_t  *m_cell_flags;
     cellid_list_t      m_critical_cells;
 
@@ -105,8 +104,6 @@ namespace grid
     void  assignGradients();
 
     void  collateCriticalPoints();
-
-    void  assignCellOwnerExtrema();
 
     int   postMergeFillDiscs(mscomplex_t *msgraph);
 

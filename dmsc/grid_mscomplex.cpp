@@ -664,7 +664,6 @@ namespace boost
     //         ds.init(NULL);
     //
     //       ar & make_binary_object(ds.(*m_cell_flags).data(),num_data_items*sizeof(GridDataset::cell_flag_t));
-    //       ar & make_binary_object(ds.m_cell_own.data(),num_data_items*sizeof(GridDataset::cellid_t));
     //       ar & make_binary_object(ds.m_cell_pairs.data(),num_data_items*sizeof(GridDataset::cellid_t));
     //    }
   }

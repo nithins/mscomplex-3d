@@ -163,8 +163,6 @@ namespace grid
 
       cell_queue.pop();
 
-      (*dataset->m_cell_own)(top_cell) = start_cellId;
-
       id_type      cets[20];
 
       uint cet_ct = ( dataset->*getcets[gradient_dir] ) ( top_cell,cets );
@@ -185,8 +183,6 @@ namespace grid
                  dataset->getCellDim ( next_cell ) &&
                  next_cell != top_cell )
             {
-              (*dataset->m_cell_own)(cets[i]) = start_cellId;
-
               // mark here that the parent of next cell is top_cell
               cell_queue.push ( next_cell );
             }
@@ -208,7 +204,6 @@ namespace grid
     m_vert_fns_ref = NULL;
     m_cell_flags   = NULL;
     m_cell_pairs   = NULL;
-    m_cell_own     = NULL;
 
   }
 
@@ -218,7 +213,6 @@ namespace grid
     m_vert_fns_ref = NULL;
     m_cell_flags   = NULL;
     m_cell_pairs   = NULL;
-    m_cell_own     = NULL;
   }
 
   dataset_t::~dataset_t ()
@@ -237,7 +231,6 @@ namespace grid
 
     m_cell_flags = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],boost::fortran_storage_order());
     m_cell_pairs = new cellpair_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],boost::fortran_storage_order());
-    m_cell_own   = new cellpair_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],boost::fortran_storage_order());
 
     cellid_t c;
 
@@ -251,7 +244,6 @@ namespace grid
 
     (*m_cell_flags).reindex (bl);
     (*m_cell_pairs).reindex (bl);
-    (*m_cell_own).reindex (bl);
   }
 
   void  dataset_t::clear()
@@ -262,14 +254,10 @@ namespace grid
     if(m_cell_pairs != NULL)
       delete m_cell_pairs;
 
-    if(m_cell_own != NULL)
-      delete m_cell_own;
-
     m_critical_cells.clear();
 
     m_cell_flags   = NULL;
     m_cell_pairs   = NULL;
-    m_cell_own     = NULL;
   }
 
   void dataset_t::init_fnref(cell_fn_t * pData)
@@ -443,8 +431,6 @@ namespace grid
     assignGradients();
 
     collateCriticalPoints();
-
-    assignCellOwnerExtrema();
   }
 
   void  dataset_t::assignGradients()
@@ -467,7 +453,6 @@ namespace grid
         }
       }
     }
-
 #warning "havent implemnted mark boundry critpts yet"
   }
 
@@ -491,29 +476,6 @@ namespace grid
         }
       }
     }
-  }
-
-  void  dataset_t::assignCellOwnerExtrema()
-  {
-    for (cellid_list_t::iterator it = m_critical_cells.begin() ;
-    it != m_critical_cells.end();++it)
-    {
-
-      (*m_cell_own)(*it) = *it;
-
-      switch (getCellDim (*it))
-      {
-      case 0:
-        track_gradient_tree_bfs(this,*it,GRADIENT_DIR_UPWARD);
-        break;
-      case 2:
-        track_gradient_tree_bfs(this,*it,GRADIENT_DIR_DOWNWARD);
-        break;
-      default:
-        break;
-      }
-    }
-
   }
 
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
