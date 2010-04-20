@@ -2,8 +2,10 @@
 
 #include <boost/bind.hpp>
 
+#include <logutil.h>
+
 #include <grid_dataset.h>
-#include <discreteMorseAlgorithm.h>
+#include <grid_mscomplex.h>
 
 
 namespace grid
@@ -481,7 +483,7 @@ namespace grid
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
 
-    addCriticalPointsToMSComplex(msgraph,m_critical_cells.begin(),m_critical_cells.end());
+//    addCriticalPointsToMSComplex(msgraph,m_critical_cells.begin(),m_critical_cells.end());
 
 #warning "havent implemented write out connectivity"
   }

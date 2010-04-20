@@ -2,7 +2,7 @@
 #define GRID_VIEWER_H_INCLUDED
 
 #include <QGLViewer/qglviewer.h>
-#include <grid_datamanager.h>
+#include <grid.h>
 
 typedef unsigned char uchar;
 typedef unsigned int  uint;

@@ -5,6 +5,10 @@
 #include <glutils.h>
 
 #include <grid_viewer.h>
+#include <grid_datamanager.h>
+#include <grid_mscomplex.h>
+#include <grid_dataset.h>
+
 
 namespace grid
 {

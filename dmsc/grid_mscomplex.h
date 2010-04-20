@@ -21,49 +21,58 @@
 #ifndef __GRID_MSCOMPLEX_H_INCLUDED_
 #define __GRID_MSCOMPLEX_H_INCLUDED_
 
-#include <cpputils.h>
+#include <set>
+#include <map>
 
-#include <discreteMorseDS.h>
-#include <rectangle_complex.h>
-
-#include <boost/static_assert.hpp>
-#define static_assert BOOST_STATIC_ASSERT
+#include <grid.h>
 
 namespace grid
 {
-
-  typedef int16_t                              cell_coord_t;
-  typedef float                                cell_fn_t;
-  typedef rectangle_complex<cell_coord_t>      rect_cmplx_t;
-  typedef rect_cmplx_t::rectangle_def          rect_t;
-  typedef rect_cmplx_t::point_def              cellid_t;
-  typedef rect_cmplx_t::point_def              rect_point_t;
-  typedef rect_cmplx_t::point_def              rect_size_t;
-  typedef rect_cmplx_t::range_def              rect_range_t;
-  typedef std::vector<cellid_t>                cellid_list_t;
   typedef unsigned int                         critpt_idx_t;
   typedef std::vector<critpt_idx_t>            critpt_idx_list_t;
   typedef std::vector<cell_fn_t>               cp_fn_list_t;
   typedef std::pair<critpt_idx_t,critpt_idx_t> crit_idx_pair_t;
   typedef std::vector<crit_idx_pair_t>         crit_idx_pair_list_t;
-  typedef MSComplex<cellid_t>::critical_point                               critpt_t;
-  typedef MSComplex<cellid_t>::critical_point::connection_t                 conn_t;
-  typedef MSComplex<cellid_t>::critical_point::disc_t                       critpt_disc_t;
-  typedef MSComplex<cellid_t>::critical_point::connection_t::iterator       conn_iter_t;
-  typedef MSComplex<cellid_t>::critical_point::connection_t::const_iterator const_conn_iter_t;
 
-
-
-
-  const uint gc_grid_dim = rect_t::base_t::static_size;
-
-  class mscomplex_t:
-      public MSComplex<cellid_t>
+  class mscomplex_t
   {
   public:
+    struct critical_point
+    {
+      typedef std::multiset<uint>     connection_t;
+      typedef std::vector<cellid_t>   disc_t;
+
+      cellid_t     cellid;
+      critpt_idx_t pair_idx;
+      cell_fn_t    fn;
+
+      bool isCancelled;
+      bool isOnStrangulationPath;
+      bool isBoundryCancelable;
+
+      critical_point()
+      {
+        isCancelled           = false;
+        isOnStrangulationPath = false;
+        isBoundryCancelable   = false;
+        pair_idx              = (u_int) -1;
+      }
+
+
+      disc_t asc_disc;
+      disc_t des_disc;
+
+      connection_t asc;
+      connection_t des;
+    };
+
+    typedef std::map<cellid_t,uint>           id_cp_map_t;
+    typedef std::vector<critical_point *>     critpt_list_t;
+
+    critpt_list_t m_cps;
+    id_cp_map_t   m_id_cp_map;
     rect_t        m_rect;
     rect_t        m_ext_rect;
-    cp_fn_list_t  m_cp_fns;
 
     // call these functions only at the highest levels
     void simplify_un_simplify(double simplification_treshold );
@@ -74,7 +83,8 @@ namespace grid
 
     void clear();
 
-    static mscomplex_t * merge_up(const mscomplex_t& msc1,const mscomplex_t& msc2);
+    static mscomplex_t * merge_up(const mscomplex_t& msc1,
+                                  const mscomplex_t& msc2);
 
     void merge_down(mscomplex_t& msc1,mscomplex_t& msc2);
 
@@ -82,8 +92,19 @@ namespace grid
 
     mscomplex_t(){}
 
+    ~mscomplex_t();
+
     void write_discs(const std::string &fn_prefix);
+
+    void print_connections(std::ostream & os);
   };
+
+  typedef mscomplex_t::critical_point                                critpt_t;
+  typedef mscomplex_t::critical_point::connection_t                 conn_t;
+  typedef mscomplex_t::critical_point::disc_t                       critpt_disc_t;
+  typedef mscomplex_t::critical_point::connection_t::iterator       conn_iter_t;
+  typedef mscomplex_t::critical_point::connection_t::const_iterator const_conn_iter_t;
+
 }
 
 

@@ -24,10 +24,13 @@
 #include <fstream>
 #include <vector>
 
-#include <grid_dataset.h>
+#include <grid.h>
 
 namespace grid
 {
+  class dataset_t;
+  class mscomplex_t;
+
   struct octtree_piece
   {
     dataset_t   *dataset;

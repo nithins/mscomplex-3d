@@ -22,8 +22,11 @@
 #include <fstream>
 #include <timer.h>
 
+#include <logutil.h>
+
+#include <grid_dataset.h>
+#include <grid_mscomplex.h>
 #include <grid_datamanager.h>
-#include <discreteMorseAlgorithm.h>
 
 using namespace std;
 
@@ -188,7 +191,7 @@ namespace grid
 
       std::stringstream ss;
 
-      print_connections( (ostream&)ss,*dp->msgraph);
+      dp->msgraph->print_connections( (ostream&)ss);
 
       outfile<<ss.str();
     }

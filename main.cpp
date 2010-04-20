@@ -5,6 +5,7 @@
 #include <grid_datamanager.h>
 
 #include <cpputils.h>
+#include <iostream>
 
 #include <boost/program_options.hpp>
 

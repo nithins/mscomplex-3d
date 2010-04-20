@@ -26,12 +26,13 @@
 
 #include <boost/multi_array.hpp>
 
-#include <grid_mscomplex.h>
-
-#include <CL/cl.h>
+#include <grid.h>
 
 namespace grid
 {
+
+  class mscomplex_t;
+
   class dataset_t
   {
 

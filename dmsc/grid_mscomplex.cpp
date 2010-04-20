@@ -1,7 +1,6 @@
 #include <cmath>
 #include <queue>
 
-#include <discreteMorseAlgorithm.h>
 #include <grid_mscomplex.h>
 #include <grid_dataset.h>
 #include <fstream>
@@ -9,6 +8,209 @@
 
 namespace grid
 {
+  void cancelPairs ( mscomplex_t *msc,uint cp0_ind,uint cp1_ind ,
+                     std::vector<uint> * new_edges = NULL)
+  {
+    if ( msc->m_cps[cp0_ind]->asc.count ( cp1_ind ) == 0)
+      std::swap ( cp0_ind,cp1_ind );
+
+    if ( msc->m_cps[cp0_ind]->asc.count ( cp1_ind ) == 0 )
+      throw std::logic_error("critical points are not connected" );
+
+    for ( conn_iter_t asc0_it = msc->m_cps[cp0_ind]->asc.begin();
+    asc0_it != msc->m_cps[cp0_ind]->asc.end(); ++asc0_it )
+    {
+      for ( conn_iter_t des1_it  = msc->m_cps[cp1_ind]->des.begin();
+      des1_it != msc->m_cps[cp1_ind]->des.end(); ++des1_it )
+      {
+        if ( ( *asc0_it == cp1_ind ) || ( *des1_it == cp0_ind ) )
+          continue;
+
+        msc->m_cps[ *asc0_it ]->des.insert ( *des1_it );
+        msc->m_cps[ *des1_it ]->asc.insert ( *asc0_it );
+
+        new_edges->push_back(*des1_it );
+        new_edges->push_back(*asc0_it );
+
+        if ( msc->m_cps[ *asc0_it ]->des.count ( *des1_it ) >= 2 )
+        {
+          msc->m_cps[ *asc0_it ]->isOnStrangulationPath = true;
+          msc->m_cps[ *des1_it ]->isOnStrangulationPath = true;
+        }
+      }
+    }
+
+    for ( conn_iter_t asc0_it  = msc->m_cps[cp0_ind]->asc.begin();
+    asc0_it != msc->m_cps[cp0_ind]->asc.end(); ++asc0_it )
+    {
+      if ( *asc0_it == cp1_ind )  continue;
+
+      //    msc->m_cps[ *asc0_it ]->des_disc.insert ( msc->m_cps[ cp1_ind ]->des_disc.begin(),msc->m_cps[ cp1_ind ]->des_disc.end() );
+
+      msc->m_cps[  *asc0_it ]->des.erase ( cp0_ind );
+    }
+
+    for ( conn_iter_t  des0_it = msc->m_cps[cp0_ind]->des.begin();
+    des0_it != msc->m_cps[cp0_ind]->des.end(); ++des0_it )
+    {
+      msc->m_cps[ ( *des0_it ) ]->asc.erase ( cp0_ind );
+    }
+
+    for ( conn_iter_t asc1_it  = msc->m_cps[cp1_ind]->asc.begin();
+    asc1_it != msc->m_cps[cp1_ind]->asc.end(); ++asc1_it )
+    {
+      msc->m_cps[ ( *asc1_it ) ]->des.erase ( cp1_ind );
+    }
+
+    for ( conn_iter_t des1_it = msc->m_cps[cp1_ind]->des.begin();
+    des1_it != msc->m_cps[cp1_ind]->des.end(); ++des1_it )
+    {
+      if ( ( *des1_it ) == cp0_ind )  continue;
+
+      //    msc->m_cps[ *des1_it ]->asc_disc.insert ( msc->m_cps[ cp0_ind ]->asc_disc.begin(),msc->m_cps[ cp0_ind ]->asc_disc.end() );
+
+      msc->m_cps[ ( *des1_it ) ]->asc.erase ( cp1_ind );
+
+
+    }
+
+    msc->m_cps[cp0_ind]->isCancelled = true;
+    //  msc->m_cps[cp0_ind]->asc.clear();
+    msc->m_cps[cp0_ind]->des.clear();
+    //  msc->m_cps[cp0_ind]->asc_disc.clear();
+    //  msc->m_cps[cp0_ind]->des_disc.clear();
+
+    msc->m_cps[cp1_ind]->isCancelled = true;
+    msc->m_cps[cp1_ind]->asc.clear();
+    //  msc->m_cps[cp1_ind]->des.clear();
+    //  msc->m_cps[cp1_ind]->asc_disc.clear();
+    //  msc->m_cps[cp1_ind]->des_disc.clear();
+  }
+
+  void uncancel_pairs( mscomplex_t  *msc,uint cp1_idx,uint cp2_idx)
+  {
+    if( msc->m_cps[cp1_idx]->asc.find ( cp2_idx ) ==
+        msc->m_cps[cp1_idx]->asc.end() )
+    {
+      std::swap ( cp1_idx,cp2_idx );
+    }
+
+    conn_t * acdc_conns[] =
+    {&msc->m_cps[cp1_idx]->asc,
+     &msc->m_cps[cp2_idx]->des};
+
+    uint * cp_idxs[]= {&cp1_idx,&cp2_idx};
+
+
+    for(uint i = 0 ;i < 2 ; ++i)
+    {
+
+      if( acdc_conns[i]->find ( *cp_idxs[(i+1)%2] ) ==
+          acdc_conns[i]->end())
+      {
+        throw std::logic_error("cancellable pair is not connected");
+      }
+
+      conn_t new_acdc;
+
+      for(conn_iter_t acdc_conn_it = acdc_conns[i]->begin();
+      acdc_conn_it != acdc_conns[i]->end();++acdc_conn_it)
+      {
+        if(*acdc_conn_it == *cp_idxs[(i+1)%2])
+          continue;
+
+        if(msc->m_cps[*acdc_conn_it]->isBoundryCancelable == false)
+        {
+          new_acdc.insert(*acdc_conn_it);
+          continue;
+        }
+
+        if(msc->m_cps[*acdc_conn_it]->isCancelled == true)
+          throw std::logic_error("*acdc_conn_it should not have been cancelled yet");
+
+
+        uint conn_cp_pair_idx = msc->m_cps[*acdc_conn_it]->pair_idx;
+
+        if(msc->m_cps[conn_cp_pair_idx]->pair_idx != *acdc_conn_it)
+          throw std::logic_error("*acdc_conn_it and its pair dont agree on pairing");
+
+        conn_t * conn_cp_acdc_conns[] =
+        {&msc->m_cps[conn_cp_pair_idx]->asc,
+         &msc->m_cps[conn_cp_pair_idx]->des};
+
+        for(conn_iter_t conn_cp_acdc_conn_it =
+            conn_cp_acdc_conns[i]->begin();
+        conn_cp_acdc_conn_it != conn_cp_acdc_conns[i]->end();
+        ++conn_cp_acdc_conn_it)
+        {
+          if(msc->m_cps[*conn_cp_acdc_conn_it]->isBoundryCancelable == true)
+            throw std::logic_error("the connected cancelable cp shold not "\
+                                   " contain a cancelable cp in its connections");
+
+          new_acdc.insert(*conn_cp_acdc_conn_it);
+        }
+      }
+
+      acdc_conns[i]->clear();
+      acdc_conns[i]->insert(new_acdc.begin(),new_acdc.end());
+    }
+
+    msc->m_cps[cp1_idx]->isCancelled = false;
+    msc->m_cps[cp2_idx]->isCancelled = false;
+  }
+
+  void print_cp_connections(std::ostream & os,const mscomplex_t &msc,
+                            const conn_t &conn)
+  {
+
+    os<<"{ ";
+    for(conn_iter_t it = conn.begin(); it != conn.end(); ++it)
+    {
+      if(msc.m_cps[*it]->isBoundryCancelable)
+        os<<"*";
+      if(msc.m_cps[*it]->isOnStrangulationPath)
+        os<<"-";
+      os<<msc.m_cps[*it]->cellid;
+      os<<", ";
+    }
+    os<<"}";
+  }
+
+
+  void mscomplex_t::print_connections(std::ostream & os)
+  {
+    for(uint i = 0 ; i < m_cps.size();++i)
+    {
+      os<<"des(";
+      if(m_cps[i]->isBoundryCancelable)
+        os<<"*";
+      if(m_cps[i]->isOnStrangulationPath)
+        os<<"-";
+      os<<m_cps[i]->cellid<<") = ";
+      print_cp_connections(os,*this,m_cps[i]->des);
+      os<<std::endl;
+
+      os<<"asc(";
+      if(m_cps[i]->isBoundryCancelable)
+        os<<"*";
+      if(m_cps[i]->isOnStrangulationPath)
+        os<<"-";
+      os<<m_cps[i]->cellid<<") = ";
+      print_cp_connections(os,*this,m_cps[i]->asc);
+      os<<std::endl;
+      os<<std::endl;
+    }
+  }
+
+  mscomplex_t::~mscomplex_t()
+  {
+    std::for_each(m_cps.begin(),m_cps.end(),delete_ftor<critical_point>);
+
+    m_cps.clear();
+    m_id_cp_map.clear();
+
+  }
+
   void shallow_replicate_cp(mscomplex_t &msc,const critpt_t &cp)
   {
     if(msc.m_id_cp_map.count(cp.cellid) != 0)
@@ -20,6 +222,7 @@ namespace grid
     dest_cp->isBoundryCancelable      = cp.isBoundryCancelable;
     dest_cp->isOnStrangulationPath    = cp.isOnStrangulationPath;
     dest_cp->cellid                   = cp.cellid;
+    dest_cp->fn                       = cp.fn;
 
     msc.m_id_cp_map[dest_cp->cellid]  = msc.m_cps.size();
     msc.m_cps.push_back(dest_cp);
@@ -66,7 +269,6 @@ namespace grid
           continue;
 
         shallow_replicate_cp(*out_msc,*src_cp);
-        out_msc->m_cp_fns.push_back(msc->m_cp_fns[j]);
 
       }
     }
@@ -234,13 +436,11 @@ namespace grid
         if(!src_in_msc)
         {
           shallow_replicate_cp(*msc,*src_cp);
-          msc->m_cp_fns.push_back(m_cp_fns[j]);
         }
 
         if(!src_pair_in_msc)
         {
           shallow_replicate_cp(*msc,*src_pair_cp);
-          msc->m_cp_fns.push_back(m_cp_fns[src_cp->pair_idx]);
         }
 
         uint dest_cp_idx = msc->m_id_cp_map[src_cp->cellid];
@@ -276,7 +476,6 @@ namespace grid
             if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
             {
               shallow_replicate_cp(*msc,*src_conn_cp);
-              msc->m_cp_fns.push_back(m_cp_fns[*it]);
             }
 
             dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
@@ -309,11 +508,8 @@ namespace grid
             critpt_t *src_conn_cp = m_cps[*it];
 
             if(src_conn_cp->isBoundryCancelable == true)
-            {
-              _LOG("appears that "<<src_conn_cp->cellid<<"is still connected to"<<
-                   src_cp->cellid);
-              //throw std::logic_error("only non cancellable cps must be remaining 1");
-            }
+              throw std::logic_error("only non cancellable cps must be remaining 1");
+
 
             if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
               continue;
@@ -342,10 +538,10 @@ namespace grid
 
     bool operator()(const canc_pair_idx_t & p1, const canc_pair_idx_t &p2)
     {
-      cell_fn_t f1 = m_msc->m_cp_fns[p1.first];
-      cell_fn_t f2 = m_msc->m_cp_fns[p1.second];
-      cell_fn_t f3 = m_msc->m_cp_fns[p2.first];
-      cell_fn_t f4 = m_msc->m_cp_fns[p2.second];
+      cell_fn_t f1 = m_msc->m_cps[p1.first]->fn;
+      cell_fn_t f2 = m_msc->m_cps[p1.second]->fn;
+      cell_fn_t f3 = m_msc->m_cps[p2.first]->fn;
+      cell_fn_t f4 = m_msc->m_cps[p2.second]->fn;
 
       cell_fn_t d1 = std::abs(f2-f1);
       cell_fn_t d2 = std::abs(f4-f3);
@@ -415,9 +611,9 @@ namespace grid
         }
       }
 
-      max_val = std::max(max_val,m_cp_fns[i]);
+      max_val = std::max(max_val,m_cps[i]->fn);
 
-      min_val = std::min(min_val,m_cp_fns[i]);
+      min_val = std::min(min_val,m_cps[i]->fn);
 
       for(const_conn_iter_t it = cp->des.begin();it != cp->des.end() ;++it)
       {
@@ -443,7 +639,7 @@ namespace grid
       critpt_t * cp1 = m_cps[v1];
       critpt_t * cp2 = m_cps[v2];
 
-      cell_fn_t persistence = std::abs(m_cp_fns[v1]-m_cp_fns[v2]);
+      cell_fn_t persistence = std::abs(m_cps[v1]->fn-m_cps[v2]->fn);
 
       if((double)persistence/(double)max_persistence > simplification_treshold)
         break;
@@ -479,7 +675,7 @@ namespace grid
 
       std::vector<uint> new_edges;
 
-      cancelPairs ( this,v1,v2 ,new_edges);
+      cancelPairs ( this,v1,v2 ,&new_edges);
       num_cancellations++;
 
       // by boundry cancelable I mean cancelable only ..:)
@@ -529,9 +725,6 @@ namespace grid
     un_simplify(canc_pairs_list);
   }
 
-
-  //#define SAVE_TO_ASCII
-
   void write_disc(const critpt_disc_t *disc,
                   const std::string &prefix,
                   const cellid_t &c )
@@ -543,22 +736,12 @@ namespace grid
 
     std::ofstream os;
 
-#ifdef SAVE_TO_ASCII
-    os.open(ss.str().c_str(),std::ios::out|std::ios::ate|std::ios::app);
-#else
     os.open(ss.str().c_str(),std::ios::out|std::ios::ate|std::ios::app|std::ios::binary);
-#endif
+
 
     if(os.is_open() == false)
       throw std::runtime_error("asc/des disc file not writeable");
-#ifdef SAVE_TO_ASCII
-    for(int i = 0 ; i < disc->size();++i)
-    {
-      os<<(*disc)[i];
-    }
-#else
     os.write((const char*)(const void*)disc->data(),disc->size()*sizeof(cellid_t));
-#endif
 
     os.close();
   }
@@ -583,6 +766,7 @@ namespace grid
   }
 }
 
+
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/array.hpp>
 #include <boost/serialization/map.hpp>
@@ -592,8 +776,6 @@ namespace grid
 
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
-
-//#include <grid_dataset.h>
 
 using namespace grid;
 
@@ -638,6 +820,7 @@ namespace boost
       ar & c.isCancelled;
       ar & c.isOnStrangulationPath;
       ar & c.pair_idx;
+      ar & c.fn;
     }
 
 
@@ -646,7 +829,6 @@ namespace boost
     {
       ar & g.m_rect;
       ar & g.m_ext_rect;
-      ar & g.m_cp_fns;
       ar & g.m_id_cp_map;
       ar & g.m_cps;
     }

@@ -40,9 +40,9 @@ endif(NOT OPENCL_FOUND)
 add_subdirectory(utls)
 
 set(dmsc_SRCS
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/discreteMorseDS.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/discreteMorseAlgorithm.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/rectangle_complex.h
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.cpp
