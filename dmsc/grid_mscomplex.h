@@ -28,20 +28,21 @@
 
 namespace grid
 {
-  typedef unsigned int                         critpt_idx_t;
-  typedef std::vector<critpt_idx_t>            critpt_idx_list_t;
-  typedef std::vector<cell_fn_t>               cp_fn_list_t;
-  typedef std::pair<critpt_idx_t,critpt_idx_t> crit_idx_pair_t;
-  typedef std::vector<crit_idx_pair_t>         crit_idx_pair_list_t;
+
+  typedef std::vector<uint>         critpt_idx_list_t;
+  typedef std::vector<cell_fn_t>    cp_fn_list_t;
+  typedef two_tuple_t<uint>         uint_pair_t;
+  typedef std::vector<uint_pair_t>  uint_pair_list_t;
 
   struct critpt_t
   {
-    typedef std::multiset<critpt_idx_t>     conn_t;
-    typedef std::vector<cellid_t>           disc_t;
+    typedef std::multiset<uint>     conn_t;
+    typedef std::vector<cellid_t>   disc_t;
 
     cellid_t     cellid;
-    critpt_idx_t pair_idx;
+    uint         pair_idx;
     cell_fn_t    fn;
+    uchar        index;
 
     bool isCancelled;
     bool isOnStrangulationPath;
@@ -67,8 +68,8 @@ namespace grid
   {
   public:
 
-    typedef std::map<cellid_t,critpt_idx_t>  id_cp_map_t;
-    typedef std::vector<critpt_t *>          critpt_list_t;
+    typedef std::map<cellid_t,uint>  id_cp_map_t;
+    typedef std::vector<critpt_t *>  critpt_list_t;
 
     critpt_list_t m_cps;
     id_cp_map_t   m_id_cp_map;
@@ -76,11 +77,13 @@ namespace grid
     rect_t        m_rect;
     rect_t        m_ext_rect;
 
-    void add_critpt(cellid_t);
+    void connect_cps(cellid_t c1,cellid_t c2);
 
-    void simplify(crit_idx_pair_list_t &,double simplification_treshold);
+    void add_critpt(cellid_t,uchar index);
 
-    void un_simplify(const crit_idx_pair_list_t &);
+    void simplify(uint_pair_list_t &,double simplification_treshold);
+
+    void un_simplify(const uint_pair_list_t &);
 
     void simplify_un_simplify(double simplification_treshold );
 

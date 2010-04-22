@@ -107,6 +107,7 @@ namespace grid
 
   void track_gradient_tree_bfs
       (dataset_t *dataset,
+       mscomplex_t *msgraph,
        cellid_t start_cellId,
        eGradDirection gradient_dir
        )
@@ -114,8 +115,6 @@ namespace grid
     typedef cellid_t id_type;
 
     std::queue<id_type> cell_queue;
-
-    // mark here that that cellid has no parent.
 
     cell_queue.push ( start_cellId );
 
@@ -133,7 +132,7 @@ namespace grid
       {
         if ( dataset->isCellCritical ( cets[i] ) )
         {
-          //        connectCps(msgraph,start_cellId,cets[i]);
+          msgraph->connect_cps(start_cellId,cets[i]);
         }
         else
         {
@@ -145,7 +144,6 @@ namespace grid
                  dataset->getCellDim ( next_cell ) &&
                  next_cell != top_cell )
             {
-              // mark here that the parent of next cell is top_cell
               cell_queue.push ( next_cell );
             }
           }
@@ -442,12 +440,16 @@ namespace grid
 
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
+    using namespace boost::lambda;
+    using namespace std;
 
-    std::for_each(m_critical_cells.begin(),m_critical_cells.end(),
-                  bl::bind(&mscomplex_t::add_critpt,msgraph,bl::_1));
+    for_each(m_critical_cells.begin(),m_critical_cells.end(),
+                  bind(&mscomplex_t::add_critpt,msgraph,_1,
+                           bind(&dataset_t::getCellDim,this,_1)));
 
+    for_each(m_critical_cells.begin(),m_critical_cells.end(),
+                  bind(track_gradient_tree_bfs,this,msgraph,_1,GRADIENT_DIR_DOWNWARD));
 
-#warning "havent implemented write out connectivity"
   }
 
   void dataset_t::log_flags()
