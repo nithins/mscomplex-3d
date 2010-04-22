@@ -35,12 +35,8 @@ namespace grid
 
   void data_manager_t::createDataPieces ()
   {
-    cellid_t z,o;
-    z.assign(0);
-    o.assign(1);
-
-    rect_t r(z,(m_size-o)*2);
-    rect_t e(z,(m_size-o)*2);
+    rect_t r(cellid_t::zero,(m_size-cellid_t::one)*2);
+    rect_t e(cellid_t::zero,(m_size-cellid_t::one)*2);
 
     octtree_piece *dp = new octtree_piece(m_pieces.size());
     dp->dataset = new dataset_t(r,e);

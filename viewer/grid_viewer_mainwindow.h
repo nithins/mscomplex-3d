@@ -8,6 +8,7 @@
 #include <QItemSelectionModel>
 
 #include <ui_grid_viewer_mainwindow.h>
+#include <grid.h>
 
 namespace grid
 {
@@ -29,7 +30,7 @@ namespace grid
     data_manager_t  *m_gdm;
 
     viewer_mainwindow
-        (data_manager_t *gdm);
+        (data_manager_t *gdm,const rect_t & roi);
 
     ~viewer_mainwindow();
 

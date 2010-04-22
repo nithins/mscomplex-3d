@@ -43,48 +43,6 @@ namespace grid
     return 0;
   }
 
-  void connectCps (mscomplex_t *msgraph,uint cp1_ind,uint cp2_ind)
-  {
-    if(dataset_t::s_getCellDim(msgraph->m_cps[cp1_ind]->cellid) <
-       dataset_t::s_getCellDim(msgraph->m_cps[cp2_ind]->cellid))
-      std::swap(cp1_ind,cp2_ind);
-
-    critpt_t *cp1 = msgraph->m_cps[cp1_ind];
-
-    critpt_t *cp2 = msgraph->m_cps[cp2_ind];
-
-    cp1->des.insert (cp2_ind);
-
-    cp2->asc.insert (cp1_ind);
-  }
-
-  void connectCps (mscomplex_t *msgraph,cellid_t c1,cellid_t c2)
-  {
-    if (dataset_t::s_getCellDim (c1) <dataset_t::s_getCellDim (c2))
-      std::swap (c1,c2);
-
-    if (dataset_t::s_getCellDim (c1) != dataset_t::s_getCellDim (c2) +1)
-      throw std::logic_error ("must connect i,i+1 cp (or vice versa)");
-
-    if (msgraph->m_id_cp_map.find (c1) == msgraph->m_id_cp_map.end())
-      throw std::logic_error (_SSTR ("cell not in id_cp_map c1="<<c1));
-
-    if (msgraph->m_id_cp_map.find (c2) == msgraph->m_id_cp_map.end())
-      throw std::logic_error (_SSTR ("cell not in id_cp_map c2="<<c2));
-
-    uint cp1_ind = msgraph->m_id_cp_map[c1];
-
-    uint cp2_ind = msgraph->m_id_cp_map[c2];
-
-    critpt_t *cp1 = msgraph->m_cps[cp1_ind];
-
-    critpt_t *cp2 = msgraph->m_cps[cp2_ind];
-
-    cp1->des.insert (cp2_ind);
-
-    cp2->asc.insert (cp1_ind);
-  }
-
   inline bool lowestPairableCoFacet
       (dataset_t *dataset,
        cellid_t cellId,
@@ -487,6 +445,7 @@ namespace grid
 
     std::for_each(m_critical_cells.begin(),m_critical_cells.end(),
                   bl::bind(&mscomplex_t::add_critpt,msgraph,bl::_1));
+
 
 #warning "havent implemented write out connectivity"
   }

@@ -104,6 +104,7 @@ namespace grid
     void print_connections(std::ostream & os);
   };
 
+  typedef mscomplex_t::critpt_list_t       critpt_list_t;
   typedef critpt_t::conn_t                 conn_t;
   typedef critpt_t::disc_t                 critpt_disc_t;
   typedef critpt_t::conn_t::iterator       conn_iter_t;

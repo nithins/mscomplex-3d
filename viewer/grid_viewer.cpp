@@ -14,11 +14,19 @@ namespace grid
 {
 
   glviewer_t::glviewer_t
-      (std::vector<octtree_piece *> * p ,cellid_t size):
+      (std::vector<octtree_piece *> * p ,cellid_t size,const rect_t &roi):
       m_size(size)
   {
+    m_roi = rect_t(cellid_t::zero,(size-cellid_t::one)*2);
+
+    rect_t s_roi(roi.lower_corner()*2,roi.upper_corner()*2);
+
+    if(m_roi.intersects(s_roi))
+      m_roi.intersection(s_roi,m_roi);
+
     for(uint i = 0 ;i < p->size();++i)
       m_grid_piece_rens.push_back(new octtree_piece_rendata(p->at(i)));
+
   }
 
   glviewer_t::~glviewer_t()
@@ -57,9 +65,11 @@ namespace grid
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
-      m_grid_piece_rens[i]->create_cp_rens();
-      m_grid_piece_rens[i]->create_grad_rens();
-      m_grid_piece_rens[i]->create_surf_ren();
+      m_grid_piece_rens[i]->create_cp_loc_bo();
+
+      m_grid_piece_rens[i]->create_cp_rens(m_roi);
+      m_grid_piece_rens[i]->create_grad_rens(m_roi);
+      m_grid_piece_rens[i]->create_surf_ren(m_roi);
 
     }
 
@@ -91,7 +101,23 @@ namespace grid
     memset(ren_canc_cp_conns,0,sizeof(ren_canc_cp_conns));
   }
 
-  void  octtree_piece_rendata::create_cp_rens()
+  void octtree_piece_rendata::create_cp_loc_bo()
+  {
+    if(dp->msgraph == NULL)
+      return;
+
+    std::vector<glutils::vertex_t>  cp_loc;
+
+    for(uint i = 0; i < dp->msgraph->m_cps.size(); ++i)
+    {
+      cellid_t c = (dp->msgraph->m_cps[i]->cellid);
+      cp_loc.push_back(glutils::vertex_t(c[0],c[1],c[2]));
+    }
+
+    cp_loc_bo = glutils::make_buf_obj(cp_loc);
+  }
+
+  void  octtree_piece_rendata::create_cp_rens(const rect_t & roi)
   {
     if(dp->msgraph == NULL)
       return;
@@ -101,15 +127,6 @@ namespace grid
     std::vector<glutils::point_idx_t>   crit_pt_idxs[gc_grid_dim+1];
     std::vector<glutils::line_idx_t>    crit_conn_idxs[gc_grid_dim];
 
-
-    std::vector<std::string>            crit_canc_labels[gc_grid_dim+1];
-    std::vector<glutils::vertex_t>      crit_canc_label_locations[gc_grid_dim+1];
-    std::vector<glutils::point_idx_t>   crit_canc_pt_idxs[gc_grid_dim+1];
-    std::vector<glutils::line_idx_t>    crit_canc_conn_idxs[gc_grid_dim];
-
-    std::vector<glutils::vertex_t>      crit_locations;
-    std::map<uint,uint>                 crit_ms_idx_ren_idx_map;
-
     for(uint i = 0; i < dp->msgraph->m_cps.size(); ++i)
     {
       if(dp->msgraph->m_cps[i]->isCancelled)
@@ -117,30 +134,22 @@ namespace grid
 
       cellid_t c = (dp->msgraph->m_cps[i]->cellid);
 
+      if(!roi.contains(c))
+        continue;
+
       uint dim = dataset_t::s_getCellDim(c);
 
       std::stringstream ss;
 
       ((std::ostream&)ss)<<c;
 
-      if(dp->msgraph->m_cps[i]->isBoundryCancelable)
-      {
-        crit_canc_labels[dim].push_back(ss.str());
-        crit_canc_label_locations[dim].push_back(glutils::vertex_t(c[0],c[1],c[2]) );
-        crit_canc_pt_idxs[dim].push_back(glutils::point_idx_t(crit_locations.size()));
-      }
-      else
+      if(!dp->msgraph->m_cps[i]->isBoundryCancelable)
       {
         crit_labels[dim].push_back(ss.str());
         crit_label_locations[dim].push_back(glutils::vertex_t(c[0],c[1],c[2]) );
-        crit_pt_idxs[dim].push_back(glutils::point_idx_t(crit_locations.size()));
+        crit_pt_idxs[dim].push_back(i);
       }
-
-      crit_ms_idx_ren_idx_map[i] = crit_locations.size();
-      crit_locations.push_back(glutils::vertex_t(c[0],c[1],c[2]));
     }
-
-    glutils::bufobj_ptr_t crit_loc_bo = glutils::make_buf_obj(crit_locations);
 
     for(uint i = 0 ; i < gc_grid_dim+1; ++i)
     {
@@ -149,18 +158,9 @@ namespace grid
           (crit_labels[i],crit_label_locations[i]);
 
       ren_cp[i] =glutils::create_buffered_points_ren
-                 (crit_loc_bo,
+                 (cp_loc_bo,
                   glutils::make_buf_obj(crit_pt_idxs[i]),
                   glutils::make_buf_obj());
-
-      ren_canc_cp_labels[i] =
-          glutils::create_buffered_text_ren
-          (crit_canc_labels[i],crit_canc_label_locations[i]);
-
-      ren_canc_cp[i] =glutils::create_buffered_points_ren
-                      (crit_loc_bo,
-                       glutils::make_buf_obj(crit_canc_pt_idxs[i]),
-                       glutils::make_buf_obj());
     }
 
     for(uint i = 0 ; i < dp->msgraph->m_cps.size(); ++i)
@@ -168,66 +168,45 @@ namespace grid
       if(dp->msgraph->m_cps[i]->isCancelled)
         continue;
 
-      conn_t *cp_acdc[] = {&dp->msgraph->m_cps[i]->des,&dp->msgraph->m_cps[i]->asc};
-
-      uint acdc_ct = 1;
-
       if(dp->msgraph->m_cps[i]->isBoundryCancelable)
-        acdc_ct = 2;
+        continue;
 
-      uint cp_ren_idx = crit_ms_idx_ren_idx_map[i];
+      cellid_t c = (dp->msgraph->m_cps[i]->cellid);
 
-      uint dim = dataset_t::s_getCellDim
-                 (dp->msgraph->m_cps[i]->cellid);
+      if(!roi.contains(c))
+        continue;
 
-      for (uint j = 0 ; j < acdc_ct; ++j)
+      uint dim = dataset_t::s_getCellDim(c);
+
+      for(conn_t::iterator it  = dp->msgraph->m_cps[i]->des.begin();
+      it != dp->msgraph->m_cps[i]->des.end(); ++it)
       {
-        for(conn_t::iterator it = cp_acdc[j]->begin();
-        it != cp_acdc[j]->end(); ++it)
-        {
-          if(dp->msgraph->m_cps[*it]->isCancelled)
-            throw std::logic_error("this cancelled cp should not be present here");
+        if(!roi.contains(dp->msgraph->m_cps[*it]->cellid))
+          continue;
 
-          if(dp->msgraph->m_cps[*it]->isBoundryCancelable)
-            throw std::logic_error("a true cp should not be connected to a bc cp");
-
-          uint conn_cp_ren_idx = crit_ms_idx_ren_idx_map[*it];
-
-          if(dp->msgraph->m_cps[i]->isBoundryCancelable)
-          {
-            crit_canc_conn_idxs[dim-1+j].push_back
-                (glutils::line_idx_t(cp_ren_idx,conn_cp_ren_idx));
-          }
-          else
-          {
-            crit_conn_idxs[dim-1+j].push_back
-                (glutils::line_idx_t(cp_ren_idx,conn_cp_ren_idx));
-          }
-        }
+        crit_conn_idxs[dim-1].push_back
+            (glutils::line_idx_t(i,*it));
       }
     }
 
     for(uint i = 0 ; i < gc_grid_dim; ++i)
     {
       ren_cp_conns[i] = glutils::create_buffered_lines_ren
-                        (crit_loc_bo,
+                        (cp_loc_bo,
                          glutils::make_buf_obj(crit_conn_idxs[i]),
                          glutils::make_buf_obj());
-
-      ren_canc_cp_conns[i] = glutils::create_buffered_lines_ren
-                             (crit_loc_bo,
-                              glutils::make_buf_obj(crit_canc_conn_idxs[i]),
-                              glutils::make_buf_obj());
     }
 
   }
 
-  void octtree_piece_rendata::create_grad_rens()
+  void octtree_piece_rendata::create_grad_rens(const rect_t & roi)
   {
     if(dp->dataset == NULL)
       return;
 
-    rect_t r = dp->dataset->get_ext_rect();
+    rect_t r;
+    if(!dp->dataset->get_ext_rect().intersection(roi,r))
+      return;
 
     std::vector<glutils::vertex_t>      cell_locations;
     std::vector<glutils::line_idx_t>    pair_idxs[gc_grid_dim];
@@ -273,11 +252,9 @@ namespace grid
                      glutils::make_buf_obj(pair_idxs[i]),
                      glutils::make_buf_obj());
     }
-
-
   }
 
-  void octtree_piece_rendata::create_surf_ren()
+  void octtree_piece_rendata::create_surf_ren(const rect_t & roi)
   {
     if(dp->dataset == NULL)
       return;

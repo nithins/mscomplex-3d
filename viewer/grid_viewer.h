@@ -4,13 +4,7 @@
 #include <QGLViewer/qglviewer.h>
 #include <grid.h>
 
-typedef unsigned char uchar;
-typedef unsigned int  uint;
-
-namespace glutils
-{
-  class renderable_t;
-}
+#include <glutils.h>
 
 namespace grid
 {
@@ -40,9 +34,13 @@ namespace grid
     glutils::renderable_t  *ren_canc_cp[gc_grid_dim+1];
     glutils::renderable_t  *ren_canc_cp_conns[gc_grid_dim];
 
-    void create_cp_rens();
-    void create_grad_rens();
-    void create_surf_ren();
+    glutils::bufobj_ptr_t   cp_loc_bo;
+
+    void create_cp_loc_bo();
+
+    void create_cp_rens(const rect_t &roi);
+    void create_grad_rens(const rect_t &roi);
+    void create_surf_ren(const rect_t &roi);
     void render() const ;
 
     octtree_piece_rendata(octtree_piece *);
@@ -53,20 +51,21 @@ namespace grid
   public:
 
     std::vector<octtree_piece_rendata * >  m_grid_piece_rens;
-
     cellid_t                               m_size;
+    rect_t                                 m_roi;
 
 
   public:
     glviewer_t(std::vector<octtree_piece *> * p ,
-               cellid_t size);
+               cellid_t size,const rect_t &roi);
+
     ~glviewer_t();
 
-  protected :
+  protected:
 
-      virtual void draw();
-  virtual void init();
-  virtual QString helpString() const;
-};
+    virtual void draw();
+    virtual void init();
+    virtual QString helpString() const;
+  };
 }
 #endif //VIEWER_H_INCLUDED

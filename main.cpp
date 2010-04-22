@@ -27,14 +27,18 @@ int main(int ac , char **av)
 
   bool   gui = false;
 
+  grid::rect_t roi ;
+
   bpo::options_description desc("Allowed options");
   desc.add_options()
       ("help,h", "produce help message")
       ("file,f",bpo::value<std::string >(), "grid file name")
-      ("size,d", bpo::value<grid::cellid_t >(), "size of grid entered as [x,y]")
+      ("size,d", bpo::value<grid::cellid_t >(), "size of grid entered as [x,y,z]")
       ("cl","use OpenCL ")
       ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
       ("gui,g","show gui")
+      ("roi,r", bpo::value<grid::rect_t >(),
+       "visualize a regoin of interset \nentered as [[x0,x1],[y0,y1],[z0,z1]]")
       ;
 
 
@@ -67,6 +71,9 @@ int main(int ac , char **av)
   if (vm.count("gui"))
     gui = true;
 
+  if (vm.count("roi"))
+    roi = vm["roi"].as<grid::rect_t >();
+
   grid::data_manager_t * gdm = new grid::data_manager_t
                           (filename,size,
                            use_ocl,
@@ -78,7 +85,7 @@ int main(int ac , char **av)
   {
     QApplication application(ac,av);
 
-    grid::viewer_mainwindow gvmw(gdm);
+    grid::viewer_mainwindow gvmw(gdm,roi);
 
     gvmw.setWindowTitle("ms complex vis");
 

@@ -76,6 +76,10 @@ namespace grid
         return ret;
 
       }
+
+      static point_def zero;
+
+      static point_def one;
     };
 
     struct range_def:public two_tuple_t<coord_type>
@@ -269,16 +273,16 @@ namespace grid
         return c;
       }
 
-      friend std::ostream& operator<< ( std::ostream& o, const rectangle_def& r )
-      {
-
-        o<<r[0];
-
-        for(size_t i = 1 ; i < rectangle_def::static_size-1;++i )
-          o<<r[i]<<"x";
-
-        return o;
-      }
+//      friend std::ostream& operator<< ( std::ostream& o, const rectangle_def& r )
+//      {
+//
+//        o<<r[0];
+//
+//        for(size_t i = 1 ; i < rectangle_def::static_size;++i )
+//          o<<"x"<<r[i];
+//
+//        return o;
+//      }
 
       coord_type eff_dim() const
       {
@@ -288,11 +292,19 @@ namespace grid
           d += ((*this)[i][1] != (*this)[i][0]) ?(1):(0);
 
         return d;
-
-
       }
     };
   };
+
+  template <typename coord_type,coord_type invalid_value>
+      typename rectangle_complex<coord_type,invalid_value>::point_def
+      rectangle_complex<coord_type,invalid_value>::point_def::zero =
+      rectangle_complex<coord_type,invalid_value>::point_def(0,0,0);
+
+  template <typename coord_type,coord_type invalid_value>
+      typename rectangle_complex<coord_type,invalid_value>::point_def
+      rectangle_complex<coord_type,invalid_value>::point_def::one =
+      rectangle_complex<coord_type,invalid_value>::point_def(1,1,1);
 
   typedef int16_t                              cell_coord_t;
   typedef float                                cell_fn_t;
