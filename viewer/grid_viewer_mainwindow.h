@@ -28,8 +28,10 @@ namespace grid
 
   public:
 
-    glviewer_t      *m_viewer;
-    data_manager_t  *m_gdm;
+    glviewer_t              *m_viewer;
+    data_manager_t          *m_gdm;
+
+    uint                     m_active_otp_idx;
 
     viewer_mainwindow
         (data_manager_t *gdm,const rect_t & roi);
@@ -54,6 +56,7 @@ namespace grid
   private slots:
     void on_datapiece_view_customContextMenuRequested ( const QPoint &p );
 
+    void on_datapiece_view_activated ( const QModelIndex & index  );
   };
 
   class toggled_signal_retransmitter:public QObject
@@ -74,50 +77,54 @@ namespace grid
     void toggled(bool state);
 
   };
-}
 
-class octtree_piece_item_model : public QAbstractItemModel
-{
-  Q_OBJECT
-
-public:
-
-  octtree_piece_item_model ( std::vector<grid::octtree_piece_rendata *> *, QObject *parent = 0 );
-  ~octtree_piece_item_model();
-
-  QVariant data ( const QModelIndex &index, int role ) const;
-
-  Qt::ItemFlags flags ( const QModelIndex &index ) const;
-
-  QVariant headerData ( int section, Qt::Orientation orientation,
-                        int role = Qt::DisplayRole ) const;
-
-  QModelIndex index ( int row, int column,
-                      const QModelIndex &parent = QModelIndex() ) const;
-
-  QModelIndex parent ( const QModelIndex &index ) const;
-
-  int rowCount ( const QModelIndex &parent = QModelIndex() ) const;
-
-  int columnCount ( const QModelIndex &parent = QModelIndex() ) const;
-
-  struct tree_item
+  class octtree_piece_item_model : public QAbstractListModel
   {
-    std::vector<tree_item *>               children;
-    grid::octtree_piece_rendata          * node;
-    tree_item                            * parent;
+    Q_OBJECT
 
-    tree_item ( grid::octtree_piece_rendata * _node , tree_item * par );
-    tree_item();
-    int row();
+  public:
+
+    octtree_piece_item_model ( viewer_mainwindow *mw,QObject *parent = 0 ):
+        QAbstractListModel ( parent ),m_mw(mw){}
+
+    QVariant data ( const QModelIndex &index, int role ) const;
+
+    QVariant headerData ( int section, Qt::Orientation orientation,
+                          int role = Qt::DisplayRole ) const;
+
+    int rowCount ( const QModelIndex &parent = QModelIndex() ) const;
+
+  private:
+
+    viewer_mainwindow * m_mw;
+
   };
 
+  class critpt_item_model : public QAbstractListModel
+  {
+    Q_OBJECT
 
-private:
-  void setupModelData
-      ( std::vector<grid::octtree_piece_rendata *> *);
+  public:
 
-  tree_item *m_tree;
-};
+    critpt_item_model ( viewer_mainwindow *mw,QObject *parent = 0 ):
+        QAbstractListModel ( parent ),m_mw(mw){}
+
+    QVariant data ( const QModelIndex &index, int role ) const;
+
+    QVariant headerData ( int section, Qt::Orientation orientation,
+                          int role = Qt::DisplayRole ) const;
+
+    int rowCount ( const QModelIndex &parent = QModelIndex() ) const;
+
+    void active_otp_changed(){reset();}
+
+  private:
+
+    viewer_mainwindow * m_mw;
+
+  };
+}
+
+
 
 #endif

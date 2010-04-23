@@ -5,6 +5,7 @@
 #include <grid_viewer.h>
 #include <grid_viewer_mainwindow.h>
 #include <grid_datamanager.h>
+#include <grid_mscomplex.h>
 
 namespace grid
 {
@@ -40,12 +41,11 @@ namespace grid
         = mw->datapiece_view->selectionModel()->selectedIndexes();
 
     for ( QModelIndexList::iterator ind_it = indexes.begin();
-          ind_it != indexes.end(); ++ind_it )
+    ind_it != indexes.end(); ++ind_it )
     {
-      octtree_piece_item_model::tree_item *item =
-          static_cast<octtree_piece_item_model::tree_item*> ( ( *ind_it ).internalPointer());
+      octtree_piece_rendata * gp_rd = mw->m_viewer->m_grid_piece_rens[(*ind_it).row()];
 
-      if ( bool_menuaction_ref(action,item->node) )
+      if ( bool_menuaction_ref(action,gp_rd) )
         ++num_checked_items;
       else
         ++num_unchecked_items;
@@ -67,14 +67,13 @@ namespace grid
     bool need_update = false;
 
     for ( QModelIndexList::iterator ind_it = indexes.begin();
-          ind_it != indexes.end(); ++ind_it )
+    ind_it != indexes.end(); ++ind_it )
     {
-      octtree_piece_item_model::tree_item *item =
-          static_cast<octtree_piece_item_model::tree_item*> ( ( *ind_it ).internalPointer());
+      octtree_piece_rendata * gp_rd = mw->m_viewer->m_grid_piece_rens[(*ind_it).row()];
 
-      if(state != bool_menuaction_ref(action,item->node))
+      if(state != bool_menuaction_ref(action,gp_rd))
       {
-        bool_menuaction_ref(action,item->node) = state;
+        bool_menuaction_ref(action,gp_rd) = state;
         need_update = true;
       }
     }
@@ -91,7 +90,7 @@ namespace grid
   }
 
   QAction * add_bool_menu_action(QMenu *m,viewer_mainwindow *mw,
-                            const QString &str,viewer_mainwindow::eBoolMenuAction act)
+                                 const QString &str,viewer_mainwindow::eBoolMenuAction act)
   {
     QAction * action  = m->addAction ( str );
     action->setCheckable ( true );
@@ -104,7 +103,6 @@ namespace grid
 
     return action;
   }
-
 
   void viewer_mainwindow::on_datapiece_view_customContextMenuRequested  ( const QPoint &pos )
   {
@@ -121,10 +119,23 @@ namespace grid
     m.exec ( datapiece_view->mapToGlobal ( pos ) );
   }
 
+  void viewer_mainwindow::on_datapiece_view_activated ( const QModelIndex & index  )
+  {
+    if(m_active_otp_idx == index.row())
+      return;
 
+    m_active_otp_idx = index.row();
+
+    critpt_item_model * cp_model =
+        dynamic_cast<critpt_item_model *>(critpt_view->model());
+
+    if(cp_model)
+      cp_model->active_otp_changed();
+  }
 
   viewer_mainwindow::viewer_mainwindow
-      (data_manager_t * gdm,const rect_t & roi):m_gdm(gdm)
+      (data_manager_t * gdm,const rect_t & roi):m_gdm(gdm),
+      m_active_otp_idx(NULL)
   {
     setupUi (this);
 
@@ -134,150 +145,81 @@ namespace grid
 
     m_viewer->resize(glviewer->size());
 
-    octtree_piece_item_model *model = new octtree_piece_item_model ( &m_viewer->m_grid_piece_rens);
+    octtree_piece_item_model *otp_model = new octtree_piece_item_model ( this);
 
-    datapiece_view->setModel ( model );
+    datapiece_view->setModel ( otp_model );
+
+    critpt_item_model *cp_model = new critpt_item_model ( this);
+
+    critpt_view->setModel ( cp_model );
   }
 
   viewer_mainwindow::~viewer_mainwindow()
   {
     delete m_gdm;
   }
-}
 
-
-octtree_piece_item_model::octtree_piece_item_model ( std::vector<grid::octtree_piece_rendata *> * dpList, QObject *parent )
-  : QAbstractItemModel ( parent )
-{
-  setupModelData ( dpList );
-}
-
-octtree_piece_item_model::~octtree_piece_item_model()
-{
-  delete m_tree;
-  m_tree = NULL;
-}
-
-
-int octtree_piece_item_model::columnCount ( const QModelIndex &/*parent*/ ) const
-{
-  return 1;
-}
-
-QVariant octtree_piece_item_model::data ( const QModelIndex &index, int role ) const
-{
-  if ( !index.isValid() )
-    return QVariant();
-
-  if ( role != Qt::DisplayRole )
-    return QVariant();
-
-  tree_item *item = static_cast<tree_item*> ( index.internalPointer() );
-
-  return QString(item->node->dp->label().c_str());
-}
-
-Qt::ItemFlags octtree_piece_item_model::flags ( const QModelIndex &index ) const
-{
-  if ( !index.isValid() )
-    return 0;
-
-  return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
-}
-
-QVariant octtree_piece_item_model::headerData ( int /*section*/, Qt::Orientation orientation,
-                                     int role ) const
-{
-  if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
-    return "Data Pieces";
-
-  return QVariant();
-}
-
-QModelIndex octtree_piece_item_model::index ( int row, int column, const QModelIndex &parent ) const
-{
-  if ( !hasIndex ( row, column, parent ) )
-    return QModelIndex();
-
-  tree_item *parentItem;
-
-  if ( !parent.isValid() )
-    parentItem = m_tree;
-  else
-    parentItem = static_cast<tree_item*> ( parent.internalPointer() );
-
-  if ( row < ( int ) parentItem->children.size() )
-    return createIndex ( row, column, parentItem->children[row] );
-  else
-    return QModelIndex();
-
-}
-
-QModelIndex octtree_piece_item_model::parent ( const QModelIndex &index ) const
-{
-  if ( !index.isValid() )
-    return QModelIndex();
-
-  tree_item *childItem  = static_cast<tree_item*> ( index.internalPointer() );
-
-  tree_item *parentItem = childItem->parent;
-
-  if ( parentItem == m_tree )
-    return QModelIndex();
-
-  return createIndex ( parentItem->row(), 0, parentItem );
-
-}
-
-int octtree_piece_item_model::rowCount ( const QModelIndex &parent ) const
-{
-  tree_item *parentItem;
-
-  if ( parent.column() > 0 )
-    return 0;
-
-  if ( !parent.isValid() )
-    parentItem = m_tree;
-  else
-    parentItem = static_cast<tree_item*> ( parent.internalPointer() );
-
-  return parentItem->children.size();
-
-}
-
-void octtree_piece_item_model::setupModelData( std::vector<grid::octtree_piece_rendata *> * dpList)
-{
-  m_tree = new tree_item();
-
-
-  for ( std::vector<grid::octtree_piece_rendata *>::iterator dp_it =  dpList->begin();
-  dp_it != dpList->end(); ++dp_it )
+  QVariant octtree_piece_item_model::data ( const QModelIndex &index, int role ) const
   {
-    grid::octtree_piece_rendata *dp = *dp_it;
+    if ( !index.isValid() )
+      return QVariant();
 
-    tree_item *parentItem = m_tree;
+    if ( role != Qt::DisplayRole )
+      return QVariant();
 
-    tree_item * dpItem = new tree_item ( dp, parentItem );
+    std::string s = m_mw->m_viewer->m_grid_piece_rens[index.row()]->dp->label();
 
-    parentItem->children.push_back ( dpItem );
+    return QString(s.c_str());
+  }
+
+  QVariant octtree_piece_item_model::headerData
+      ( int /*section*/, Qt::Orientation orientation,int role ) const
+  {
+    if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
+      return "Data Pieces";
+
+    return QVariant();
+  }
+
+  int octtree_piece_item_model::rowCount ( const QModelIndex &parent ) const
+  {
+    return m_mw->m_viewer->m_grid_piece_rens.size();
 
   }
-}
 
-octtree_piece_item_model::tree_item::tree_item
-    ( grid::octtree_piece_rendata * _node , tree_item * par ) :
-    node ( _node ),parent ( par )
-{
-}
+  QVariant critpt_item_model::data ( const QModelIndex &index, int role ) const
+  {
+    if ( !index.isValid() )
+      return QVariant();
 
-octtree_piece_item_model::tree_item::tree_item()
-{
-  node = NULL;
-  parent = NULL;
-}
+    if ( role != Qt::DisplayRole )
+      return QVariant();
 
-int octtree_piece_item_model::tree_item::row()
-{
-  return std::find ( parent->children.begin(),parent->children.end(),this )
-      - parent->children.begin();
+    int active_otp = m_mw->m_active_otp_idx;
+
+    mscomplex_t * msc = m_mw->m_viewer->m_grid_piece_rens[active_otp]->dp->msgraph;
+
+    std::string s = msc->m_cps[index.row()]->cellid.to_string();
+
+    return QString(s.c_str());
+  }
+
+  QVariant critpt_item_model::headerData
+      ( int /*section*/, Qt::Orientation orientation,int role ) const
+  {
+    if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
+      return "Cript of piece no:";
+
+    return QVariant();
+  }
+
+  int critpt_item_model::rowCount ( const QModelIndex &parent ) const
+  {
+    int active_otp = m_mw->m_active_otp_idx;
+
+    mscomplex_t * msc = m_mw->m_viewer->m_grid_piece_rens[active_otp]->dp->msgraph;
+
+    return msc->m_cps.size();
+  }
+
 }
