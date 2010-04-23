@@ -6,9 +6,11 @@
 #include <QModelIndex>
 #include <QVariant>
 #include <QItemSelectionModel>
+#include <QTreeView>
 
 #include <ui_grid_viewer_mainwindow.h>
 #include <grid.h>
+#include <iostream>
 
 namespace grid
 {
@@ -38,43 +40,50 @@ namespace grid
 
   public:
 
-    enum eTreeViewActions
+    enum eBoolMenuAction
     {
-      TVA_SURF,
-      TVA_CPS,
-      TVA_CPLABELS,
-      TVA_GRAPH,
-      TVA_GRAD,
-      TVA_CANC_CPS,
-      TVA_CANC_GRAPH,
+      VA_SURF,
+      VA_CPS,
+      VA_CPLABELS,
+      VA_GRAPH,
+      VA_GRAD,
+      VA_CANC_CPS,
+      VA_CANC_GRAPH,
     };
 
-    void perform_tva_action ( const eTreeViewActions &,const bool & );
-    bool get_tva_state ( const eTreeViewActions & );
+  private slots:
+    void on_datapiece_view_customContextMenuRequested ( const QPoint &p );
 
+  };
+
+  class toggled_signal_retransmitter:public QObject
+  {
+    Q_OBJECT
+
+  public:
+
+    viewer_mainwindow *m_pMw;
+    viewer_mainwindow::eBoolMenuAction m_act;
+
+    toggled_signal_retransmitter
+        (viewer_mainwindow *pMw,viewer_mainwindow::eBoolMenuAction act,
+         QObject *par):m_pMw(pMw),m_act(act)
+    {setParent(par);}
 
   private slots:
-    void on_datapiece_treeView_customContextMenuRequested ( const QPoint &p );
-
-    void show_surf_toggled ( bool state ) {perform_tva_action ( TVA_SURF,state );}
-    void show_cps_toggled ( bool state ) {perform_tva_action ( TVA_CPS,state );}
-    void show_cplabels_toggled ( bool state ) {perform_tva_action ( TVA_CPLABELS,state );}
-    void show_graph_toggled ( bool state ) {perform_tva_action ( TVA_GRAPH,state );}
-    void show_grad_toggled ( bool state ) {perform_tva_action ( TVA_GRAD,state );}
-    void show_canc_cps_toggled ( bool state ) {perform_tva_action ( TVA_CANC_CPS,state );}
-    void show_canc_graph_toggled ( bool state ) {perform_tva_action ( TVA_CANC_GRAPH,state );}
+    void toggled(bool state);
 
   };
 }
 
-class GridTreeModel : public QAbstractItemModel
+class octtree_piece_item_model : public QAbstractItemModel
 {
   Q_OBJECT
 
 public:
 
-  GridTreeModel ( std::vector<grid::octtree_piece_rendata *> *, QObject *parent = 0 );
-  ~GridTreeModel();
+  octtree_piece_item_model ( std::vector<grid::octtree_piece_rendata *> *, QObject *parent = 0 );
+  ~octtree_piece_item_model();
 
   QVariant data ( const QModelIndex &index, int role ) const;
 
@@ -109,30 +118,6 @@ private:
       ( std::vector<grid::octtree_piece_rendata *> *);
 
   tree_item *m_tree;
-};
-
-class RecursiveTreeItemSelectionModel:
-    public QItemSelectionModel
-{
-  Q_OBJECT
-
-public:
-  RecursiveTreeItemSelectionModel ( QAbstractItemModel * m,QTreeView * tv) :
-      QItemSelectionModel ( m),m_pTreeView ( tv) {}
-
-public slots:
-
-  virtual void select ( const QModelIndex &index,
-                        QItemSelectionModel::SelectionFlags command );
-
-  virtual void select ( const QItemSelection &selection,
-                        QItemSelectionModel::SelectionFlags command );
-private:
-
-  void collect_all_children ( const QModelIndex &index,
-                              QModelIndexList &retlist );
-
-  QTreeView *m_pTreeView;
 };
 
 #endif

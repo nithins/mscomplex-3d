@@ -8,19 +8,19 @@
 
 namespace grid
 {
-  bool &get_tva_item_flag_ref
-      (const viewer_mainwindow::eTreeViewActions &action ,
+  bool &bool_menuaction_ref
+      (const viewer_mainwindow::eBoolMenuAction &action ,
        octtree_piece_rendata *gp_rd )
   {
     switch (action)
     {
-    case viewer_mainwindow::TVA_SURF: return gp_rd->m_bShowSurface;
-    case viewer_mainwindow::TVA_CPS: return gp_rd->m_bShowCps;
-    case viewer_mainwindow::TVA_CPLABELS: return gp_rd->m_bShowCpLabels;
-    case viewer_mainwindow::TVA_GRAPH:return gp_rd->m_bShowMsGraph;
-    case viewer_mainwindow::TVA_GRAD:return gp_rd->m_bShowGrad;
-    case viewer_mainwindow::TVA_CANC_CPS:return gp_rd->m_bShowCancCps;
-    case viewer_mainwindow::TVA_CANC_GRAPH:return gp_rd->m_bShowCancMsGraph;
+    case viewer_mainwindow::VA_SURF: return gp_rd->m_bShowSurface;
+    case viewer_mainwindow::VA_CPS: return gp_rd->m_bShowCps;
+    case viewer_mainwindow::VA_CPLABELS: return gp_rd->m_bShowCpLabels;
+    case viewer_mainwindow::VA_GRAPH:return gp_rd->m_bShowMsGraph;
+    case viewer_mainwindow::VA_GRAD:return gp_rd->m_bShowGrad;
+    case viewer_mainwindow::VA_CANC_CPS:return gp_rd->m_bShowCancCps;
+    case viewer_mainwindow::VA_CANC_GRAPH:return gp_rd->m_bShowCancMsGraph;
     }
 
     throw std::invalid_argument("undefined tva action");
@@ -28,20 +28,27 @@ namespace grid
     return gp_rd->m_bShowSurface;
   }
 
-  bool viewer_mainwindow::get_tva_state ( const eTreeViewActions &action )
+  bool get_bool_menuaction_value
+      ( viewer_mainwindow * mw,
+        const viewer_mainwindow::eBoolMenuAction &action )
   {
 
     uint num_checked_items = 0;
     uint num_unchecked_items = 0;
 
-    QModelIndexList indexes = datapiece_treeView->selectionModel()->selectedIndexes();
+    QModelIndexList indexes
+        = mw->datapiece_view->selectionModel()->selectedIndexes();
 
-    for ( QModelIndexList::iterator ind_it = indexes.begin();ind_it != indexes.end(); ++ind_it )
+    for ( QModelIndexList::iterator ind_it = indexes.begin();
+          ind_it != indexes.end(); ++ind_it )
     {
-      GridTreeModel::tree_item *item = static_cast<GridTreeModel::tree_item*> ( ( *ind_it ).internalPointer() );
+      octtree_piece_item_model::tree_item *item =
+          static_cast<octtree_piece_item_model::tree_item*> ( ( *ind_it ).internalPointer());
 
-      if ( get_tva_item_flag_ref(action,item->node) ) ++num_checked_items;
-      else ++num_unchecked_items;
+      if ( bool_menuaction_ref(action,item->node) )
+        ++num_checked_items;
+      else
+        ++num_unchecked_items;
     }
 
     if ( num_checked_items > num_unchecked_items )
@@ -50,57 +57,68 @@ namespace grid
       return false;
   }
 
-
-
-  void viewer_mainwindow::perform_tva_action ( const eTreeViewActions &action, const bool & state )
+  void update_bool_menuaction_value
+      ( viewer_mainwindow * mw,const viewer_mainwindow::eBoolMenuAction &action,
+        const bool & state )
   {
 
-    QModelIndexList indexes = datapiece_treeView->selectionModel()->selectedIndexes();
+    QModelIndexList indexes = mw->datapiece_view->selectionModel()->selectedIndexes();
 
     bool need_update = false;
 
-    for ( QModelIndexList::iterator ind_it = indexes.begin();ind_it != indexes.end(); ++ind_it )
+    for ( QModelIndexList::iterator ind_it = indexes.begin();
+          ind_it != indexes.end(); ++ind_it )
     {
-      GridTreeModel::tree_item *item = static_cast<GridTreeModel::tree_item*> ( ( *ind_it ).internalPointer() );
+      octtree_piece_item_model::tree_item *item =
+          static_cast<octtree_piece_item_model::tree_item*> ( ( *ind_it ).internalPointer());
 
-      if(state != get_tva_item_flag_ref(action,item->node))
+      if(state != bool_menuaction_ref(action,item->node))
       {
-        get_tva_item_flag_ref(action,item->node) = state;
+        bool_menuaction_ref(action,item->node) = state;
         need_update = true;
       }
-
     }
 
     if(need_update )
     {
-      m_viewer->updateGL();
+      mw->m_viewer->updateGL();
     }
   }
 
-#define ADD_MENU_ACTION(menu_ptr,action_string,start_state,recv_func_name) \
-  {\
-   QAction * _ama_action  = (menu_ptr)->addAction ( tr(action_string) );\
-                            _ama_action->setCheckable ( true );\
-                            _ama_action->setChecked ( (start_state));\
-                            connect ( _ama_action,SIGNAL ( toggled ( bool ) ),this,SLOT ( recv_func_name(bool) ) );\
-                          }\
+  void toggled_signal_retransmitter::toggled(bool state)
+  {
+    update_bool_menuaction_value(m_pMw,m_act,state);
+  }
+
+  QAction * add_bool_menu_action(QMenu *m,viewer_mainwindow *mw,
+                            const QString &str,viewer_mainwindow::eBoolMenuAction act)
+  {
+    QAction * action  = m->addAction ( str );
+    action->setCheckable ( true );
+    action->setChecked ( get_bool_menuaction_value(mw,act));
+
+    toggled_signal_retransmitter * re_trns =
+        new toggled_signal_retransmitter(mw,act,m);
+
+    re_trns->connect(action,SIGNAL ( toggled ( bool ) ),re_trns,SLOT(toggled ( bool )));
+
+    return action;
+  }
 
 
+  void viewer_mainwindow::on_datapiece_view_customContextMenuRequested  ( const QPoint &pos )
+  {
+    QMenu m;
 
-void viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( const QPoint &pos )
-{
+    QAction * a = NULL;
 
-    QMenu menu;
+    a = add_bool_menu_action(&m,this,"show surface",VA_SURF);
+    a = add_bool_menu_action(&m,this,"show cps ",VA_CPS);
+    a = add_bool_menu_action(&m,this,"show cp labels",VA_CPLABELS);
+    a = add_bool_menu_action(&m,this,"show graph",VA_GRAPH);
+    a = add_bool_menu_action(&m,this,"show grad",VA_GRAD);
 
-    ADD_MENU_ACTION ( &menu, "show surface", get_tva_state ( TVA_SURF ), show_surf_toggled );
-    ADD_MENU_ACTION ( &menu, "show critical points", get_tva_state ( TVA_CPS ), show_cps_toggled );
-    ADD_MENU_ACTION ( &menu, "show critical point labels", get_tva_state ( TVA_CPLABELS ), show_cplabels_toggled );
-    ADD_MENU_ACTION ( &menu, "show graph", get_tva_state ( TVA_GRAPH ), show_graph_toggled );
-    ADD_MENU_ACTION ( &menu, "show grad", get_tva_state ( TVA_GRAD ), show_grad_toggled );
-    ADD_MENU_ACTION ( &menu, "show canc cps", get_tva_state ( TVA_CANC_CPS ), show_canc_cps_toggled );
-    ADD_MENU_ACTION ( &menu, "show canc graph", get_tva_state ( TVA_CANC_GRAPH ), show_canc_graph_toggled );
-    menu.exec ( datapiece_treeView->mapToGlobal ( pos ) );
-
+    m.exec ( datapiece_view->mapToGlobal ( pos ) );
   }
 
 
@@ -116,15 +134,9 @@ void viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( const
 
     m_viewer->resize(glviewer->size());
 
-    GridTreeModel *model = new GridTreeModel ( &m_viewer->m_grid_piece_rens);
+    octtree_piece_item_model *model = new octtree_piece_item_model ( &m_viewer->m_grid_piece_rens);
 
-    RecursiveTreeItemSelectionModel * sel_model =
-        new RecursiveTreeItemSelectionModel ( model, datapiece_treeView );
-
-    datapiece_treeView->setModel ( model );
-
-    datapiece_treeView->setSelectionModel ( sel_model );
-
+    datapiece_view->setModel ( model );
   }
 
   viewer_mainwindow::~viewer_mainwindow()
@@ -134,25 +146,25 @@ void viewer_mainwindow::on_datapiece_treeView_customContextMenuRequested ( const
 }
 
 
-GridTreeModel::GridTreeModel ( std::vector<grid::octtree_piece_rendata *> * dpList, QObject *parent )
+octtree_piece_item_model::octtree_piece_item_model ( std::vector<grid::octtree_piece_rendata *> * dpList, QObject *parent )
   : QAbstractItemModel ( parent )
 {
   setupModelData ( dpList );
 }
 
-GridTreeModel::~GridTreeModel()
+octtree_piece_item_model::~octtree_piece_item_model()
 {
   delete m_tree;
   m_tree = NULL;
 }
 
 
-int GridTreeModel::columnCount ( const QModelIndex &/*parent*/ ) const
+int octtree_piece_item_model::columnCount ( const QModelIndex &/*parent*/ ) const
 {
   return 1;
 }
 
-QVariant GridTreeModel::data ( const QModelIndex &index, int role ) const
+QVariant octtree_piece_item_model::data ( const QModelIndex &index, int role ) const
 {
   if ( !index.isValid() )
     return QVariant();
@@ -165,7 +177,7 @@ QVariant GridTreeModel::data ( const QModelIndex &index, int role ) const
   return QString(item->node->dp->label().c_str());
 }
 
-Qt::ItemFlags GridTreeModel::flags ( const QModelIndex &index ) const
+Qt::ItemFlags octtree_piece_item_model::flags ( const QModelIndex &index ) const
 {
   if ( !index.isValid() )
     return 0;
@@ -173,7 +185,7 @@ Qt::ItemFlags GridTreeModel::flags ( const QModelIndex &index ) const
   return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
-QVariant GridTreeModel::headerData ( int /*section*/, Qt::Orientation orientation,
+QVariant octtree_piece_item_model::headerData ( int /*section*/, Qt::Orientation orientation,
                                      int role ) const
 {
   if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
@@ -182,7 +194,7 @@ QVariant GridTreeModel::headerData ( int /*section*/, Qt::Orientation orientatio
   return QVariant();
 }
 
-QModelIndex GridTreeModel::index ( int row, int column, const QModelIndex &parent ) const
+QModelIndex octtree_piece_item_model::index ( int row, int column, const QModelIndex &parent ) const
 {
   if ( !hasIndex ( row, column, parent ) )
     return QModelIndex();
@@ -201,7 +213,7 @@ QModelIndex GridTreeModel::index ( int row, int column, const QModelIndex &paren
 
 }
 
-QModelIndex GridTreeModel::parent ( const QModelIndex &index ) const
+QModelIndex octtree_piece_item_model::parent ( const QModelIndex &index ) const
 {
   if ( !index.isValid() )
     return QModelIndex();
@@ -217,7 +229,7 @@ QModelIndex GridTreeModel::parent ( const QModelIndex &index ) const
 
 }
 
-int GridTreeModel::rowCount ( const QModelIndex &parent ) const
+int octtree_piece_item_model::rowCount ( const QModelIndex &parent ) const
 {
   tree_item *parentItem;
 
@@ -233,7 +245,7 @@ int GridTreeModel::rowCount ( const QModelIndex &parent ) const
 
 }
 
-void GridTreeModel::setupModelData( std::vector<grid::octtree_piece_rendata *> * dpList)
+void octtree_piece_item_model::setupModelData( std::vector<grid::octtree_piece_rendata *> * dpList)
 {
   m_tree = new tree_item();
 
@@ -245,7 +257,6 @@ void GridTreeModel::setupModelData( std::vector<grid::octtree_piece_rendata *> *
 
     tree_item *parentItem = m_tree;
 
-
     tree_item * dpItem = new tree_item ( dp, parentItem );
 
     parentItem->children.push_back ( dpItem );
@@ -253,82 +264,20 @@ void GridTreeModel::setupModelData( std::vector<grid::octtree_piece_rendata *> *
   }
 }
 
-GridTreeModel::tree_item::tree_item
+octtree_piece_item_model::tree_item::tree_item
     ( grid::octtree_piece_rendata * _node , tree_item * par ) :
     node ( _node ),parent ( par )
 {
 }
 
-GridTreeModel::tree_item::tree_item()
+octtree_piece_item_model::tree_item::tree_item()
 {
   node = NULL;
   parent = NULL;
 }
 
-int GridTreeModel::tree_item::row()
+int octtree_piece_item_model::tree_item::row()
 {
   return std::find ( parent->children.begin(),parent->children.end(),this )
       - parent->children.begin();
-}
-
-
-void RecursiveTreeItemSelectionModel::select
-    ( const QModelIndex &index,
-      QItemSelectionModel::SelectionFlags command )
-{
-
-  QItemSelectionModel::select ( index,command );
-
-  if ( ! ( command & QItemSelectionModel::Select ) )
-  {
-    return;
-  }
-
-  if ( index.isValid() && !m_pTreeView->isExpanded ( index ) )
-  {
-    QModelIndexList indexes_to_select;
-
-    collect_all_children ( index,indexes_to_select );
-
-    for ( QModelIndexList::iterator ind_it = indexes_to_select.begin();
-    ind_it != indexes_to_select.end();++ind_it )
-    {
-      QItemSelectionModel::select ( *ind_it,QItemSelectionModel::Select );
-    }
-  }
-}
-
-void RecursiveTreeItemSelectionModel::select
-    ( const QItemSelection &selection,
-      QItemSelectionModel::SelectionFlags command )
-{
-  QItemSelectionModel::select ( selection,command );
-}
-
-void RecursiveTreeItemSelectionModel::collect_all_children
-    ( const QModelIndex &index,QModelIndexList &retlist )
-{
-  QModelIndexList ind_stack;
-
-  ind_stack.push_back ( index );
-
-  while ( ind_stack.size() !=0 )
-  {
-    QModelIndex top_ind = ind_stack.front();
-
-    ind_stack.pop_front();
-
-    retlist.push_back ( top_ind );
-
-    uint child_ind = 0;
-
-    QModelIndex child = top_ind.child ( child_ind++, top_ind.column() );
-
-    while ( child.isValid() )
-    {
-      ind_stack.push_back ( child );
-
-      child = top_ind.child ( child_ind++, top_ind.column() );
-    }
-  }
 }

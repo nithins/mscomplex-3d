@@ -29,7 +29,7 @@
     <bool>false</bool>
    </property>
   </widget>
-  <widget class="QTreeView" name="datapiece_treeView">
+  <widget class="QTableView" name="datapiece_view">
    <property name="geometry">
     <rect>
      <x>20</x>

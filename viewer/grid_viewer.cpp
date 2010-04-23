@@ -46,7 +46,9 @@ namespace grid
 
     glTranslatef(-0.5,-0.5,-0.5);
 
-    glScalef(0.5/(double) m_size[0],0.5/(double)m_size[1],0.5/(double) m_size[2]);
+    glScalef(0.5/(double)(m_size[0]-1),
+             0.5/(double)(m_size[1]-1),
+             0.5/(double)(m_size[2]-1));
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
