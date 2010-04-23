@@ -9,6 +9,27 @@
 #include <grid_mscomplex.h>
 #include <grid_dataset.h>
 
+glutils::color_t g_grid_cp_colors[] =
+{
+  glutils::color_t(0.0,0.0,1.0),
+  glutils::color_t(0.0,1.0,0.0),
+  glutils::color_t(1.0,0.0,0.0),
+  glutils::color_t(1.0,0.0,1.0),
+};
+
+glutils::color_t g_grid_grad_colors[] =
+{
+  glutils::color_t(0.0,0.5,0.5 ),
+  glutils::color_t(0.5,0.0,0.5 ),
+  glutils::color_t(0.5,0.5,0.0 ),
+};
+
+glutils::color_t g_grid_cp_conn_colors[] =
+{
+  glutils::color_t(0.0,0.5,0.5 ),
+  glutils::color_t(0.5,0.0,0.5 ),
+  glutils::color_t(0.5,0.5,0.0 ),
+};
 
 namespace grid
 {
@@ -72,7 +93,7 @@ namespace grid
       m_grid_piece_rens[i]->create_cp_rens(m_roi);
       m_grid_piece_rens[i]->create_grad_rens(m_roi);
       m_grid_piece_rens[i]->create_surf_ren(m_roi);
-
+      m_grid_piece_rens[i]->create_disc_rds();
     }
 
   }
@@ -91,6 +112,7 @@ namespace grid
       m_bShowGrad ( false ),
       m_bShowCancCps(false),
       m_bShowCancMsGraph(false),
+      m_bNeedUpdateDiscRens(false),
       dp(_dp)
   {
     memset(ren_cp,0,sizeof(ren_cp));
@@ -265,31 +287,55 @@ namespace grid
 
   }
 
-  glutils::color_t g_grid_cp_colors[] =
+  void octtree_piece_rendata::create_disc_rds()
   {
-    glutils::color_t(0.0,0.0,1.0),
-    glutils::color_t(0.0,1.0,0.0),
-    glutils::color_t(1.0,0.0,0.0),
-    glutils::color_t(1.0,0.0,1.0),
-  };
+    if(dp->msgraph == NULL)
+      return;
 
-  glutils::color_t g_grid_grad_colors[] =
+    boost::shared_ptr<disc_rendata_t> sptr;
+
+    for(uint j = 0 ; j < GRADIENT_DIR_COUNT; ++j)
+    {
+      for(uint i = 0 ; i < dp->msgraph->m_cps.size();++i)
+      {
+        sptr.reset(new disc_rendata_t);
+        disc_rds[j].push_back(sptr);
+      }
+    }
+  }
+
+  void octtree_piece_rendata::update_active_disc_rens()
   {
-    glutils::color_t(0.0,0.5,0.5 ),
-    glutils::color_t(0.5,0.0,0.5 ),
-    glutils::color_t(0.5,0.5,0.0 ),
-  };
+    if(dp->msgraph == NULL)
+      return;
 
-  glutils::color_t g_grid_cp_conn_colors[] =
+    for(uint j = 0 ; j < GRADIENT_DIR_COUNT; ++j)
+    {
+      for(uint i = 0 ; i < disc_rds[j].size();++i)
+      {
+        if(disc_rds[j][i]->m_bShow && active_disc_rens.count(disc_rds[j][i]) == 0)
+        {
+          disc_rds[j][i]->create_ren(dp->msgraph,i,(eGradDirection)j);
+          active_disc_rens.insert(disc_rds[j][i]);
+        }
+
+        if(!disc_rds[j][i]->m_bShow && active_disc_rens.count(disc_rds[j][i]) == 1)
+        {
+          active_disc_rens.erase(disc_rds[j][i]);
+          disc_rds[j][i]->clear_ren();
+        }
+      }
+    }
+  }
+
+  void octtree_piece_rendata::render()
   {
-    glutils::color_t(0.0,0.5,0.5 ),
-    glutils::color_t(0.5,0.0,0.5 ),
-    glutils::color_t(0.5,0.5,0.0 ),
-  };
+    if(m_bNeedUpdateDiscRens)
+    {
+      update_active_disc_rens();
+      m_bNeedUpdateDiscRens = false;
+    }
 
-
-  void octtree_piece_rendata::render() const
-  {
     glPushMatrix();
     glPushAttrib ( GL_ENABLE_BIT );
 
@@ -375,7 +421,61 @@ namespace grid
       }
     }
 
+    for(uint j = 0 ; j < GRADIENT_DIR_COUNT; ++j)
+    {
+      for(uint i = 0 ; i < disc_rds[j].size();++i)
+      {
+        disc_rds[j][i]->render();
+      }
+    }
+
     glPopAttrib();
     glPopMatrix();
+  }
+
+  disc_rendata_t::disc_rendata_t():ren(NULL),m_bShow(false){}
+
+  disc_rendata_t::~disc_rendata_t()
+  {
+    m_bShow = false;
+
+    clear_ren();
+  }
+
+  void disc_rendata_t::render()
+  {
+    if(m_bShow && ren)
+    {
+      uint dim = dataset_t::s_getCellDim(cellid);
+
+      glColor3dv(g_grid_cp_colors[dim].data());
+
+      glBegin(GL_POINTS);
+      glVertex3sv(cellid.data());
+      glEnd();
+
+      ren->render();
+    }
+  }
+  void disc_rendata_t::create_ren(mscomplex_t *msc,uint idx,eGradDirection )
+  {
+    if(m_bShow && ren == NULL)
+    {
+      cellid = msc->m_cps[idx]->cellid;
+
+      std::vector<glutils::vertex_t> vlist;
+
+      ren = glutils::create_buffered_points_ren
+            (glutils::make_buf_obj(vlist),
+             glutils::make_buf_obj(),
+             glutils::make_buf_obj());
+    }
+  }
+  void disc_rendata_t::clear_ren()
+  {
+    if(!m_bShow && ren != NULL)
+    {
+      delete ren;
+    }
   }
 }

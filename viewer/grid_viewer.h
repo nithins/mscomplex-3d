@@ -5,10 +5,33 @@
 #include <grid.h>
 
 #include <glutils.h>
+#include <set>
 
 namespace grid
 {
   class octtree_piece ;
+
+  class mscomplex_t;
+
+  class disc_rendata_t
+  {
+
+    glutils::renderable_t *ren;
+    cellid_t               cellid;
+
+  public:
+
+    bool                   m_bShow;
+    glutils::color_t       color;
+
+
+    disc_rendata_t();
+    ~disc_rendata_t();
+
+    void render();
+    void create_ren(mscomplex_t *,uint/* idx*/,eGradDirection );
+    void clear_ren();
+  };
 
   class octtree_piece_rendata
   {
@@ -25,6 +48,9 @@ namespace grid
     bool m_bShowCancCps;
     bool m_bShowCancMsGraph;
 
+    // set externally .. cleared by render
+    bool m_bNeedUpdateDiscRens;
+
     glutils::renderable_t  *ren_surf;
     glutils::renderable_t  *ren_grad[gc_grid_dim];
     glutils::renderable_t  *ren_cp_labels[gc_grid_dim+1];
@@ -36,12 +62,20 @@ namespace grid
 
     glutils::bufobj_ptr_t   cp_loc_bo;
 
+    std::vector<boost::shared_ptr<disc_rendata_t> > disc_rds[GRADIENT_DIR_COUNT];
+
+    std::set<boost::shared_ptr<disc_rendata_t> >    active_disc_rens;
+
+
+    void create_disc_rds();
+    void update_active_disc_rens();
+
     void create_cp_loc_bo();
 
     void create_cp_rens(const rect_t &roi);
     void create_grad_rens(const rect_t &roi);
     void create_surf_ren(const rect_t &roi);
-    void render() const ;
+    void render() ;
 
     octtree_piece_rendata(octtree_piece *);
   };
