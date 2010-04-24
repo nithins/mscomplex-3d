@@ -16,21 +16,26 @@ namespace grid
   class disc_rendata_t
   {
 
-    glutils::renderable_t *ren;
-    cellid_t               cellid;
-
   public:
 
-    bool                   m_bShow;
-    glutils::color_t       color;
+    glutils::renderable_t *asc_ren;
+    glutils::renderable_t *des_ren;
+    cellid_t               cellid;
 
 
-    disc_rendata_t();
+
+    bool                   m_bShowAsc;
+    bool                   m_bShowDes;
+
+    glutils::color_t       asc_color;
+    glutils::color_t       des_color;
+
+
+    disc_rendata_t(cellid_t c);
     ~disc_rendata_t();
 
     void render();
-    void create_ren(mscomplex_t *,uint/* idx*/,eGradDirection );
-    void clear_ren();
+    bool update(mscomplex_t *);
   };
 
   class octtree_piece_rendata
@@ -62,7 +67,7 @@ namespace grid
 
     glutils::bufobj_ptr_t   cp_loc_bo;
 
-    std::vector<boost::shared_ptr<disc_rendata_t> > disc_rds[GRADIENT_DIR_COUNT];
+    std::vector<boost::shared_ptr<disc_rendata_t> > disc_rds;
 
     std::set<boost::shared_ptr<disc_rendata_t> >    active_disc_rens;
 

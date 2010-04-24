@@ -1,105 +1,228 @@
 #include <QMenu>
 #include <QTreeView>
-
+#include <QColorDialog>
+#include <QDebug>
 
 #include <grid_viewer.h>
 #include <grid_viewer_mainwindow.h>
 #include <grid_datamanager.h>
-#include <grid_mscomplex.h>
 
 namespace grid
 {
-  bool &bool_menuaction_ref
-      (const viewer_mainwindow::eBoolMenuAction &action ,
-       octtree_piece_rendata *gp_rd )
+  QColor glutils_to_q_color(const glutils::color_t &c)
   {
+    return  QColor::fromRgbF(c[0],c[1],c[2],1.0);
+  }
+
+  glutils::color_t q_to_glutils_color(const QColor &qc)
+  {
+    return  glutils::color_t(qc.redF(),qc.greenF(),qc.blueF());
+  }
+
+  typedef QVariant (*get_val_for_action_fnt )
+      (const uint &,          // action
+       viewer_mainwindow * ,
+       const uint &);         // index
+
+  typedef void (*set_val_for_action_fnt )
+      (const uint &,          // action
+       viewer_mainwindow * ,
+       const uint &,          // index
+       const QVariant &);     // value
+
+  struct ctx_menu_data_t
+  {
+    const char * text;
+    get_val_for_action_fnt get_fn;
+    set_val_for_action_fnt set_fn;
+  };
+
+
+  enum eContextMenuAction
+  {
+    RD_MA_BEGIN               = 0,
+    OTPRD_MA_BEGIN            = RD_MA_BEGIN,
+
+    OTPRD_MA_SURF             = OTPRD_MA_BEGIN,
+    OTPRD_MA_CPS,
+    OTPRD_MA_CPLABELS,
+    OTPRD_MA_GRAPH,
+    OTPRD_MA_GRAD,
+
+    OTPRD_MA_END,
+    CPDRD_MA_BEGIN            = OTPRD_MA_END,
+
+    CPDRD_MA_SHOW_ASC_DISC    = CPDRD_MA_BEGIN,
+    CPDRD_MA_ASC_DISC_COLOR,
+    CPDRD_MA_SHOW_DES_DISC,
+    CPDRD_MA_DES_DISC_COLOR,
+
+    CPDRD_MA_END,
+    RD_MA_END                 = CPDRD_MA_END,
+  };
+
+  QVariant get_val_for_otprd_ma
+      (const uint &action,
+       viewer_mainwindow * mw ,
+       const uint &idx)
+  {
+    octtree_piece_rendata * otp_rd = NULL;
+
+    otp_rd = mw->m_viewer->m_grid_piece_rens[idx];
+
     switch (action)
     {
-    case viewer_mainwindow::VA_SURF: return gp_rd->m_bShowSurface;
-    case viewer_mainwindow::VA_CPS: return gp_rd->m_bShowCps;
-    case viewer_mainwindow::VA_CPLABELS: return gp_rd->m_bShowCpLabels;
-    case viewer_mainwindow::VA_GRAPH:return gp_rd->m_bShowMsGraph;
-    case viewer_mainwindow::VA_GRAD:return gp_rd->m_bShowGrad;
-    case viewer_mainwindow::VA_CANC_CPS:return gp_rd->m_bShowCancCps;
-    case viewer_mainwindow::VA_CANC_GRAPH:return gp_rd->m_bShowCancMsGraph;
+    case OTPRD_MA_SURF: return otp_rd->m_bShowSurface;
+    case OTPRD_MA_CPS: return otp_rd->m_bShowCps;
+    case OTPRD_MA_CPLABELS: return otp_rd->m_bShowCpLabels;
+    case OTPRD_MA_GRAPH:return otp_rd->m_bShowMsGraph;
+    case OTPRD_MA_GRAD:return otp_rd->m_bShowGrad;
+    default:throw std::logic_error("cannot deal with this action");
     }
-
-    throw std::invalid_argument("undefined tva action");
-
-    return gp_rd->m_bShowSurface;
+    return QVariant();
   }
 
-  bool get_bool_menuaction_value
-      ( viewer_mainwindow * mw,
-        const viewer_mainwindow::eBoolMenuAction &action )
+  void set_val_for_otprd_ma
+      (const uint &action,
+       viewer_mainwindow * mw ,
+       const uint &idx,
+       const QVariant &val)
   {
+    octtree_piece_rendata * otp_rd = mw->m_viewer->m_grid_piece_rens[idx];
 
-    uint num_checked_items = 0;
-    uint num_unchecked_items = 0;
-
-    QModelIndexList indexes
-        = mw->datapiece_view->selectionModel()->selectedIndexes();
-
-    for ( QModelIndexList::iterator ind_it = indexes.begin();
-    ind_it != indexes.end(); ++ind_it )
+    switch (action)
     {
-      octtree_piece_rendata * gp_rd = mw->m_viewer->m_grid_piece_rens[(*ind_it).row()];
-
-      if ( bool_menuaction_ref(action,gp_rd) )
-        ++num_checked_items;
-      else
-        ++num_unchecked_items;
+    case OTPRD_MA_SURF: otp_rd->m_bShowSurface = val.value<bool>();break;
+    case OTPRD_MA_CPS: otp_rd->m_bShowCps = val.value<bool>();break;
+    case OTPRD_MA_CPLABELS: otp_rd->m_bShowCpLabels = val.value<bool>();break;
+    case OTPRD_MA_GRAPH: otp_rd->m_bShowMsGraph = val.value<bool>();break;
+    case OTPRD_MA_GRAD: otp_rd->m_bShowGrad = val.value<bool>();break;
+    default:throw std::logic_error("cannot deal with this action");
     }
-
-    if ( num_checked_items > num_unchecked_items )
-      return true;
-    else
-      return false;
   }
 
-  void update_bool_menuaction_value
-      ( viewer_mainwindow * mw,const viewer_mainwindow::eBoolMenuAction &action,
-        const bool & state )
+  QVariant get_val_for_cpdrd_ma
+      (const uint &action,
+       viewer_mainwindow * mw ,
+       const uint &idx)
   {
+    octtree_piece_rendata * otp_rd =
+        mw->m_viewer->m_grid_piece_rens[mw->m_active_otp_idx];
 
-    QModelIndexList indexes = mw->datapiece_view->selectionModel()->selectedIndexes();
+    boost::shared_ptr<disc_rendata_t> cpd_rd = otp_rd->disc_rds[idx];
 
-    bool need_update = false;
-
-    for ( QModelIndexList::iterator ind_it = indexes.begin();
-    ind_it != indexes.end(); ++ind_it )
+    switch (action)
     {
-      octtree_piece_rendata * gp_rd = mw->m_viewer->m_grid_piece_rens[(*ind_it).row()];
-
-      if(state != bool_menuaction_ref(action,gp_rd))
-      {
-        bool_menuaction_ref(action,gp_rd) = state;
-        need_update = true;
-      }
+    case CPDRD_MA_ASC_DISC_COLOR:return glutils_to_q_color(cpd_rd->asc_color);
+    case CPDRD_MA_SHOW_ASC_DISC:return cpd_rd->m_bShowAsc;
+    case CPDRD_MA_DES_DISC_COLOR:return glutils_to_q_color(cpd_rd->des_color);
+    case CPDRD_MA_SHOW_DES_DISC:return cpd_rd->m_bShowDes;
+    default:throw std::logic_error("cannot deal with this action");
     }
+    return QVariant();
+  }
 
-    if(need_update )
+  void set_val_for_cpdrd_ma
+      (const uint &action,
+       viewer_mainwindow * mw ,
+       const uint &idx,
+       const QVariant &val)
+  {
+    octtree_piece_rendata * otp_rd =
+        mw->m_viewer->m_grid_piece_rens[mw->m_active_otp_idx];
+
+    boost::shared_ptr<disc_rendata_t> cpd_rd = otp_rd->disc_rds[idx];
+
+    switch (action)
     {
-      mw->m_viewer->updateGL();
+    case CPDRD_MA_ASC_DISC_COLOR:cpd_rd->asc_color  = q_to_glutils_color(val.value<QColor>());break;
+    case CPDRD_MA_SHOW_ASC_DISC:cpd_rd->m_bShowAsc  = val.value<bool>();break;
+    case CPDRD_MA_DES_DISC_COLOR:cpd_rd->des_color  = q_to_glutils_color(val.value<QColor>());break;
+    case CPDRD_MA_SHOW_DES_DISC:cpd_rd->m_bShowDes  = val.value<bool>();break;
+    default:
+      throw std::logic_error("cannot deal with this action");
     }
+  }
+
+  ctx_menu_data_t s_ctx_menu_data [RD_MA_END - RD_MA_BEGIN] =
+  {
+    {"show surface",get_val_for_otprd_ma,set_val_for_otprd_ma},
+    {"show critical points",get_val_for_otprd_ma,set_val_for_otprd_ma},
+    {"show critical point labels",get_val_for_otprd_ma,set_val_for_otprd_ma},
+    {"show graph",get_val_for_otprd_ma,set_val_for_otprd_ma},
+    {"show grad",get_val_for_otprd_ma,set_val_for_otprd_ma},
+
+    {"show asc disc",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
+    {"set asc disc color",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
+    {"show des disc",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
+    {"set des disc color",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
+  };
+
+  QAbstractItemView * get_action_view(uint action,viewer_mainwindow *mw)
+  {
+    if(OTPRD_MA_BEGIN <= action && action < OTPRD_MA_END)
+      return mw->datapiece_view;
+
+    if(CPDRD_MA_BEGIN <= action && action < CPDRD_MA_END)
+      return mw->critpt_view;
+
+    throw std::logic_error("unknown action type");
+
+    return NULL;
   }
 
   void toggled_signal_retransmitter::toggled(bool state)
   {
-    update_bool_menuaction_value(m_pMw,m_act,state);
+    QModelIndexList l
+        = get_action_view(m_act,m_pMw)->selectionModel()->selectedIndexes();
+
+    QVariant updated_value;
+
+    if(m_val.canConvert<bool>())
+      updated_value = state;
+
+    if(m_val.canConvert<QColor>())
+    {
+      QColor ic = m_val.value<QColor>();
+
+      if (ic.isValid() == false)  ic = Qt::white;
+
+      QColor c = QColorDialog::getColor(ic,m_pMw);
+
+      if(c.isValid())
+        updated_value=c;
+    }
+
+    if(updated_value.isValid())
+    {
+      for(QModelIndexList::iterator it = l.begin(); it != l.end();++it)
+      {
+        (*s_ctx_menu_data[m_act].set_fn)(m_act,m_pMw,(*it).row(),updated_value);
+      }
+    }
+
+    m_pMw->m_viewer->updateGL();
   }
 
-  QAction * add_bool_menu_action(QMenu *m,viewer_mainwindow *mw,
-                                 const QString &str,viewer_mainwindow::eBoolMenuAction act)
+
+  QAction * add_menu_action(QMenu *m,viewer_mainwindow *mw,const uint & act)
   {
-    QAction * action  = m->addAction ( str );
-    action->setCheckable ( true );
-    action->setChecked ( get_bool_menuaction_value(mw,act));
+    QAction * action  = m->addAction ( s_ctx_menu_data[act].text);
+
+    QModelIndex i = get_action_view(act,mw)->selectionModel()->currentIndex();
+
+    QVariant cur_val = (*s_ctx_menu_data[act].get_fn)(act,mw,i.row());
+
+    if(cur_val.canConvert<bool>())
+    {
+      action->setCheckable(true);
+      action->setChecked(cur_val.value<bool>());
+    }
 
     toggled_signal_retransmitter * re_trns =
-        new toggled_signal_retransmitter(mw,act,m);
+        new toggled_signal_retransmitter(mw,act,cur_val,m);
 
-    re_trns->connect(action,SIGNAL ( toggled ( bool ) ),re_trns,SLOT(toggled ( bool )));
+    re_trns->connect(action,SIGNAL ( triggered ( bool ) ),re_trns,SLOT(toggled ( bool )));
 
     return action;
   }
@@ -108,15 +231,20 @@ namespace grid
   {
     QMenu m;
 
-    QAction * a = NULL;
-
-    a = add_bool_menu_action(&m,this,"show surface",VA_SURF);
-    a = add_bool_menu_action(&m,this,"show cps ",VA_CPS);
-    a = add_bool_menu_action(&m,this,"show cp labels",VA_CPLABELS);
-    a = add_bool_menu_action(&m,this,"show graph",VA_GRAPH);
-    a = add_bool_menu_action(&m,this,"show grad",VA_GRAD);
+    for(uint i = OTPRD_MA_BEGIN; i < OTPRD_MA_END; ++i)
+      add_menu_action(&m,this,i);
 
     m.exec ( datapiece_view->mapToGlobal ( pos ) );
+  }
+
+  void viewer_mainwindow::on_critpt_view_customContextMenuRequested ( const QPoint &p )
+  {
+    QMenu m;
+
+    for(uint i = CPDRD_MA_BEGIN; i < CPDRD_MA_END; ++i)
+      add_menu_action(&m,this,i);
+
+    m.exec ( critpt_view->mapToGlobal ( p ) );
   }
 
   void viewer_mainwindow::on_datapiece_view_activated ( const QModelIndex & index  )
@@ -184,7 +312,6 @@ namespace grid
   int octtree_piece_item_model::rowCount ( const QModelIndex &parent ) const
   {
     return m_mw->m_viewer->m_grid_piece_rens.size();
-
   }
 
   QVariant critpt_item_model::data ( const QModelIndex &index, int role ) const
@@ -197,11 +324,9 @@ namespace grid
 
     int active_otp = m_mw->m_active_otp_idx;
 
-    mscomplex_t * msc = m_mw->m_viewer->m_grid_piece_rens[active_otp]->dp->msgraph;
+    cellid_t c = m_mw->m_viewer->m_grid_piece_rens[active_otp]->disc_rds[index.row()]->cellid;
 
-    std::string s = msc->m_cps[index.row()]->cellid.to_string();
-
-    return QString(s.c_str());
+    return QString(c.to_string().c_str());
   }
 
   QVariant critpt_item_model::headerData
@@ -217,9 +342,7 @@ namespace grid
   {
     int active_otp = m_mw->m_active_otp_idx;
 
-    mscomplex_t * msc = m_mw->m_viewer->m_grid_piece_rens[active_otp]->dp->msgraph;
-
-    return msc->m_cps.size();
+    return m_mw->m_viewer->m_grid_piece_rens[active_otp]->disc_rds.size();
   }
 
 }

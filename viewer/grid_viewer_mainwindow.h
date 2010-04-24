@@ -26,6 +26,8 @@ namespace grid
       public Ui::grid_viewer_mainwindow_Dialog
   {
 
+  Q_OBJECT
+
   public:
 
     glviewer_t              *m_viewer;
@@ -38,23 +40,10 @@ namespace grid
 
     ~viewer_mainwindow();
 
-    Q_OBJECT
-
-  public:
-
-    enum eBoolMenuAction
-    {
-      VA_SURF,
-      VA_CPS,
-      VA_CPLABELS,
-      VA_GRAPH,
-      VA_GRAD,
-      VA_CANC_CPS,
-      VA_CANC_GRAPH,
-    };
-
   private slots:
     void on_datapiece_view_customContextMenuRequested ( const QPoint &p );
+
+    void on_critpt_view_customContextMenuRequested ( const QPoint &p );
 
     void on_datapiece_view_activated ( const QModelIndex & index  );
   };
@@ -66,11 +55,12 @@ namespace grid
   public:
 
     viewer_mainwindow *m_pMw;
-    viewer_mainwindow::eBoolMenuAction m_act;
+    uint               m_act;
+    QVariant           m_val;
 
     toggled_signal_retransmitter
-        (viewer_mainwindow *pMw,viewer_mainwindow::eBoolMenuAction act,
-         QObject *par):m_pMw(pMw),m_act(act)
+        (viewer_mainwindow *pMw,uint act,QVariant v,
+         QObject *par):m_pMw(pMw),m_act(act),m_val(v)
     {setParent(par);}
 
   private slots:
