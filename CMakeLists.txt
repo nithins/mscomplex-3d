@@ -31,11 +31,11 @@ if(NOT Boost_FOUND)
   message(FATAL_ERROR "Cannot find boost")
 endif(NOT Boost_FOUND)
 
-find_package(OpenCL)
-
-if(NOT OPENCL_FOUND)
-  message(FATAL_ERROR "could not find openCL ..")
-endif(NOT OPENCL_FOUND)
+# find_package(OpenCL)
+# 
+# if(NOT OPENCL_FOUND)
+#   message(FATAL_ERROR "could not find openCL ..")
+# endif(NOT OPENCL_FOUND)
 
 add_subdirectory(utls)
 
@@ -53,11 +53,11 @@ set(dmsc_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_datamanager.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_datamanager.cpp
 
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.cpp
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.cpp
+#   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.h
+#   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.cpp
+# 
+#   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.h
+#   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.cpp
   )
 
 QT4_ADD_RESOURCES(dmsc_RC_SRCS
