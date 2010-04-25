@@ -425,6 +425,41 @@ namespace grid
     glPopMatrix();
   }
 
+  int octtree_piece_rendata::get_num_items()
+  {
+    return 7;
+  }
+  bool octtree_piece_rendata::update_item(const int & i,boost::any &v,const bool &us)
+  {
+    switch(i)
+    {
+    case 0: return configureable_t::s_update_item(m_bShowSurface,v,us);
+    case 1: return configureable_t::s_update_item(m_bShowCps,v,us);
+    case 2: return configureable_t::s_update_item(m_bShowCpLabels,v,us);
+    case 3: return configureable_t::s_update_item(m_bShowMsGraph,v,us);
+    case 4: return configureable_t::s_update_item(m_bShowGrad,v,us);
+    case 5: return configureable_t::s_update_item(m_bShowCancCps,v,us);
+    case 6: return configureable_t::s_update_item(m_bShowCancMsGraph,v,us);
+    }
+    throw std::logic_error("invalid index");
+  }
+
+  std::string octtree_piece_rendata::get_description(int i)
+  {
+    switch(i)
+    {
+    case 0: return "show surface";
+    case 1: return "show cps";
+    case 2: return "show cp labels";
+    case 3: return "show msgraph";
+    case 4: return "show gradient";
+    case 5: return "show cancelled cps";
+    case 6: return "show cancelled cp msgraph";
+    }
+    throw std::logic_error("invalid index");
+  }
+
+
   disc_rendata_t::disc_rendata_t(cellid_t c):
       m_bShowAsc(false),
       m_bShowDes(false),
@@ -501,6 +536,34 @@ namespace grid
     }
 
     return ret;
+  }
+
+  int disc_rendata_t::get_num_items()
+  {
+    return 4;
+  }
+
+  bool disc_rendata_t::update_item(const int & i,boost::any &v,const bool &us)
+  {
+    switch(i)
+    {
+    case 0: return configureable_t::s_update_item(m_bShowAsc,v,us);
+    case 1: return configureable_t::s_update_item(asc_color,v,us);
+    case 2: return configureable_t::s_update_item(m_bShowDes,v,us);
+    case 3: return configureable_t::s_update_item(des_color,v,us);
+    }
+    throw std::logic_error("invalid index");
+  }
+  std::string disc_rendata_t::get_description(int i)
+  {
+    switch(i)
+    {
+    case 0: return "show asc disc";
+    case 1: return "set asc disc color";
+    case 2: return "show des disc";
+    case 3: return "set des disc color";
+    }
+    throw std::logic_error("invalid index");
   }
 
 }

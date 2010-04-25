@@ -11,6 +11,7 @@
 #include <ui_grid_viewer_mainwindow.h>
 #include <grid.h>
 #include <iostream>
+#include <boost/any.hpp>
 
 namespace grid
 {
@@ -48,24 +49,31 @@ namespace grid
     void on_datapiece_view_activated ( const QModelIndex & index  );
   };
 
-  class toggled_signal_retransmitter:public QObject
+  class configureable_t;
+
+  static void configure_ctx_menu(const std::vector<configureable_t *> &,const QPoint &p );
+
+  class configure_ctx_menu_sig_collector:public QObject
   {
     Q_OBJECT
 
   public:
 
-    viewer_mainwindow *m_pMw;
-    uint               m_act;
-    QVariant           m_val;
+    boost::any m_val;
 
-    toggled_signal_retransmitter
-        (viewer_mainwindow *pMw,uint act,QVariant v,
-         QObject *par):m_pMw(pMw),m_act(act),m_val(v)
+    int m_i;
+
+    const std::vector<configureable_t *> & m_list;
+
+    configure_ctx_menu_sig_collector
+        (const std::vector<configureable_t *> & l,
+         const boost::any & val,
+         const int & i,
+         QObject *par):m_list(l),m_val(val),m_i(i)
     {setParent(par);}
 
   private slots:
-    void toggled(bool state);
-
+    void triggered(bool state);
   };
 
   class octtree_piece_item_model : public QAbstractListModel

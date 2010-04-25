@@ -9,242 +9,33 @@
 
 namespace grid
 {
-  QColor glutils_to_q_color(const glutils::color_t &c)
+  void viewer_mainwindow::on_datapiece_view_customContextMenuRequested  ( const QPoint &p )
   {
-    return  QColor::fromRgbF(c[0],c[1],c[2],1.0);
-  }
+    QModelIndexList l =  datapiece_view->selectionModel()->selectedIndexes();
 
-  glutils::color_t q_to_glutils_color(const QColor &qc)
-  {
-    return  glutils::color_t(qc.redF(),qc.greenF(),qc.blueF());
-  }
+    std::vector<configureable_t *> c_list;
 
-  typedef QVariant (*get_val_for_action_fnt )
-      (const uint &,          // action
-       viewer_mainwindow * ,
-       const uint &);         // index
+    for(uint i = 0 ; i < l.size();++i)
+      c_list.push_back(m_viewer->m_grid_piece_rens[l[i].row()]);
 
-  typedef void (*set_val_for_action_fnt )
-      (const uint &,          // action
-       viewer_mainwindow * ,
-       const uint &,          // index
-       const QVariant &);     // value
+    configure_ctx_menu(c_list,datapiece_view->mapToGlobal(p));
 
-  struct ctx_menu_data_t
-  {
-    const char * text;
-    get_val_for_action_fnt get_fn;
-    set_val_for_action_fnt set_fn;
-  };
+    m_viewer->updateGL();
 
-
-  enum eContextMenuAction
-  {
-    RD_MA_BEGIN               = 0,
-    OTPRD_MA_BEGIN            = RD_MA_BEGIN,
-
-    OTPRD_MA_SURF             = OTPRD_MA_BEGIN,
-    OTPRD_MA_CPS,
-    OTPRD_MA_CPLABELS,
-    OTPRD_MA_GRAPH,
-    OTPRD_MA_GRAD,
-
-    OTPRD_MA_END,
-    CPDRD_MA_BEGIN            = OTPRD_MA_END,
-
-    CPDRD_MA_SHOW_ASC_DISC    = CPDRD_MA_BEGIN,
-    CPDRD_MA_ASC_DISC_COLOR,
-    CPDRD_MA_SHOW_DES_DISC,
-    CPDRD_MA_DES_DISC_COLOR,
-
-    CPDRD_MA_END,
-    RD_MA_END                 = CPDRD_MA_END,
-  };
-
-  QVariant get_val_for_otprd_ma
-      (const uint &action,
-       viewer_mainwindow * mw ,
-       const uint &idx)
-  {
-    octtree_piece_rendata * otp_rd = NULL;
-
-    otp_rd = mw->m_viewer->m_grid_piece_rens[idx];
-
-    switch (action)
-    {
-    case OTPRD_MA_SURF: return otp_rd->m_bShowSurface;
-    case OTPRD_MA_CPS: return otp_rd->m_bShowCps;
-    case OTPRD_MA_CPLABELS: return otp_rd->m_bShowCpLabels;
-    case OTPRD_MA_GRAPH:return otp_rd->m_bShowMsGraph;
-    case OTPRD_MA_GRAD:return otp_rd->m_bShowGrad;
-    default:throw std::logic_error("cannot deal with this action");
-    }
-    return QVariant();
-  }
-
-  void set_val_for_otprd_ma
-      (const uint &action,
-       viewer_mainwindow * mw ,
-       const uint &idx,
-       const QVariant &val)
-  {
-    octtree_piece_rendata * otp_rd = mw->m_viewer->m_grid_piece_rens[idx];
-
-    switch (action)
-    {
-    case OTPRD_MA_SURF: otp_rd->m_bShowSurface = val.value<bool>();break;
-    case OTPRD_MA_CPS: otp_rd->m_bShowCps = val.value<bool>();break;
-    case OTPRD_MA_CPLABELS: otp_rd->m_bShowCpLabels = val.value<bool>();break;
-    case OTPRD_MA_GRAPH: otp_rd->m_bShowMsGraph = val.value<bool>();break;
-    case OTPRD_MA_GRAD: otp_rd->m_bShowGrad = val.value<bool>();break;
-    default:throw std::logic_error("cannot deal with this action");
-    }
-  }
-
-  QVariant get_val_for_cpdrd_ma
-      (const uint &action,
-       viewer_mainwindow * mw ,
-       const uint &idx)
-  {
-    octtree_piece_rendata * otp_rd =
-        mw->m_viewer->m_grid_piece_rens[mw->m_active_otp_idx];
-
-    boost::shared_ptr<disc_rendata_t> cpd_rd = otp_rd->disc_rds[idx];
-
-    switch (action)
-    {
-    case CPDRD_MA_ASC_DISC_COLOR:return glutils_to_q_color(cpd_rd->asc_color);
-    case CPDRD_MA_SHOW_ASC_DISC:return cpd_rd->m_bShowAsc;
-    case CPDRD_MA_DES_DISC_COLOR:return glutils_to_q_color(cpd_rd->des_color);
-    case CPDRD_MA_SHOW_DES_DISC:return cpd_rd->m_bShowDes;
-    default:throw std::logic_error("cannot deal with this action");
-    }
-    return QVariant();
-  }
-
-  void set_val_for_cpdrd_ma
-      (const uint &action,
-       viewer_mainwindow * mw ,
-       const uint &idx,
-       const QVariant &val)
-  {
-    octtree_piece_rendata * otp_rd =
-        mw->m_viewer->m_grid_piece_rens[mw->m_active_otp_idx];
-
-    boost::shared_ptr<disc_rendata_t> cpd_rd = otp_rd->disc_rds[idx];
-
-    switch (action)
-    {
-    case CPDRD_MA_ASC_DISC_COLOR:cpd_rd->asc_color  = q_to_glutils_color(val.value<QColor>());break;
-    case CPDRD_MA_SHOW_ASC_DISC:cpd_rd->m_bShowAsc  = val.value<bool>();break;
-    case CPDRD_MA_DES_DISC_COLOR:cpd_rd->des_color  = q_to_glutils_color(val.value<QColor>());break;
-    case CPDRD_MA_SHOW_DES_DISC:cpd_rd->m_bShowDes  = val.value<bool>();break;
-    default:
-      throw std::logic_error("cannot deal with this action");
-    }
-  }
-
-  ctx_menu_data_t s_ctx_menu_data [RD_MA_END - RD_MA_BEGIN] =
-  {
-    {"show surface",get_val_for_otprd_ma,set_val_for_otprd_ma},
-    {"show critical points",get_val_for_otprd_ma,set_val_for_otprd_ma},
-    {"show critical point labels",get_val_for_otprd_ma,set_val_for_otprd_ma},
-    {"show graph",get_val_for_otprd_ma,set_val_for_otprd_ma},
-    {"show grad",get_val_for_otprd_ma,set_val_for_otprd_ma},
-
-    {"show asc disc",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
-    {"set asc disc color",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
-    {"show des disc",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
-    {"set des disc color",get_val_for_cpdrd_ma,set_val_for_cpdrd_ma},
-  };
-
-  QAbstractItemView * get_action_view(uint action,viewer_mainwindow *mw)
-  {
-    if(OTPRD_MA_BEGIN <= action && action < OTPRD_MA_END)
-      return mw->datapiece_view;
-
-    if(CPDRD_MA_BEGIN <= action && action < CPDRD_MA_END)
-      return mw->critpt_view;
-
-    throw std::logic_error("unknown action type");
-
-    return NULL;
-  }
-
-  void toggled_signal_retransmitter::toggled(bool state)
-  {
-    QModelIndexList l
-        = get_action_view(m_act,m_pMw)->selectionModel()->selectedIndexes();
-
-    QVariant updated_value;
-
-    if(m_val.canConvert<bool>())
-      updated_value = state;
-
-    if(m_val.canConvert<QColor>())
-    {
-      QColor ic = m_val.value<QColor>();
-
-      if (ic.isValid() == false)  ic = Qt::white;
-
-      QColor c = QColorDialog::getColor(ic,m_pMw);
-
-      if(c.isValid())
-        updated_value=c;
-    }
-
-    if(updated_value.isValid())
-    {
-      for(QModelIndexList::iterator it = l.begin(); it != l.end();++it)
-      {
-        (*s_ctx_menu_data[m_act].set_fn)(m_act,m_pMw,(*it).row(),updated_value);
-      }
-    }
-
-    m_pMw->m_viewer->updateGL();
-  }
-
-
-  QAction * add_menu_action(QMenu *m,viewer_mainwindow *mw,const uint & act)
-  {
-    QAction * action  = m->addAction ( s_ctx_menu_data[act].text);
-
-    QModelIndex i = get_action_view(act,mw)->selectionModel()->currentIndex();
-
-    QVariant cur_val = (*s_ctx_menu_data[act].get_fn)(act,mw,i.row());
-
-    if(cur_val.canConvert<bool>())
-    {
-      action->setCheckable(true);
-      action->setChecked(cur_val.value<bool>());
-    }
-
-    toggled_signal_retransmitter * re_trns =
-        new toggled_signal_retransmitter(mw,act,cur_val,m);
-
-    re_trns->connect(action,SIGNAL ( triggered ( bool ) ),re_trns,SLOT(toggled ( bool )));
-
-    return action;
-  }
-
-  void viewer_mainwindow::on_datapiece_view_customContextMenuRequested  ( const QPoint &pos )
-  {
-    QMenu m;
-
-    for(uint i = OTPRD_MA_BEGIN; i < OTPRD_MA_END; ++i)
-      add_menu_action(&m,this,i);
-
-    m.exec ( datapiece_view->mapToGlobal ( pos ) );
   }
 
   void viewer_mainwindow::on_critpt_view_customContextMenuRequested ( const QPoint &p )
   {
-    QMenu m;
+    QModelIndexList l =  critpt_view->selectionModel()->selectedIndexes();
 
-    for(uint i = CPDRD_MA_BEGIN; i < CPDRD_MA_END; ++i)
-      add_menu_action(&m,this,i);
+    std::vector<configureable_t *> c_list;
 
-    m.exec ( critpt_view->mapToGlobal ( p ) );
+    for(uint i = 0 ; i < l.size();++i)
+      c_list.push_back(m_viewer->m_grid_piece_rens[m_active_otp_idx]->disc_rds[l[i].row()].get());
+
+    configure_ctx_menu(c_list,critpt_view->mapToGlobal(p));
+
+    m_viewer->updateGL();
   }
 
   void viewer_mainwindow::on_datapiece_view_activated ( const QModelIndex & index  )
@@ -343,6 +134,68 @@ namespace grid
     int active_otp = m_mw->m_active_otp_idx;
 
     return m_mw->m_viewer->m_grid_piece_rens[active_otp]->disc_rds.size();
+  }
+
+  void configure_ctx_menu(const std::vector<configureable_t *> &l, const QPoint &p)
+  {
+    if(l.size() == 0)
+      return;
+
+    configureable_t * c = l[0];
+
+    QMenu m;
+
+    for(uint i = 0 ; i < c->get_num_items();++i)
+    {
+      QAction * action  = m.addAction ( c->get_description(i).c_str());
+
+      boost::any val;
+
+      c->update_item(i,val,false);
+
+      if(val.type() == typeid(bool))
+      {
+        action->setCheckable(true);
+        action->setChecked(boost::any_cast<bool>(val));
+      }
+
+      configure_ctx_menu_sig_collector * coll =
+          new configure_ctx_menu_sig_collector(l,val,i,&m);
+
+      coll->connect(action,SIGNAL ( triggered ( bool ) ),coll,SLOT(triggered ( bool )));
+    }
+
+    m.exec(p);
+  }
+
+  void configure_ctx_menu_sig_collector::triggered(bool state)
+  {
+    boost::any out_val;
+
+    if(m_val.type() == typeid(bool))
+      out_val = boost::any(state);
+
+    if(m_val.type() == typeid(glutils::color_t))
+    {
+
+      glutils::color_t c = boost::any_cast<glutils::color_t>(m_val);
+
+      QColor ic = QColor::fromRgbF(c[0],c[1],c[2],1.0);
+
+      QColor qc = QColorDialog::getColor(ic);
+
+      if(qc.isValid())
+        out_val = glutils::color_t(qc.redF(),qc.greenF(),qc.blueF());
+    }
+
+    if(out_val.empty())
+      return;
+
+    for(uint i = 0 ; i < m_list.size();++i)
+    {
+      configureable_t * c = m_list[i];
+      c->update_item(m_i,out_val,true);
+    }
   }
 
 }

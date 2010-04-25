@@ -7,13 +7,40 @@
 #include <glutils.h>
 #include <set>
 
+#include <boost/any.hpp>
+
 namespace grid
 {
   class octtree_piece ;
 
   class mscomplex_t;
 
-  class disc_rendata_t
+  class configureable_t
+  {
+  public:
+    virtual int         get_num_items() = 0 ;
+    virtual bool        update_item(const int &,boost::any &,const bool &) = 0;
+    virtual std::string get_description(int i) = 0;
+
+
+    template <typename T>
+        static bool s_update_item(T &p_val,boost::any &c_val,const bool &update_self)
+    {
+      bool ret = false;
+
+      if(update_self)
+      {
+        ret   = (p_val != boost::any_cast<T>(c_val));
+        p_val = boost::any_cast<T>(c_val);
+      }
+      else
+        c_val = boost::any(p_val);
+
+      return ret;
+    }
+  };
+
+  class disc_rendata_t:public configureable_t
   {
 
   public:
@@ -21,8 +48,6 @@ namespace grid
     glutils::renderable_t *asc_ren;
     glutils::renderable_t *des_ren;
     cellid_t               cellid;
-
-
 
     bool                   m_bShowAsc;
     bool                   m_bShowDes;
@@ -36,9 +61,13 @@ namespace grid
 
     void render();
     bool update(mscomplex_t *);
+
+    virtual int         get_num_items();
+    virtual bool        update_item(const int & ,boost::any &,const bool &);
+    virtual std::string get_description(int i);
   };
 
-  class octtree_piece_rendata
+  class octtree_piece_rendata:public configureable_t
   {
   public:
 
@@ -83,6 +112,11 @@ namespace grid
     void render() ;
 
     octtree_piece_rendata(octtree_piece *);
+
+    virtual int         get_num_items();
+    virtual bool        update_item(const int &,boost::any &,const bool &);
+    virtual std::string get_description(int i);
+
   };
 
   class glviewer_t : public QGLViewer
