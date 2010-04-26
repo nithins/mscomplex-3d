@@ -1,7 +1,5 @@
 #ifndef GRID_VIEWER_H_INCLUDED
 #define GRID_VIEWER_H_INCLUDED
-
-#include <QGLViewer/qglviewer.h>
 #include <grid.h>
 
 #include <glutils.h>
@@ -15,32 +13,65 @@ namespace grid
 
   class mscomplex_t;
 
-  class configureable_t
+  class configurable_t
   {
   public:
-    virtual int         get_num_items() = 0 ;
-    virtual bool        update_item(const int &,boost::any &,const bool &) = 0;
-    virtual std::string get_description(int i) = 0;
 
+    typedef two_tuple_t<int> data_index_t;
+
+    enum eExchangeMode {EXCHANGE_READ,EXCHANGE_WRITE};
+
+    virtual int         rows()    = 0 ;
+
+    virtual int         columns() = 0 ;
+
+    virtual bool        exchange_data(const data_index_t &,
+                                      boost::any &,
+                                      const eExchangeMode &) = 0;
+
+    virtual std::string get_header(int i)
+    {
+      std::stringstream ss;
+      ss<<i;
+      return ss.str();
+    }
 
     template <typename T>
-        static bool s_update_item(T &p_val,boost::any &c_val,const bool &update_self)
+        static bool s_exchange_read_write
+        (T &p_val,boost::any &c_val,const eExchangeMode & mode)
     {
-      bool ret = false;
+      bool ret = true;
 
-      if(update_self)
+      switch(mode)
       {
+      case EXCHANGE_WRITE:
         ret   = (p_val != boost::any_cast<T>(c_val));
         p_val = boost::any_cast<T>(c_val);
-      }
-      else
+        break;
+      case EXCHANGE_READ:
         c_val = boost::any(p_val);
-
+        break;
+      }
       return ret;
+    }
+
+    template <typename T>
+        static bool s_exchange_read_only
+        (const T &p_val,boost::any &c_val,const eExchangeMode & mode)
+    {
+      switch(mode)
+      {
+      case EXCHANGE_WRITE:
+        throw std::logic_error("read only property cannot write");
+        break;
+      case EXCHANGE_READ:
+        c_val = boost::any(p_val);
+      }
+      return false;
     }
   };
 
-  class disc_rendata_t:public configureable_t
+  class disc_rendata_t
   {
 
   public:
@@ -61,13 +92,9 @@ namespace grid
 
     void render();
     bool update(mscomplex_t *);
-
-    virtual int         get_num_items();
-    virtual bool        update_item(const int & ,boost::any &,const bool &);
-    virtual std::string get_description(int i);
   };
 
-  class octtree_piece_rendata:public configureable_t
+  class octtree_piece_rendata:public configurable_t
   {
   public:
 
@@ -113,32 +140,45 @@ namespace grid
 
     octtree_piece_rendata(octtree_piece *);
 
-    virtual int         get_num_items();
-    virtual bool        update_item(const int &,boost::any &,const bool &);
-    virtual std::string get_description(int i);
 
+    // configurable_t interface
+  public:
+    int rows();
+    int columns();
+    bool exchange_data(const data_index_t &,boost::any &,const eExchangeMode &);
+    std::string get_header(int i);
   };
 
-  class glviewer_t : public QGLViewer
+  class data_manager_t;
+
+  class grid_viewer_t:
+      public glutils::renderable_t,
+      public configurable_t
   {
   public:
-
     std::vector<octtree_piece_rendata * >  m_grid_piece_rens;
     cellid_t                               m_size;
     rect_t                                 m_roi;
 
-
   public:
-    glviewer_t(std::vector<octtree_piece *> * p ,
-               cellid_t size,const rect_t &roi);
 
-    ~glviewer_t();
+    grid_viewer_t(data_manager_t * p ,const rect_t &roi);
 
-  protected:
+    ~grid_viewer_t();
 
-    virtual void draw();
-    virtual void init();
-    virtual QString helpString() const;
+
+    void init();
+
+    // renderable_t interface
+  public:
+    int  render();
+
+    // configurable_t interface
+  public:
+    int rows();
+    int columns();
+    bool exchange_data(const data_index_t &,boost::any &,const eExchangeMode &);
+    std::string get_header(int i);
   };
 }
 #endif //VIEWER_H_INCLUDED

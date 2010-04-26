@@ -8,6 +8,7 @@
 #include <grid_datamanager.h>
 #include <grid_mscomplex.h>
 #include <grid_dataset.h>
+#include <cstring>
 
 glutils::color_t g_grid_cp_colors[] =
 {
@@ -34,25 +35,23 @@ glutils::color_t g_grid_cp_conn_colors[] =
 namespace grid
 {
 
-  glviewer_t::glviewer_t
-      (std::vector<octtree_piece *> * p ,cellid_t size,const rect_t &roi):
-      m_size(size)
+  grid_viewer_t::grid_viewer_t
+      (data_manager_t * gdm,const rect_t &roi):
+      m_size(gdm->m_size)
   {
-    m_roi = rect_t(cellid_t::zero,(size-cellid_t::one)*2);
+    m_roi = rect_t(cellid_t::zero,(m_size-cellid_t::one)*2);
 
     rect_t s_roi(roi.lower_corner()*2,roi.upper_corner()*2);
 
     if(m_roi.intersects(s_roi))
       m_roi.intersection(s_roi,m_roi);
 
-    for(uint i = 0 ;i < p->size();++i)
-      m_grid_piece_rens.push_back(new octtree_piece_rendata(p->at(i)));
-
-    std::cout<<m_roi<<'\n';
+    for(uint i = 0 ;i < gdm->m_pieces.size();++i)
+      m_grid_piece_rens.push_back(new octtree_piece_rendata(gdm->m_pieces.at(i)));
 
   }
 
-  glviewer_t::~glviewer_t()
+  grid_viewer_t::~grid_viewer_t()
   {
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
       delete m_grid_piece_rens[i];
@@ -60,7 +59,7 @@ namespace grid
     m_grid_piece_rens.clear();
   }
 
-  void glviewer_t::draw()
+  int grid_viewer_t::render()
   {
 
     glPushAttrib(GL_ENABLE_BIT);
@@ -81,12 +80,9 @@ namespace grid
     glPopAttrib();
   }
 
-  void glviewer_t::init()
+  void grid_viewer_t::init()
   {
     glutils::init();
-
-    // Restore previous viewer state.
-    restoreStateFromFile();
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
@@ -100,11 +96,52 @@ namespace grid
 
   }
 
-  QString glviewer_t::helpString() const
+  int grid_viewer_t::rows()
   {
-    QString text("<h2>MS Complex Viewer</h2>");
-    return text;
+    return m_grid_piece_rens.size();
+
   }
+  int grid_viewer_t::columns()
+  {
+    return 8;
+  }
+  bool grid_viewer_t::exchange_data(const data_index_t &idx,
+                                    boost::any &v,
+                                    const eExchangeMode &m)
+  {
+
+    switch(idx[0])
+    {
+    case 0: return s_exchange_read_only(m_grid_piece_rens[idx[1]]->dp->label(),v,m);
+    case 1: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowSurface,v,m);
+    case 2: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCps,v,m);
+    case 3: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v,m);
+    case 4: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v,m);
+    case 5: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowGrad,v,m);
+    case 6: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v,m);
+    case 7: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v,m);
+    }
+
+    throw std::logic_error("unknown index");
+  }
+  std::string grid_viewer_t::get_header(int i)
+  {
+    switch(i)
+    {
+
+    case 0: return "oct tree piece";
+    case 1: return "surface";
+    case 2: return "cps";
+    case 3: return "cp labels";
+    case 4: return "msgraph";
+    case 5: return "gradient";
+    case 6: return "cancelled cps";
+    case 7: return "cancelled cp msgraph";
+    }
+
+    throw std::logic_error("unknown index");
+  }
+
 
   octtree_piece_rendata::octtree_piece_rendata (octtree_piece * _dp):
       m_bShowSurface ( false ),
@@ -429,40 +466,41 @@ namespace grid
     glPopMatrix();
   }
 
-  int octtree_piece_rendata::get_num_items()
+  int octtree_piece_rendata::rows()
   {
-    return 7;
+    return disc_rds.size();
   }
-  bool octtree_piece_rendata::update_item(const int & i,boost::any &v,const bool &us)
+  int octtree_piece_rendata::columns()
   {
-    switch(i)
+    return 5;
+  }
+  bool octtree_piece_rendata::exchange_data(const data_index_t &idx,
+                                            boost::any &v,
+                                            const eExchangeMode &m)
+  {
+    switch(idx[0])
     {
-    case 0: return configureable_t::s_update_item(m_bShowSurface,v,us);
-    case 1: return configureable_t::s_update_item(m_bShowCps,v,us);
-    case 2: return configureable_t::s_update_item(m_bShowCpLabels,v,us);
-    case 3: return configureable_t::s_update_item(m_bShowMsGraph,v,us);
-    case 4: return configureable_t::s_update_item(m_bShowGrad,v,us);
-    case 5: return configureable_t::s_update_item(m_bShowCancCps,v,us);
-    case 6: return configureable_t::s_update_item(m_bShowCancMsGraph,v,us);
-    }
+    case 0:return s_exchange_read_only(disc_rds[idx[1]]->cellid.to_string(),v,m);
+    case 1:return s_exchange_read_write(disc_rds[idx[1]]->m_bShowAsc,v,m);
+    case 2:return s_exchange_read_write(disc_rds[idx[1]]->asc_color,v,m);
+    case 3:return s_exchange_read_write(disc_rds[idx[1]]->m_bShowDes,v,m);
+    case 4:return s_exchange_read_write(disc_rds[idx[1]]->des_color,v,m);
+    };
     throw std::logic_error("invalid index");
   }
 
-  std::string octtree_piece_rendata::get_description(int i)
+  std::string octtree_piece_rendata::get_header(int i)
   {
     switch(i)
     {
-    case 0: return "show surface";
-    case 1: return "show cps";
-    case 2: return "show cp labels";
-    case 3: return "show msgraph";
-    case 4: return "show gradient";
-    case 5: return "show cancelled cps";
-    case 6: return "show cancelled cp msgraph";
+    case 0: return "cellid";
+    case 1: return "asc disc";
+    case 2: return "asc disc color";
+    case 3: return "des disc";
+    case 4: return "des disc color";
     }
     throw std::logic_error("invalid index");
   }
-
 
   disc_rendata_t::disc_rendata_t(cellid_t c):
       m_bShowAsc(false),
@@ -540,34 +578,6 @@ namespace grid
     }
 
     return ret;
-  }
-
-  int disc_rendata_t::get_num_items()
-  {
-    return 4;
-  }
-
-  bool disc_rendata_t::update_item(const int & i,boost::any &v,const bool &us)
-  {
-    switch(i)
-    {
-    case 0: return configureable_t::s_update_item(m_bShowAsc,v,us);
-    case 1: return configureable_t::s_update_item(asc_color,v,us);
-    case 2: return configureable_t::s_update_item(m_bShowDes,v,us);
-    case 3: return configureable_t::s_update_item(des_color,v,us);
-    }
-    throw std::logic_error("invalid index");
-  }
-  std::string disc_rendata_t::get_description(int i)
-  {
-    switch(i)
-    {
-    case 0: return "show asc disc";
-    case 1: return "set asc disc color";
-    case 2: return "show des disc";
-    case 3: return "set des disc color";
-    }
-    throw std::logic_error("invalid index");
   }
 
 }

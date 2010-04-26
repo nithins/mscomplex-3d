@@ -9,31 +9,52 @@
 
 namespace grid
 {
+
+  void glviewer_t::draw()
+  {
+    m_ren->render();
+  }
+
+  void glviewer_t::init()
+  {
+    // Restore previous viewer state.
+    restoreStateFromFile();
+
+    m_ren->init();
+  }
+
+  glviewer_t::glviewer_t(data_manager_t * gdm ,const rect_t &r)
+  {
+    m_ren = new grid_viewer_t(gdm,r);
+  }
+
+  glviewer_t::~glviewer_t()
+  {
+    delete m_ren;
+  }
+
+  QString glviewer_t::helpString() const
+  {
+    QString text("<h2>MS Complex Viewer</h2>");
+    return text;
+  }
+
   void viewer_mainwindow::on_datapiece_view_customContextMenuRequested  ( const QPoint &p )
   {
     QModelIndexList l =  datapiece_view->selectionModel()->selectedIndexes();
 
-    std::vector<configureable_t *> c_list;
-
-    for(uint i = 0 ; i < l.size();++i)
-      c_list.push_back(m_viewer->m_grid_piece_rens[l[i].row()]);
-
-    configure_ctx_menu(c_list,datapiece_view->mapToGlobal(p));
+    configurable_ctx_menu(m_viewer->m_ren,l,datapiece_view->mapToGlobal(p));
 
     m_viewer->updateGL();
-
   }
 
   void viewer_mainwindow::on_critpt_view_customContextMenuRequested ( const QPoint &p )
   {
+
     QModelIndexList l =  critpt_view->selectionModel()->selectedIndexes();
 
-    std::vector<configureable_t *> c_list;
-
-    for(uint i = 0 ; i < l.size();++i)
-      c_list.push_back(m_viewer->m_grid_piece_rens[m_active_otp_idx]->disc_rds[l[i].row()].get());
-
-    configure_ctx_menu(c_list,critpt_view->mapToGlobal(p));
+    configurable_ctx_menu(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],
+                          l,critpt_view->mapToGlobal(p));
 
     m_viewer->updateGL();
   }
@@ -45,11 +66,11 @@ namespace grid
 
     m_active_otp_idx = index.row();
 
-    critpt_item_model * cp_model =
-        dynamic_cast<critpt_item_model *>(critpt_view->model());
+    configurable_item_model * cp_model =
+        dynamic_cast<configurable_item_model *>(critpt_view->model());
 
     if(cp_model)
-      cp_model->active_otp_changed();
+      cp_model->reset_configurable(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx]);
   }
 
   viewer_mainwindow::viewer_mainwindow
@@ -58,17 +79,20 @@ namespace grid
   {
     setupUi (this);
 
-    m_viewer = new glviewer_t(&gdm->m_pieces,gdm->m_size,roi);
+    m_viewer = new glviewer_t(gdm,roi);
 
     m_viewer->setParent(glviewer);
 
     m_viewer->resize(glviewer->size());
 
-    octtree_piece_item_model *otp_model = new octtree_piece_item_model ( this);
+    configurable_item_model *otp_model
+        = new configurable_item_model (m_viewer->m_ren,this);
 
     datapiece_view->setModel ( otp_model );
 
-    critpt_item_model *cp_model = new critpt_item_model ( this);
+    configurable_item_model *cp_model
+        = new configurable_item_model
+          (m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],this);
 
     critpt_view->setModel ( cp_model );
   }
@@ -78,7 +102,8 @@ namespace grid
     delete m_gdm;
   }
 
-  QVariant octtree_piece_item_model::data ( const QModelIndex &index, int role ) const
+  QVariant configurable_item_model::data
+      ( const QModelIndex &index, int role ) const
   {
     if ( !index.isValid() )
       return QVariant();
@@ -86,72 +111,73 @@ namespace grid
     if ( role != Qt::DisplayRole )
       return QVariant();
 
-    std::string s = m_mw->m_viewer->m_grid_piece_rens[index.row()]->dp->label();
+    if(index.column() >= m_conf->columns())
+      return QVariant();
 
-    return QString(s.c_str());
+    configurable_t::data_index_t idx(index.column(),index.row());
+
+    boost::any val;
+
+    bool writeable = m_conf->exchange_data(idx,val,configurable_t::EXCHANGE_READ);
+
+    if(writeable == true)
+      return QVariant();
+
+    if(val.type() == typeid(std::string))
+      return QString(boost::any_cast<std::string>(val).c_str());
   }
 
-  QVariant octtree_piece_item_model::headerData
-      ( int /*section*/, Qt::Orientation orientation,int role ) const
+  QVariant configurable_item_model::headerData
+      ( int section, Qt::Orientation orientation,int role ) const
   {
-    if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
-      return "Data Pieces";
-
+    if ( orientation == Qt::Horizontal &&
+         role == Qt::DisplayRole &&
+         section < m_conf->columns())
+    {
+      return m_conf->get_header(section).c_str();
+    }
     return QVariant();
   }
 
-  int octtree_piece_item_model::rowCount ( const QModelIndex &parent ) const
+  int configurable_item_model::rowCount ( const QModelIndex &parent ) const
   {
-    return m_mw->m_viewer->m_grid_piece_rens.size();
+    return m_conf->rows();
   }
 
-  QVariant critpt_item_model::data ( const QModelIndex &index, int role ) const
+  void configurable_item_model::reset_configurable(configurable_t *conf)
   {
-    if ( !index.isValid() )
-      return QVariant();
+    if(conf == m_conf)
+      return;
+    m_conf = conf;
 
-    if ( role != Qt::DisplayRole )
-      return QVariant();
-
-    int active_otp = m_mw->m_active_otp_idx;
-
-    cellid_t c = m_mw->m_viewer->m_grid_piece_rens[active_otp]->disc_rds[index.row()]->cellid;
-
-    return QString(c.to_string().c_str());
+    reset();
   }
 
-  QVariant critpt_item_model::headerData
-      ( int /*section*/, Qt::Orientation orientation,int role ) const
+  void configurable_ctx_menu
+      (configurable_t *c,
+       const QModelIndexList & l,
+       const QPoint &p)
   {
-    if ( orientation == Qt::Horizontal && role == Qt::DisplayRole )
-      return "Cript of piece no:";
 
-    return QVariant();
-  }
-
-  int critpt_item_model::rowCount ( const QModelIndex &parent ) const
-  {
-    int active_otp = m_mw->m_active_otp_idx;
-
-    return m_mw->m_viewer->m_grid_piece_rens[active_otp]->disc_rds.size();
-  }
-
-  void configure_ctx_menu(const std::vector<configureable_t *> &l, const QPoint &p)
-  {
     if(l.size() == 0)
       return;
 
-    configureable_t * c = l[0];
+    uint first_row = l[0].row();
 
     QMenu m;
 
-    for(uint i = 0 ; i < c->get_num_items();++i)
+    for(uint i = 0 ; i < c->columns();++i)
     {
-      QAction * action  = m.addAction ( c->get_description(i).c_str());
-
       boost::any val;
 
-      c->update_item(i,val,false);
+      bool writeable = c->exchange_data(configurable_t::data_index_t(i,first_row),
+                                        val,
+                                        configurable_t::EXCHANGE_READ);
+
+      if(writeable == false)
+        continue;
+
+      QAction * action  = m.addAction ( c->get_header(i).c_str());
 
       if(val.type() == typeid(bool))
       {
@@ -159,8 +185,8 @@ namespace grid
         action->setChecked(boost::any_cast<bool>(val));
       }
 
-      configure_ctx_menu_sig_collector * coll =
-          new configure_ctx_menu_sig_collector(l,val,i,&m);
+      configurable_ctx_menu_sig_collector * coll =
+          new configurable_ctx_menu_sig_collector(c,val,i,l,&m);
 
       coll->connect(action,SIGNAL ( triggered ( bool ) ),coll,SLOT(triggered ( bool )));
     }
@@ -168,7 +194,7 @@ namespace grid
     m.exec(p);
   }
 
-  void configure_ctx_menu_sig_collector::triggered(bool state)
+  void configurable_ctx_menu_sig_collector::triggered(bool state)
   {
     boost::any out_val;
 
@@ -191,10 +217,13 @@ namespace grid
     if(out_val.empty())
       return;
 
-    for(uint i = 0 ; i < m_list.size();++i)
+    for(uint i = 0 ; i < m_rows.size();++i)
     {
-      configureable_t * c = m_list[i];
-      c->update_item(m_i,out_val,true);
+      configurable_t::data_index_t idx;
+      idx[1] = m_rows[i].row();
+      idx[0] = m_col;
+
+      m_conf->exchange_data(idx,out_val,configurable_t::EXCHANGE_WRITE);
     }
   }
 

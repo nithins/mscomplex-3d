@@ -1,26 +1,44 @@
 #ifndef GRID_VIEWER_MAINWINDOW_INCLUDED
 #define GRID_VIEWER_MAINWINDOW_INCLUDED
 
+#include <grid.h>
+
 #include <QDialog>
 #include <QAbstractItemModel>
 #include <QModelIndex>
 #include <QVariant>
 #include <QItemSelectionModel>
 #include <QTreeView>
+#include <QGLViewer/qglviewer.h>
 
 #include <ui_grid_viewer_mainwindow.h>
-#include <grid.h>
-#include <iostream>
 #include <boost/any.hpp>
 
 namespace grid
 {
 
-  class glviewer_t;
+
+  class grid_viewer_t;
 
   class data_manager_t;
 
-  class octtree_piece_rendata;
+  class glviewer_t : public QGLViewer
+  {
+
+  public:
+
+    grid_viewer_t *m_ren;
+
+    glviewer_t(data_manager_t * p ,const rect_t &r);
+
+    ~glviewer_t();
+
+  protected:
+
+    virtual void draw();
+    virtual void init();
+    virtual QString helpString() const;
+  };
 
   class viewer_mainwindow:
       public QDialog,
@@ -49,41 +67,48 @@ namespace grid
     void on_datapiece_view_activated ( const QModelIndex & index  );
   };
 
-  class configureable_t;
+  class configurable_t;
 
-  static void configure_ctx_menu(const std::vector<configureable_t *> &,const QPoint &p );
+  void configurable_ctx_menu
+      (configurable_t *c,
+       const QModelIndexList & l,
+       const QPoint &p);
 
-  class configure_ctx_menu_sig_collector:public QObject
+  class configurable_ctx_menu_sig_collector:public QObject
   {
     Q_OBJECT
 
   public:
 
-    boost::any m_val;
+    boost::any              m_val;
+    int                     m_col;
+    configurable_t *        m_conf;
+    const QModelIndexList & m_rows;
 
-    int m_i;
-
-    const std::vector<configureable_t *> & m_list;
-
-    configure_ctx_menu_sig_collector
-        (const std::vector<configureable_t *> & l,
+    configurable_ctx_menu_sig_collector
+        (configurable_t * conf,
          const boost::any & val,
-         const int & i,
-         QObject *par):m_list(l),m_val(val),m_i(i)
+         const int & col,
+         const QModelIndexList & rows,
+         QObject *par):
+        m_conf(conf),
+        m_val(val),
+        m_col(col),
+        m_rows(rows)
     {setParent(par);}
 
   private slots:
     void triggered(bool state);
   };
 
-  class octtree_piece_item_model : public QAbstractListModel
+  class configurable_item_model : public QAbstractListModel
   {
     Q_OBJECT
 
   public:
 
-    octtree_piece_item_model ( viewer_mainwindow *mw,QObject *parent = 0 ):
-        QAbstractListModel ( parent ),m_mw(mw){}
+    configurable_item_model ( configurable_t *conf,QObject *parent = 0 ):
+        QAbstractListModel ( parent ),m_conf(conf){}
 
     QVariant data ( const QModelIndex &index, int role ) const;
 
@@ -92,33 +117,11 @@ namespace grid
 
     int rowCount ( const QModelIndex &parent = QModelIndex() ) const;
 
-  private:
-
-    viewer_mainwindow * m_mw;
-
-  };
-
-  class critpt_item_model : public QAbstractListModel
-  {
-    Q_OBJECT
-
-  public:
-
-    critpt_item_model ( viewer_mainwindow *mw,QObject *parent = 0 ):
-        QAbstractListModel ( parent ),m_mw(mw){}
-
-    QVariant data ( const QModelIndex &index, int role ) const;
-
-    QVariant headerData ( int section, Qt::Orientation orientation,
-                          int role = Qt::DisplayRole ) const;
-
-    int rowCount ( const QModelIndex &parent = QModelIndex() ) const;
-
-    void active_otp_changed(){reset();}
+    void reset_configurable(configurable_t *conf);
 
   private:
 
-    viewer_mainwindow * m_mw;
+    configurable_t * m_conf;
 
   };
 }
