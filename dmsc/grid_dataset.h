@@ -173,6 +173,22 @@ namespace grid
       return (dim);
     }
 
+    inline cell_fn_t get_cell_fn(cellid_t c)
+    {
+      cellid_t f[20];
+
+      uint f_ct = getCellPoints(c,f);
+
+      cell_fn_t ret = 0.0;
+
+      for(uint i = 0 ;i < f_ct;++i)
+      {
+        ret += (*m_vert_fns_ref)(f[i]/2);
+      }
+
+      return ret/f_ct;
+    }
+
     inline rect_t get_rect()
     {
       return m_rect;

@@ -45,14 +45,12 @@ namespace grid
     uchar        index;
 
     bool isCancelled;
-    bool isOnStrangulationPath;
-    bool isBoundryCancelable;
+    bool is_paired;
 
     critpt_t()
     {
       isCancelled           = false;
-      isOnStrangulationPath = false;
-      isBoundryCancelable   = false;
+      is_paired             = false;
       pair_idx              = -1;
     }
 
@@ -79,7 +77,7 @@ namespace grid
 
     void connect_cps(cellid_t c1,cellid_t c2);
 
-    void add_critpt(cellid_t,uchar index);
+    void add_critpt(cellid_t c,uchar i,cell_fn_t f);
 
     void simplify(uint_pair_list_t &,double simplification_treshold);
 

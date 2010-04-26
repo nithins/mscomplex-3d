@@ -443,9 +443,11 @@ namespace grid
     using namespace boost::lambda;
     using namespace std;
 
-    for_each(m_critical_cells.begin(),m_critical_cells.end(),
-                  bind(&mscomplex_t::add_critpt,msgraph,_1,
-                           bind(&dataset_t::getCellDim,this,_1)));
+    for(uint i = 0 ; i < m_critical_cells.size();++i)
+    {
+      cellid_t c = m_critical_cells[i];
+      msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c));
+    }
 
     for_each(m_critical_cells.begin(),m_critical_cells.end(),
                   bind(track_gradient_tree_bfs,this,msgraph,_1,GRADIENT_DIR_DOWNWARD));

@@ -48,6 +48,8 @@ namespace grid
     for(uint i = 0 ;i < p->size();++i)
       m_grid_piece_rens.push_back(new octtree_piece_rendata(p->at(i)));
 
+    std::cout<<m_roi<<'\n';
+
   }
 
   glviewer_t::~glviewer_t()
@@ -67,9 +69,9 @@ namespace grid
 
     glTranslatef(-0.5,-0.5,-0.5);
 
-    glScalef(0.5/(double)(m_size[0]-1),
-             0.5/(double)(m_size[1]-1),
-             0.5/(double)(m_size[2]-1));
+    glScalef(0.5/std::max(1.0,(double)(m_size[0]-1)),
+             0.5/std::max(1.0,(double)(m_size[1]-1)),
+             0.5/std::max(1.0,(double)(m_size[2]-1)));
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
@@ -167,7 +169,7 @@ namespace grid
 
       ((std::ostream&)ss)<<c;
 
-      if(!dp->msgraph->m_cps[i]->isBoundryCancelable)
+      if(!dp->msgraph->m_cps[i]->is_paired)
       {
         crit_labels[dim].push_back(ss.str());
         crit_label_locations[dim].push_back(glutils::vertex_t(c[0],c[1],c[2]) );
@@ -192,7 +194,7 @@ namespace grid
       if(dp->msgraph->m_cps[i]->isCancelled)
         continue;
 
-      if(dp->msgraph->m_cps[i]->isBoundryCancelable)
+      if(dp->msgraph->m_cps[i]->is_paired)
         continue;
 
       cellid_t c = (dp->msgraph->m_cps[i]->cellid);
@@ -296,6 +298,8 @@ namespace grid
 
     for(uint i = 0 ; i < dp->msgraph->m_cps.size();++i)
     {
+      if(dp->msgraph->m_cps[i]->is_paired) continue;
+
       sptr.reset(new disc_rendata_t(dp->msgraph->m_cps[i]->cellid));
       disc_rds.push_back(sptr);
     }
