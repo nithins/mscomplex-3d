@@ -2,6 +2,13 @@
 #extension GL_EXT_geometry_shader4 : enable
 #extension GL_EXT_gpu_shader4 : enable
 
+//HEADER_REPLACE_BEGIN
+
+const float even_sz = 0.2;
+const float odd_sz  = 0.6;
+
+//HEADER_REPLACE_END
+
 vec4 diffuse;
 vec4 ambient;
 vec4 in_color;
@@ -41,9 +48,6 @@ void set_light_constants()
   lightDir   = normalize(vec3(gl_LightSource[0].position));
   halfVector = normalize(gl_LightSource[0].halfVector.xyz);
 }
-
-uniform float even_sz = 0.2;
-uniform float odd_sz  = 0.6;
 
 vec3[8] get_box(vec3 c)
 {

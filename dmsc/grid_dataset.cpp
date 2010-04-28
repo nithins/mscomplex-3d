@@ -103,7 +103,7 @@ namespace grid
       (dataset_t *dataset,
        mscomplex_t *msgraph,
        cellid_t start_cellId,
-       eGradDirection gradient_dir
+       eDirection gradient_dir
        )
   {
     typedef cellid_t id_type;
@@ -150,7 +150,7 @@ namespace grid
       (dataset_t *dataset,
        critpt_disc_t *disc,
        cellid_t start_cellId,
-       eGradDirection gradient_dir
+       eDirection gradient_dir
        )
   {
     typedef cellid_t id_type;
@@ -487,7 +487,7 @@ namespace grid
 
     for(uint i = 0 ; i < m_critical_cells.size();++i)
       track_gradient_tree_bfs
-          (this,msgraph,m_critical_cells[i],GRADIENT_DIR_DOWNWARD);
+          (this,msgraph,m_critical_cells[i],DIRECTION_DESCENDING);
 
   }
 
@@ -499,16 +499,13 @@ namespace grid
     {
       critpt_t * cp = msgraph->m_cps[i];
 
-      if(cp->asc_disc.size() == 1)
+      for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
       {
-        cp->asc_disc.clear();
-        compute_disc_bfs(this,&cp->asc_disc,cp->cellid,GRADIENT_DIR_UPWARD);
-      }
-
-      if(cp->des_disc.size() == 1)
-      {
-        cp->des_disc.clear();
-        compute_disc_bfs(this,&cp->des_disc,cp->cellid,GRADIENT_DIR_DOWNWARD);
+        if(cp->disc[dir].size() == 1)
+        {
+          cp->disc[dir].clear();
+          compute_disc_bfs(this,&cp->disc[dir],cp->cellid,(eDirection)dir);
+        }
       }
     }
   }

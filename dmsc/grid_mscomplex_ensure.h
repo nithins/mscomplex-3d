@@ -18,7 +18,7 @@ namespace grid
 
   inline void ensure_ordered_index_one_separation(mscomplex_t *msc,uint_pair_t e)
   {
-    if(msc->m_cps[e[0]]->index +1 != msc->m_cps[e[1]]->index)
+    if(msc->m_cps[e[1]]->index +1 != msc->m_cps[e[0]]->index)
       throw std::logic_error("ordered index one separation violated");
   }
 
@@ -26,18 +26,19 @@ namespace grid
   {
     ensure_ordered_index_one_separation(msc,e);
 
-    if(msc->m_cps[e[0]]->asc.count(e[1]) == 0 ||
-       msc->m_cps[e[1]]->des.count(e[0]) == 0)
-      throw std::logic_error("connectivity violated");
+    for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+      if(msc->m_cps[e[dir]]->conn[dir].count(e[dir^1]) == 0)
+        throw std::logic_error("connectivity violated");
+
   }
 
   inline void ensure_single_connectivity(mscomplex_t *msc,uint_pair_t e)
   {
     ensure_ordered_index_one_separation(msc,e);
 
-    if(msc->m_cps[e[0]]->asc.count(e[1]) != 1 ||
-       msc->m_cps[e[1]]->des.count(e[0]) != 1)
-      throw std::logic_error("single connectivity violated");
+    for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+      if(msc->m_cps[e[dir]]->conn[dir].count(e[dir^1]) != 1)
+        throw std::logic_error("connectivity violated");
   }
 
   inline void ensure_cellid_critical(mscomplex_t * msc,cellid_t c)

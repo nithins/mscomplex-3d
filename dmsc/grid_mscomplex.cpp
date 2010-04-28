@@ -11,7 +11,7 @@ namespace grid
 {
   inline void order_pr_by_cp_index(mscomplex_t *msc,uint_pair_t &e)
   {
-    if(msc->m_cps[e[0]]->index > msc->m_cps[e[1]]->index)
+    if(msc->m_cps[e[0]]->index < msc->m_cps[e[1]]->index)
       std::swap(e[0],e[1]);
   }
 
@@ -41,6 +41,7 @@ namespace grid
   void mscomplex_t::connect_cps(cellid_t c0,cellid_t c1)
   {
     ensure_cellid_critical(this,c0);
+
     ensure_cellid_critical(this,c1);
 
     uint_pair_t e(m_id_cp_map[c0],m_id_cp_map[c1]);
@@ -49,8 +50,8 @@ namespace grid
 
     ensure_ordered_index_one_separation(this,e);
 
-    m_cps[e[0]]->asc.insert(e[1]);
-    m_cps[e[1]]->des.insert(e[0]);
+    for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+      m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
   }
 
   void cancelPairs ( mscomplex_t *msc,uint_pair_t e,
@@ -61,49 +62,43 @@ namespace grid
 
     ensure_single_connectivity(msc,e);
 
-    critpt_t * cp0 = msc->m_cps[e[0]];
-    critpt_t * cp1 = msc->m_cps[e[1]];
+    critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
 
-    for ( conn_iter_t asc0_it = cp0->asc.begin();asc0_it != cp0->asc.end(); ++asc0_it )
-    {
-      if(*asc0_it == e[1])
-        continue;
+    conn_iter_t it[DIRECTION_COUNT];
 
-      for ( conn_iter_t des1_it = cp1->des.begin();des1_it != cp1->des.end(); ++des1_it )
-      {
-        if(*des1_it == e[0])
-          continue;
+    for(uint dir = 0 ; dir < 2;++dir)
+      cp[dir]->conn[dir].erase(e[dir^1]);
 
-        msc->m_cps[*asc0_it]->des.insert(*des1_it);
-        msc->m_cps[*des1_it]->asc.insert(*asc0_it);
+    // cps in lower of u except l
+    for(it[0] = cp[0]->conn[0].begin();it[0] != cp[0]->conn[0].end();++it[0])
+      // cps in upper of l except u
+      for(it[1] = cp[1]->conn[1].begin();it[1] != cp[1]->conn[1].end();++it[1])
+        for(uint dir = 0 ; dir < 2;++dir)
+          msc->m_cps[*it[dir]]->conn[dir^1].insert(*it[dir^1]);
 
-        if(new_edges != NULL)
-          new_edges->push_back(uint_pair_t(*des1_it,*asc0_it ));
-      }
-    }
+    if(new_edges)
+      // cps in lower of u except l
+      for(it[0] = cp[0]->conn[0].begin();it[0] != cp[0]->conn[0].end();++it[0])
+        // cps in upper of l except u
+        for(it[1] = cp[1]->conn[1].begin();it[1] != cp[1]->conn[1].end();++it[1])
+            new_edges->push_back(uint_pair_t(*it[0],*it[1]));
 
-    // merge here the des disc of cp1_ind to the des disc of asc0_it;
-    for ( conn_iter_t asc0_it  = cp0->asc.begin(); asc0_it != cp0->asc.end(); ++asc0_it )
-      if ( *asc0_it != e[1] )
-        msc->m_cps[*asc0_it]->des.erase ( e[0] );
+    for(uint dir = 0 ; dir<2;++dir)
+     for(conn_iter_t it = cp[dir]->conn[dir].begin();it != cp[dir]->conn[dir].end();++it)
+       msc->m_cps[*it]->conn[dir^1].erase(e[dir]);
 
-    for ( conn_iter_t  des0_it = cp0->des.begin();des0_it != cp0->des.end(); ++des0_it )
-      msc->m_cps[*des0_it]->asc.erase ( e[0] );
+    for(uint dir = 0 ; dir<2;++dir)
+      for(conn_iter_t it = cp[dir]->conn[dir^1].begin();it != cp[dir]->conn[dir^1].end();++it)
+        msc->m_cps[*it]->conn[dir].erase(e[dir]);
 
-    for ( conn_iter_t asc1_it  = cp1->asc.begin();asc1_it != cp1->asc.end(); ++asc1_it )
-      msc->m_cps[*asc1_it]->des.erase ( e[1] );
+    for(uint dir = 0 ; dir < 2;++dir)
+      cp[dir]->conn[dir].insert(e[dir^1]);
 
-    // merge here the asc disc of cp0_ind to the asc disc of des1_it;
-    for ( conn_iter_t des1_it = cp1->des.begin(); des1_it != cp1->des.end(); ++des1_it )
-      if ( *des1_it!= e[0] )
-        msc->m_cps[*des1_it]->asc.erase ( e[1] );
+    for(uint dir = 0 ; dir < 2;++dir)
+      cp[dir]->isCancelled = true;
 
-
-    cp0->isCancelled = true;
-    cp0->des.clear();
-
-    cp1->isCancelled = true;
-    cp1->asc.clear();
+    for(uint dir = 0 ; dir < 2;++dir)
+      cp[dir]->conn[dir^1].clear();
   }
 
   void uncancel_pairs( mscomplex_t  *msc,uint_pair_t e)
@@ -112,21 +107,23 @@ namespace grid
 
     ensure_connectivity(msc,e);
 
-    conn_t * ad_conns [] = {&msc->m_cps[e[0]]->asc,&msc->m_cps[e[1]]->des};
+    critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
 
-    for(uint ad = 0 ; ad <2 ; ++ad)
+    conn_iter_t i_it,j_it;
+
+    for(uint dir = 0 ; dir <2 ; ++dir)
     {
-      conn_t new_ad;
+      conn_t new_conn;
 
-      for(conn_iter_t i_it = ad_conns[ad]->begin(); i_it != ad_conns[ad]->end() ; ++i_it )
+      for(i_it = cp[dir]->conn[dir].begin();i_it != cp[dir]->conn[dir].end() ; ++i_it )
       {
-        if(*i_it == e[(ad+1)%2]) continue;
+        if(*i_it == e[dir^1]) continue;
 
-        critpt_t *cp = msc->m_cps[*i_it];
+        critpt_t *conn_cp = msc->m_cps[*i_it];
 
-        if(!cp->is_paired)
+        if(!conn_cp->is_paired)
         {
-          new_ad.insert(*i_it);
+          new_conn.insert(*i_it);
           continue;
         }
 
@@ -134,21 +131,19 @@ namespace grid
 
         ensure_cp_is_paired(msc,*i_it);
 
-        critpt_t *cp_pr = msc->m_cps[cp->pair_idx];
+        critpt_t *cp_pr = msc->m_cps[conn_cp->pair_idx];
 
-        conn_t *pr_ad_conns = (ad == 0)?(&cp_pr->asc):(&cp_pr->des);
-
-        for(conn_iter_t j_it = pr_ad_conns->begin(); j_it != pr_ad_conns->end() ; ++j_it )
+        for(j_it = cp_pr->conn[dir].begin(); j_it != cp_pr->conn[dir].end() ; ++j_it )
         {
           ensure_cp_is_not_paired(msc,*j_it);
 
-          new_ad.insert(*j_it);
+          new_conn.insert(*j_it);
         }
       }
 
-      msc->m_cps[e[ad]]->isCancelled = false;
-      ad_conns[ad]->clear();
-      ad_conns[ad]->insert(new_ad.begin(),new_ad.end());
+      msc->m_cps[e[dir]]->isCancelled = false;
+      cp[dir]->conn[dir].clear();
+      cp[dir]->conn[dir].insert(new_conn.begin(),new_conn.end());
     }
   }
 
@@ -176,14 +171,14 @@ namespace grid
       if(m_cps[i]->is_paired)
         os<<"*";
       os<<m_cps[i]->cellid<<") = ";
-      print_cp_connections(os,*this,m_cps[i]->des);
+      print_cp_connections(os,*this,m_cps[i]->conn[0]);
       os<<std::endl;
 
       os<<"asc(";
       if(m_cps[i]->is_paired)
         os<<"*";
       os<<m_cps[i]->cellid<<") = ";
-      print_cp_connections(os,*this,m_cps[i]->asc);
+      print_cp_connections(os,*this,m_cps[i]->conn[1]);
       os<<std::endl;
       os<<std::endl;
     }
@@ -211,298 +206,298 @@ namespace grid
     msc.m_cps.push_back(dest_cp);
   }
 
-  mscomplex_t * mscomplex_t::merge_up
-      (const mscomplex_t& msc1,
-       const mscomplex_t& msc2)
-  {
-
-    // form the intersection rect
-    rect_t ixn;
-
-    if (!msc2.m_rect.intersection (msc1.m_rect,ixn))
-      throw std::logic_error ("rects should intersect for merge");
-
-    if ( msc2.m_rect.eff_dim() != gc_grid_dim-1)
-      throw std::logic_error ("rects must merge along a d-1 manifold");
-
-    // TODO: ensure that the union of  rects is not including anything extra
-
-    rect_t r = msc1.m_rect.bounding_box(msc1.m_rect);
-
-    rect_t e = msc1.m_ext_rect.bounding_box(msc1.m_ext_rect);
-
-    mscomplex_t * out_msc = new mscomplex_t(r,e);
-
-    const mscomplex_t* msc_arr[] = {&msc1,&msc2};
-
-    // make a union of the critical points in this
-    for (uint i = 0 ; i <2;++i)
-    {
-      const mscomplex_t * msc = msc_arr[i];
-
-      for (uint j = 0 ; j <msc->m_cps.size();++j)
-      {
-        const critpt_t *src_cp = msc->m_cps[j];
-
-        // if it is contained or not
-        if (i == 1 && (out_msc->m_id_cp_map.count(src_cp->cellid) == 1))
-          continue;
-
-        if(src_cp->isCancelled)
-          continue;
-
-        shallow_replicate_cp(*out_msc,*src_cp);
-
-      }
-    }
-
-    for (uint i = 0 ; i <2;++i)
-    {
-      const mscomplex_t * msc = msc_arr[i];
-
-      // copy over connectivity information
-      for (uint j = 0 ; j <msc->m_cps.size();++j)
-      {
-        const critpt_t *src_cp = msc->m_cps[j];
-
-        if(src_cp->isCancelled)
-          continue;
-
-        critpt_t *dest_cp = out_msc->m_cps[out_msc->m_id_cp_map[src_cp->cellid]];
-
-        if(src_cp->is_paired)
-        {
-          critpt_t *src_pair_cp = msc->m_cps[src_cp->pair_idx];
-
-          dest_cp->pair_idx = out_msc->m_id_cp_map[src_pair_cp->cellid];
-        }
-
-        const conn_t *acdc_src[]  = {&src_cp->asc, &src_cp->des};
-
-        conn_t *acdc_dest[] = {&dest_cp->asc,&dest_cp->des};
-
-        bool is_src_cmn_bndry = (ixn.contains(src_cp->cellid) && i == 1);
-
-        for (uint j = 0 ; j < 2; ++j)
-        {
-          for (const_conn_iter_t it = acdc_src[j]->begin();
-          it != acdc_src[j]->end();++it)
-          {
-            const critpt_t *conn_cp = msc->m_cps[*it];
-
-            // common boundry connections would have been found along the boundry
-            if( is_src_cmn_bndry && ixn.contains(conn_cp->cellid))
-              continue;
-
-            if (conn_cp->isCancelled)
-              continue;
-
-            acdc_dest[j]->insert (out_msc->m_id_cp_map[conn_cp->cellid]);
-          }
-        }
-      }
-    }
-
-    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
-
-    cellid_t c;
-
-    for(c[2] = ixn[2][0] ; c[2] <= ixn[2][1]; ++c[2])
-    {
-      for(c[1] = ixn[1][0] ; c[1] <= ixn[1][1]; ++c[1])
-      {
-        for(c[0] = ixn[0][0] ; c[0] <= ixn[0][1]; ++c[0])
-        {
-
-          if(out_msc->m_id_cp_map.count(c) != 1)
-            throw std::logic_error("missing common bndry cp");
-
-          u_int src_idx = out_msc->m_id_cp_map[c];
-
-          critpt_t *src_cp = out_msc->m_cps[src_idx];
-
-          if(src_cp->is_paired || !src_cp->is_paired)
-            continue;
-
-          u_int pair_idx = src_cp->pair_idx;
-
-          cellid_t p = out_msc->m_cps[pair_idx]->cellid;
-
-          if(!out_msc->m_rect.isInInterior(c)&& !out_msc->m_ext_rect.isOnBoundry(c))
-            continue;
-
-          if(!out_msc->m_rect.isInInterior(p)&& !out_msc->m_ext_rect.isOnBoundry(p))
-            continue;
-
-          cancelPairs(out_msc,uint_pair_t(src_idx,pair_idx));
-        }
-      }
-    }
-
-    return out_msc;
-  }
-
-  void mscomplex_t::merge_down(mscomplex_t& msc1,mscomplex_t& msc2)
-  {
-    // form the intersection rect
-    rect_t ixn;
-
-    if (!msc2.m_rect.intersection (msc1.m_rect,ixn))
-      throw std::logic_error ("rects should intersect for merge");
-
-    if ( msc2.m_rect.eff_dim() != gc_grid_dim-1)
-      throw std::logic_error ("rects must merge along a d-1 manifold");
-
-    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
-
-    cellid_t c;
-
-    for(c[2] = ixn[2][1] ; c[2] >= ixn[2][0]; --c[2])
-    {
-      for(c[1] = ixn[1][1] ; c[1] >= ixn[1][0]; --c[1])
-      {
-        for(c[0] = ixn[0][1] ; c[0] >= ixn[0][0]; --c[0])
-        {
-
-          if(this->m_id_cp_map.count(c) != 1)
-            throw std::logic_error("missing common bndry cp");
-
-          u_int src_idx = this->m_id_cp_map[c];
-
-          critpt_t *src_cp = this->m_cps[src_idx];
-
-          if(!src_cp->isCancelled )
-            continue;
-
-          u_int pair_idx = src_cp->pair_idx;
-
-          cellid_t p = this->m_cps[pair_idx]->cellid;
-
-          if(!this->m_rect.isInInterior(c)&& !this->m_ext_rect.isOnBoundry(c))
-            continue;
-
-          if(!this->m_rect.isInInterior(p)&& !this->m_ext_rect.isOnBoundry(p))
-            continue;
-
-          uncancel_pairs(this,uint_pair_t(src_idx,pair_idx));
-        }
-      }
-    }
-
-    // identify and copy the results to msc1 and msc2
-
-    mscomplex_t* msc_arr[] = {&msc1,&msc2};
-
-    for (uint i = 0 ; i <2;++i)
-    {
-      mscomplex_t * msc = msc_arr[i];
-
-      // adjust connections for uncancelled cps in msc
-      for(uint j = 0 ; j < m_cps.size();++j)
-      {
-        critpt_t * src_cp = m_cps[j];
-
-        if(src_cp->isCancelled)
-          throw std::logic_error("all cps ought to be uncancelled by now");
-
-        if(!src_cp->is_paired)
-          continue;
-
-        critpt_t * src_pair_cp = m_cps[src_cp->pair_idx];
-
-        bool src_in_msc      = (msc->m_id_cp_map.count(src_cp->cellid) != 0);
-        bool src_pair_in_msc = (msc->m_id_cp_map.count(src_pair_cp->cellid) != 0);
-
-        if(!src_in_msc && !src_pair_in_msc)
-          continue;
-
-        if(!src_in_msc)
-        {
-          shallow_replicate_cp(*msc,*src_cp);
-        }
-
-        if(!src_pair_in_msc)
-        {
-          shallow_replicate_cp(*msc,*src_pair_cp);
-        }
-
-        uint dest_cp_idx = msc->m_id_cp_map[src_cp->cellid];
-
-        critpt_t *dest_cp = msc->m_cps[dest_cp_idx];
-
-        if(!src_in_msc || !src_pair_in_msc || !dest_cp->is_paired)
-        {
-          uint dest_pair_cp_idx  = msc->m_id_cp_map[src_pair_cp->cellid];
-          critpt_t *dest_pair_cp = msc->m_cps[dest_pair_cp_idx];
-
-          dest_cp->is_paired      = true;
-          dest_pair_cp->is_paired = true;
-
-          dest_cp->pair_idx      = dest_pair_cp_idx;
-          dest_pair_cp->pair_idx = dest_cp_idx;
-        }
-
-        conn_t *src_acdc[] = {&src_cp->asc,&src_cp->des};
-        conn_t *dest_acdc[] = {&dest_cp->asc,&dest_cp->des};
-
-        for(uint k = 0 ; k < 2;++k)
-        {
-          dest_acdc[k]->clear();
-
-          for(conn_iter_t it = src_acdc[k]->begin(); it!=src_acdc[k]->end();++it)
-          {
-            critpt_t *src_conn_cp = m_cps[*it];
-
-            if(src_conn_cp->is_paired == true)
-              throw std::logic_error("only non cancellable cps must be remaining");
-
-            if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
-            {
-              shallow_replicate_cp(*msc,*src_conn_cp);
-            }
-
-            dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
-          }// end it
-        }// end k
-      }// end j
-
-      // adjust connections for non uncancelled cps in msc
-      for(uint j = 0 ; j < m_cps.size();++j)
-      {
-        critpt_t * src_cp = m_cps[j];
-
-        if(src_cp->is_paired)
-          continue;
-
-        if(msc->m_id_cp_map.count(src_cp->cellid) != 1)
-          continue;
-
-        critpt_t *dest_cp = msc->m_cps[msc->m_id_cp_map[src_cp->cellid]];
-
-        conn_t *src_acdc[] = {&src_cp->asc,&src_cp->des};
-        conn_t *dest_acdc[] = {&dest_cp->asc,&dest_cp->des};
-
-        for(uint k = 0 ; k < 2;++k)
-        {
-          dest_acdc[k]->clear();
-
-          for(conn_iter_t it = src_acdc[k]->begin(); it!=src_acdc[k]->end();++it)
-          {
-            critpt_t *src_conn_cp = m_cps[*it];
-
-            if(src_conn_cp->is_paired == true)
-              throw std::logic_error("only non cancellable cps must be remaining 1");
-
-
-            if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
-              continue;
-
-            dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
-          }// end it
-        }// end k
-      }// end j
-    }//end i
-  }
+//  mscomplex_t * mscomplex_t::merge_up
+//      (const mscomplex_t& msc1,
+//       const mscomplex_t& msc2)
+//  {
+//
+//    // form the intersection rect
+//    rect_t ixn;
+//
+//    if (!msc2.m_rect.intersection (msc1.m_rect,ixn))
+//      throw std::logic_error ("rects should intersect for merge");
+//
+//    if ( msc2.m_rect.eff_dim() != gc_grid_dim-1)
+//      throw std::logic_error ("rects must merge along a d-1 manifold");
+//
+//    // TODO: ensure that the union of  rects is not including anything extra
+//
+//    rect_t r = msc1.m_rect.bounding_box(msc1.m_rect);
+//
+//    rect_t e = msc1.m_ext_rect.bounding_box(msc1.m_ext_rect);
+//
+//    mscomplex_t * out_msc = new mscomplex_t(r,e);
+//
+//    const mscomplex_t* msc_arr[] = {&msc1,&msc2};
+//
+//    // make a union of the critical points in this
+//    for (uint i = 0 ; i <2;++i)
+//    {
+//      const mscomplex_t * msc = msc_arr[i];
+//
+//      for (uint j = 0 ; j <msc->m_cps.size();++j)
+//      {
+//        const critpt_t *src_cp = msc->m_cps[j];
+//
+//        // if it is contained or not
+//        if (i == 1 && (out_msc->m_id_cp_map.count(src_cp->cellid) == 1))
+//          continue;
+//
+//        if(src_cp->isCancelled)
+//          continue;
+//
+//        shallow_replicate_cp(*out_msc,*src_cp);
+//
+//      }
+//    }
+//
+//    for (uint i = 0 ; i <2;++i)
+//    {
+//      const mscomplex_t * msc = msc_arr[i];
+//
+//      // copy over connectivity information
+//      for (uint j = 0 ; j <msc->m_cps.size();++j)
+//      {
+//        const critpt_t *src_cp = msc->m_cps[j];
+//
+//        if(src_cp->isCancelled)
+//          continue;
+//
+//        critpt_t *dest_cp = out_msc->m_cps[out_msc->m_id_cp_map[src_cp->cellid]];
+//
+//        if(src_cp->is_paired)
+//        {
+//          critpt_t *src_pair_cp = msc->m_cps[src_cp->pair_idx];
+//
+//          dest_cp->pair_idx = out_msc->m_id_cp_map[src_pair_cp->cellid];
+//        }
+//
+//        const conn_t *acdc_src[]  = {&src_cp->asc, &src_cp->des};
+//
+//        conn_t *acdc_dest[] = {&dest_cp->asc,&dest_cp->des};
+//
+//        bool is_src_cmn_bndry = (ixn.contains(src_cp->cellid) && i == 1);
+//
+//        for (uint j = 0 ; j < 2; ++j)
+//        {
+//          for (const_conn_iter_t it = acdc_src[j]->begin();
+//          it != acdc_src[j]->end();++it)
+//          {
+//            const critpt_t *conn_cp = msc->m_cps[*it];
+//
+//            // common boundry connections would have been found along the boundry
+//            if( is_src_cmn_bndry && ixn.contains(conn_cp->cellid))
+//              continue;
+//
+//            if (conn_cp->isCancelled)
+//              continue;
+//
+//            acdc_dest[j]->insert (out_msc->m_id_cp_map[conn_cp->cellid]);
+//          }
+//        }
+//      }
+//    }
+//
+//    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
+//
+//    cellid_t c;
+//
+//    for(c[2] = ixn[2][0] ; c[2] <= ixn[2][1]; ++c[2])
+//    {
+//      for(c[1] = ixn[1][0] ; c[1] <= ixn[1][1]; ++c[1])
+//      {
+//        for(c[0] = ixn[0][0] ; c[0] <= ixn[0][1]; ++c[0])
+//        {
+//
+//          if(out_msc->m_id_cp_map.count(c) != 1)
+//            throw std::logic_error("missing common bndry cp");
+//
+//          u_int src_idx = out_msc->m_id_cp_map[c];
+//
+//          critpt_t *src_cp = out_msc->m_cps[src_idx];
+//
+//          if(src_cp->is_paired || !src_cp->is_paired)
+//            continue;
+//
+//          u_int pair_idx = src_cp->pair_idx;
+//
+//          cellid_t p = out_msc->m_cps[pair_idx]->cellid;
+//
+//          if(!out_msc->m_rect.isInInterior(c)&& !out_msc->m_ext_rect.isOnBoundry(c))
+//            continue;
+//
+//          if(!out_msc->m_rect.isInInterior(p)&& !out_msc->m_ext_rect.isOnBoundry(p))
+//            continue;
+//
+//          cancelPairs(out_msc,uint_pair_t(src_idx,pair_idx));
+//        }
+//      }
+//    }
+//
+//    return out_msc;
+//  }
+//
+//  void mscomplex_t::merge_down(mscomplex_t& msc1,mscomplex_t& msc2)
+//  {
+//    // form the intersection rect
+//    rect_t ixn;
+//
+//    if (!msc2.m_rect.intersection (msc1.m_rect,ixn))
+//      throw std::logic_error ("rects should intersect for merge");
+//
+//    if ( msc2.m_rect.eff_dim() != gc_grid_dim-1)
+//      throw std::logic_error ("rects must merge along a d-1 manifold");
+//
+//    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
+//
+//    cellid_t c;
+//
+//    for(c[2] = ixn[2][1] ; c[2] >= ixn[2][0]; --c[2])
+//    {
+//      for(c[1] = ixn[1][1] ; c[1] >= ixn[1][0]; --c[1])
+//      {
+//        for(c[0] = ixn[0][1] ; c[0] >= ixn[0][0]; --c[0])
+//        {
+//
+//          if(this->m_id_cp_map.count(c) != 1)
+//            throw std::logic_error("missing common bndry cp");
+//
+//          u_int src_idx = this->m_id_cp_map[c];
+//
+//          critpt_t *src_cp = this->m_cps[src_idx];
+//
+//          if(!src_cp->isCancelled )
+//            continue;
+//
+//          u_int pair_idx = src_cp->pair_idx;
+//
+//          cellid_t p = this->m_cps[pair_idx]->cellid;
+//
+//          if(!this->m_rect.isInInterior(c)&& !this->m_ext_rect.isOnBoundry(c))
+//            continue;
+//
+//          if(!this->m_rect.isInInterior(p)&& !this->m_ext_rect.isOnBoundry(p))
+//            continue;
+//
+//          uncancel_pairs(this,uint_pair_t(src_idx,pair_idx));
+//        }
+//      }
+//    }
+//
+//    // identify and copy the results to msc1 and msc2
+//
+//    mscomplex_t* msc_arr[] = {&msc1,&msc2};
+//
+//    for (uint i = 0 ; i <2;++i)
+//    {
+//      mscomplex_t * msc = msc_arr[i];
+//
+//      // adjust connections for uncancelled cps in msc
+//      for(uint j = 0 ; j < m_cps.size();++j)
+//      {
+//        critpt_t * src_cp = m_cps[j];
+//
+//        if(src_cp->isCancelled)
+//          throw std::logic_error("all cps ought to be uncancelled by now");
+//
+//        if(!src_cp->is_paired)
+//          continue;
+//
+//        critpt_t * src_pair_cp = m_cps[src_cp->pair_idx];
+//
+//        bool src_in_msc      = (msc->m_id_cp_map.count(src_cp->cellid) != 0);
+//        bool src_pair_in_msc = (msc->m_id_cp_map.count(src_pair_cp->cellid) != 0);
+//
+//        if(!src_in_msc && !src_pair_in_msc)
+//          continue;
+//
+//        if(!src_in_msc)
+//        {
+//          shallow_replicate_cp(*msc,*src_cp);
+//        }
+//
+//        if(!src_pair_in_msc)
+//        {
+//          shallow_replicate_cp(*msc,*src_pair_cp);
+//        }
+//
+//        uint dest_cp_idx = msc->m_id_cp_map[src_cp->cellid];
+//
+//        critpt_t *dest_cp = msc->m_cps[dest_cp_idx];
+//
+//        if(!src_in_msc || !src_pair_in_msc || !dest_cp->is_paired)
+//        {
+//          uint dest_pair_cp_idx  = msc->m_id_cp_map[src_pair_cp->cellid];
+//          critpt_t *dest_pair_cp = msc->m_cps[dest_pair_cp_idx];
+//
+//          dest_cp->is_paired      = true;
+//          dest_pair_cp->is_paired = true;
+//
+//          dest_cp->pair_idx      = dest_pair_cp_idx;
+//          dest_pair_cp->pair_idx = dest_cp_idx;
+//        }
+//
+//        conn_t *src_acdc[] = {&src_cp->asc,&src_cp->des};
+//        conn_t *dest_acdc[] = {&dest_cp->asc,&dest_cp->des};
+//
+//        for(uint k = 0 ; k < 2;++k)
+//        {
+//          dest_acdc[k]->clear();
+//
+//          for(conn_iter_t it = src_acdc[k]->begin(); it!=src_acdc[k]->end();++it)
+//          {
+//            critpt_t *src_conn_cp = m_cps[*it];
+//
+//            if(src_conn_cp->is_paired == true)
+//              throw std::logic_error("only non cancellable cps must be remaining");
+//
+//            if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
+//            {
+//              shallow_replicate_cp(*msc,*src_conn_cp);
+//            }
+//
+//            dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
+//          }// end it
+//        }// end k
+//      }// end j
+//
+//      // adjust connections for non uncancelled cps in msc
+//      for(uint j = 0 ; j < m_cps.size();++j)
+//      {
+//        critpt_t * src_cp = m_cps[j];
+//
+//        if(src_cp->is_paired)
+//          continue;
+//
+//        if(msc->m_id_cp_map.count(src_cp->cellid) != 1)
+//          continue;
+//
+//        critpt_t *dest_cp = msc->m_cps[msc->m_id_cp_map[src_cp->cellid]];
+//
+//        conn_t *src_acdc[] = {&src_cp->asc,&src_cp->des};
+//        conn_t *dest_acdc[] = {&dest_cp->asc,&dest_cp->des};
+//
+//        for(uint k = 0 ; k < 2;++k)
+//        {
+//          dest_acdc[k]->clear();
+//
+//          for(conn_iter_t it = src_acdc[k]->begin(); it!=src_acdc[k]->end();++it)
+//          {
+//            critpt_t *src_conn_cp = m_cps[*it];
+//
+//            if(src_conn_cp->is_paired == true)
+//              throw std::logic_error("only non cancellable cps must be remaining 1");
+//
+//
+//            if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
+//              continue;
+//
+//            dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
+//          }// end it
+//        }// end k
+//      }// end j
+//    }//end i
+//  }
 
   void mscomplex_t::clear()
   {
@@ -560,20 +555,20 @@ namespace grid
   {
     order_pr_by_cp_index(msc,e);
 
-    critpt_t *cp0 = msc->m_cps[e[0]];
-    critpt_t *cp1 = msc->m_cps[e[1]];
+    critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
 
-    if(cp0->isCancelled ||
-       cp1->isCancelled )
-      return false;
+    for(uint dir = 0 ; dir < 2; ++dir)
+      if(cp[dir]->isCancelled)
+        return false;
 
-    if((msc->m_rect.isOnBoundry(cp1->cellid) && !msc->m_rect.isOnBoundry(cp0->cellid))||
-       (msc->m_rect.isOnBoundry(cp0->cellid) && !msc->m_rect.isOnBoundry(cp1->cellid)))
-      return false;
+    for(uint dir = 0 ; dir < 2; ++dir)
+      if(!msc->m_rect.isOnBoundry(cp[dir]->cellid) &&
+         msc->m_rect.isOnBoundry(cp[dir^1]->cellid))
+        return false;
 
-    if(cp0->asc.count(e[1]) != 1 ||
-       cp1->des.count(e[0]) != 1)
-      return false;
+    for(uint dir = 0 ; dir < 2; ++dir)
+      if(cp[dir]->conn[dir].count(e[dir^1]) != 1)
+        return false;
 
     return true;
   }
@@ -604,7 +599,7 @@ namespace grid
 
       min_val = std::min(min_val,m_cps[i]->fn);
 
-      for(const_conn_iter_t it = cp->des.begin();it != cp->des.end() ;++it)
+      for(const_conn_iter_t it = cp->conn[0].begin();it != cp->conn[0].end() ;++it)
         if(is_valid_canc_edge(this,uint_pair_t(i,*it)))
           canc_pair_priq.push(uint_pair_t(i,*it));
     }
@@ -658,51 +653,43 @@ namespace grid
   {
     for(uint i = 0 ; i < m_cps.size(); ++i)
     {
-      critpt_t * cp = m_cps[i];
-
-      if(cp->is_paired)
+      if(m_cps[i]->is_paired)
       {
-        critpt_t * cp_pair = m_cps[cp->pair_idx];
+        uint_pair_t e(i,m_cps[i]->pair_idx);
 
-        if(cp->index < cp_pair->index)
+        critpt_t * cp[] = {m_cps[e[0]],m_cps[e[1]]};
+
+        if(cp[0]->index > cp[1]->index)
         {
-          uint_pair_t pr(i,cp->pair_idx);
+          ensure_ordered_index_one_separation(this,e);
 
-          ensure_ordered_index_one_separation(this,pr);
+          ensure_pairing(this,e);
 
-          ensure_pairing(this,pr);
-
-          bool need_cp_pair_des= false;
-
-          for(conn_iter_t it = cp->asc.begin(); it != cp->asc.end(); ++it)
+          for(uint dir = 0 ; dir < 2 ;++dir)
           {
-            ensure_cp_is_not_paired(this,*it);
+            bool need_disc = false;
 
-            m_cps[*it]->des_contrib.push_back(cp->pair_idx);
-            need_cp_pair_des = true;
+            conn_iter_t it ;
+
+            for(it = cp[dir]->conn[dir].begin(); it != cp[dir]->conn[dir].end(); ++it)
+            {
+              ensure_cp_is_not_paired(this,*it);
+
+              m_cps[*it]->contrib[dir^1].push_back(e[dir^1]);
+
+              need_disc = true;
+            }
+
+            if(need_disc)
+              cp[dir^1]->disc[dir^1].push_back(cp[dir^1]->cellid);
+
           }
-
-          if(need_cp_pair_des)
-            cp_pair->des_disc.push_back(cp_pair->cellid);
-
-          bool need_cp_asc= false;
-
-          for(conn_iter_t it = cp_pair->des.begin(); it != cp_pair->des.end(); ++it)
-          {
-            ensure_cp_is_not_paired(this,*it);
-
-            m_cps[*it]->asc_contrib.push_back(i);
-            need_cp_asc = true;
-          }
-
-          if(need_cp_asc)
-            cp->asc_disc.push_back(cp->cellid);
         }
       }
       else
       {
-        cp->asc_disc.push_back(cp->cellid);
-        cp->des_disc.push_back(cp->cellid);
+        for(uint dir = 0 ; dir < 2 ;++dir)
+          m_cps[i]->disc[dir].push_back(m_cps[i]->cellid);
       }
     }
   }
@@ -739,11 +726,12 @@ namespace grid
       if(cp->is_paired == true)
         continue;
 
-      if(cp->asc_disc.size() != 0 )
-        write_disc(&cp->asc_disc,fn_prefix+"asc_",cp->cellid);
+      if(cp->disc[0].size() != 0 )
+        write_disc(&cp->disc[0],fn_prefix+"des_",cp->cellid);
 
-      if(cp->des_disc.size() != 0 )
-        write_disc(&cp->des_disc,fn_prefix+"des_",cp->cellid);
+      if(cp->disc[1].size() != 0 )
+        write_disc(&cp->disc[1],fn_prefix+"asc_",cp->cellid);
+
     }
   }
 }
@@ -796,8 +784,8 @@ namespace boost
     void serialize(Archive & ar, critpt_t & c, const unsigned int )
     {
       ar & c.cellid;
-      ar & c.asc;
-      ar & c.des;
+      for(uint dir = 0 ;dir <0 ;++dir)
+        ar& c.conn[dir];
       ar & c.is_paired;
       ar & c.isCancelled;
       ar & c.pair_idx;

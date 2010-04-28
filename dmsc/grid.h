@@ -318,11 +318,11 @@ namespace grid
 
   const uint gc_grid_dim = rect_t::base_t::static_size;
 
-  enum eGradDirection
+  enum eDirection
   {
-    GRADIENT_DIR_DOWNWARD,
-    GRADIENT_DIR_UPWARD,
-    GRADIENT_DIR_COUNT,
+    DIRECTION_DESCENDING,
+    DIRECTION_ASCENDING,
+    DIRECTION_COUNT,
   };
 
 }

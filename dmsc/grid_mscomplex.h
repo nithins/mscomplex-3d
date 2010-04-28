@@ -56,15 +56,10 @@ namespace grid
     }
 
     // list of idx's of cancelled cps that contribute their disc to this cp
-    disc_contrib_t asc_contrib;
-    disc_contrib_t des_contrib;
 
-    // list of cells that are part of the crit disc
-    disc_t asc_disc;
-    disc_t des_disc;
-
-    conn_t asc;
-    conn_t des;
+    disc_contrib_t contrib[DIRECTION_COUNT];
+    disc_t         disc[DIRECTION_COUNT] ;
+    conn_t         conn[DIRECTION_COUNT];
   };
 
 

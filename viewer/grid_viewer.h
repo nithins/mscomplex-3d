@@ -20,16 +20,11 @@ namespace grid
   {
   public:
 
-    glutils::renderable_t *asc_ren;
-    glutils::renderable_t *des_ren;
     cellid_t               cellid;
 
-    bool                   m_bShowAsc;
-    bool                   m_bShowDes;
-
-    glutils::color_t       asc_color;
-    glutils::color_t       des_color;
-
+    glutils::renderable_t *ren[DIRECTION_COUNT];
+    bool                   show[DIRECTION_COUNT];
+    glutils::color_t       color[DIRECTION_COUNT];
 
     disc_rendata_t(cellid_t c);
     ~disc_rendata_t();

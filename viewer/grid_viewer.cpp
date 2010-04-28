@@ -163,14 +163,14 @@ namespace grid
 
     switch(idx[0])
     {
-    case 0: return s_exchange_read_only(m_grid_piece_rens[idx[1]]->dp->label(),v,m);
-    case 1: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowSurface,v,m);
-    case 2: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCps,v,m);
-    case 3: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v,m);
-    case 4: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v,m);
-    case 5: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowGrad,v,m);
-    case 6: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v,m);
-    case 7: return s_exchange_read_write(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v,m);
+    case 0: return s_exchange_ro(m_grid_piece_rens[idx[1]]->dp->label(),v,m);
+    case 1: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowSurface,v,m);
+    case 2: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps,v,m);
+    case 3: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v,m);
+    case 4: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v,m);
+    case 5: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowGrad,v,m);
+    case 6: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v,m);
+    case 7: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v,m);
     }
 
     throw std::logic_error("unknown index");
@@ -292,8 +292,8 @@ namespace grid
 
       uint dim = dataset_t::s_getCellDim(c);
 
-      for(conn_t::iterator it  = dp->msgraph->m_cps[i]->des.begin();
-      it != dp->msgraph->m_cps[i]->des.end(); ++it)
+      for(conn_iter_t it  = dp->msgraph->m_cps[i]->conn[0].begin();
+      it != dp->msgraph->m_cps[i]->conn[0].end(); ++it)
       {
         if(!roi.contains(dp->msgraph->m_cps[*it]->cellid))
           continue;
@@ -534,13 +534,18 @@ namespace grid
 
     bool need_update = false;
 
-    switch(idx[0])
+    int i = idx[0];
+
+    switch(i)
     {
-    case 0:return s_exchange_read_only(disc_rds[idx[1]]->cellid.to_string(),v,m);
-    case 1:need_update =  s_exchange_read_write(disc_rds[idx[1]]->m_bShowAsc,v,m);break;
-    case 2:return s_exchange_read_write(disc_rds[idx[1]]->asc_color,v,m);
-    case 3:need_update =  s_exchange_read_write(disc_rds[idx[1]]->m_bShowDes,v,m);break;
-    case 4:return s_exchange_read_write(disc_rds[idx[1]]->des_color,v,m);
+    case 0:
+      return s_exchange_ro(disc_rds[idx[1]]->cellid.to_string(),v,m);
+    case 1:
+    case 2:
+      need_update =  s_exchange_rw(disc_rds[idx[1]]->show[i%2],v,m);break;
+    case 3:
+    case 4:
+      return s_exchange_rw(disc_rds[idx[1]]->color[i%2],v,m);
     };
 
     if(need_update && m == EXCHANGE_WRITE )
@@ -556,24 +561,26 @@ namespace grid
     {
     case 0: return "cellid";
     case 1: return "asc disc";
-    case 2: return "asc disc color";
-    case 3: return "des disc";
+    case 2: return "des disc";
+    case 3: return "asc disc color";
     case 4: return "des disc color";
     }
     throw std::logic_error("invalid index");
   }
 
-  disc_rendata_t::disc_rendata_t(cellid_t c):
-      m_bShowAsc(false),
-      m_bShowDes(false),
-      asc_ren(NULL),
-      des_ren(NULL),
-      cellid(c){}
+  disc_rendata_t::disc_rendata_t(cellid_t c):cellid(c)
+  {
+    color[0] = glutils::color_t(0.0,0.25,0.5);
+    color[1] = glutils::color_t(0.5,0.25,0.0);
+
+    show[0] =false; ren[0] =NULL;
+    show[1] =false; ren[1] =NULL;
+  }
 
   disc_rendata_t::~disc_rendata_t()
   {
-    m_bShowAsc = false;
-    m_bShowDes = false;
+    show[0] =false;
+    show[1] =false;
 
     update(NULL);
 
@@ -585,7 +592,7 @@ namespace grid
 
     s_cell_shader->use();
 
-    if(m_bShowDes)
+    if(show[0] || show[1])
     {
       glColor3dv(g_grid_cp_colors[dim].data());
 
@@ -594,11 +601,14 @@ namespace grid
       glEnd();
     }
 
-    if(m_bShowDes && des_ren)
+    for(uint dir = 0 ; dir<2;++dir)
     {
-      glColor3dv(des_color.data());
+      if(show[dir])
+      {
+        glColor3dv(color[dir].data());
 
-      des_ren->render();
+        ren[dir]->render();
+      }
     }
 
     s_cell_shader->disable();
@@ -608,37 +618,40 @@ namespace grid
   {
     uint ret = false;
 
-    if(m_bShowDes && this->des_ren == NULL && msc)
+    for(uint dir = 0 ; dir<2;++dir)
     {
-      ensure_cellid_critical(msc,cellid);
-
-      critpt_t *cp = msc->m_cps[msc->m_id_cp_map[cellid]];
-
-      std::vector<glutils::vertex_t> vlist;
-
-      for(uint i = 0; i < cp->des_disc.size(); ++i)
+      if(show[dir] && this->ren[dir] == NULL && msc)
       {
-        cellid_t c = cp->des_disc[i];
+        ensure_cellid_critical(msc,cellid);
 
-        vlist.push_back(glutils::vertex_t(c[0],c[1],c[2]));
+        critpt_t *cp = msc->m_cps[msc->m_id_cp_map[cellid]];
+
+        std::vector<glutils::vertex_t> vlist;
+
+        for(uint i = 0; i < cp->disc[dir].size(); ++i)
+        {
+          cellid_t c = cp->disc[dir][i];
+
+          vlist.push_back(glutils::vertex_t(c[0],c[1],c[2]));
+        }
+
+        ren[dir] = glutils::create_buffered_points_ren
+                  (glutils::make_buf_obj(vlist),
+                   glutils::make_buf_obj(),
+                   glutils::make_buf_obj());
+
+        ret = true;
       }
 
-      des_ren = glutils::create_buffered_points_ren
-                (glutils::make_buf_obj(vlist),
-                 glutils::make_buf_obj(),
-                 glutils::make_buf_obj());
+      if(!show[dir] && this->ren[dir] != NULL )
+      {
+        delete ren[dir];
 
-      ret = true;
-    }
+        ren[dir] = NULL;
 
-    if(!m_bShowDes && this->des_ren != NULL )
-    {
-      delete des_ren;
+        ret = true;
 
-      des_ren = NULL;
-
-      ret = true;
-
+      }
     }
     return ret;
   }
