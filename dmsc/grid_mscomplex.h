@@ -38,6 +38,7 @@ namespace grid
   {
     typedef std::multiset<uint>     conn_t;
     typedef std::vector<cellid_t>   disc_t;
+    typedef std::vector<uint>       disc_contrib_t;
 
     cellid_t     cellid;
     uint         pair_idx;
@@ -54,6 +55,11 @@ namespace grid
       pair_idx              = -1;
     }
 
+    // list of idx's of cancelled cps that contribute their disc to this cp
+    disc_contrib_t asc_contrib;
+    disc_contrib_t des_contrib;
+
+    // list of cells that are part of the crit disc
     disc_t asc_disc;
     disc_t des_disc;
 
@@ -85,6 +91,7 @@ namespace grid
 
     void simplify_un_simplify(double simplification_treshold );
 
+    void add_disc_tracking_seed_cps();
 
     void clear();
 

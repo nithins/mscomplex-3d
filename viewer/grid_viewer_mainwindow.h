@@ -14,6 +14,8 @@
 #include <ui_grid_viewer_mainwindow.h>
 #include <boost/any.hpp>
 
+class configurable_t;
+
 namespace grid
 {
 
@@ -66,8 +68,6 @@ namespace grid
 
     void on_datapiece_view_activated ( const QModelIndex & index  );
   };
-
-  class configurable_t;
 
   void configurable_ctx_menu
       (configurable_t *c,

@@ -2,10 +2,13 @@
 #define GRID_VIEWER_H_INCLUDED
 #include <grid.h>
 
-#include <glutils.h>
 #include <set>
 
-#include <boost/any.hpp>
+#include <glutils.h>
+#include <cpputils.h>
+
+
+
 
 namespace grid
 {
@@ -13,67 +16,8 @@ namespace grid
 
   class mscomplex_t;
 
-  class configurable_t
-  {
-  public:
-
-    typedef two_tuple_t<int> data_index_t;
-
-    enum eExchangeMode {EXCHANGE_READ,EXCHANGE_WRITE};
-
-    virtual int         rows()    = 0 ;
-
-    virtual int         columns() = 0 ;
-
-    virtual bool        exchange_data(const data_index_t &,
-                                      boost::any &,
-                                      const eExchangeMode &) = 0;
-
-    virtual std::string get_header(int i)
-    {
-      std::stringstream ss;
-      ss<<i;
-      return ss.str();
-    }
-
-    template <typename T>
-        static bool s_exchange_read_write
-        (T &p_val,boost::any &c_val,const eExchangeMode & mode)
-    {
-      bool ret = true;
-
-      switch(mode)
-      {
-      case EXCHANGE_WRITE:
-        ret   = (p_val != boost::any_cast<T>(c_val));
-        p_val = boost::any_cast<T>(c_val);
-        break;
-      case EXCHANGE_READ:
-        c_val = boost::any(p_val);
-        break;
-      }
-      return ret;
-    }
-
-    template <typename T>
-        static bool s_exchange_read_only
-        (const T &p_val,boost::any &c_val,const eExchangeMode & mode)
-    {
-      switch(mode)
-      {
-      case EXCHANGE_WRITE:
-        throw std::logic_error("read only property cannot write");
-        break;
-      case EXCHANGE_READ:
-        c_val = boost::any(p_val);
-      }
-      return false;
-    }
-  };
-
   class disc_rendata_t
   {
-
   public:
 
     glutils::renderable_t *asc_ren;
@@ -92,6 +36,9 @@ namespace grid
 
     void render();
     bool update(mscomplex_t *);
+
+    static void init();
+    static void cleanup();
   };
 
   class octtree_piece_rendata:public configurable_t

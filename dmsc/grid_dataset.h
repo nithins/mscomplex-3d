@@ -106,7 +106,7 @@ namespace grid
 
     void  collateCriticalPoints();
 
-    int   postMergeFillDiscs(mscomplex_t *msgraph);
+    void  postMergeFillDiscs(mscomplex_t *msgraph);
 
 
     // dataset interface

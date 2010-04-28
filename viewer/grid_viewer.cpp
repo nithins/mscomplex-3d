@@ -1,14 +1,21 @@
 #include <sstream>
+#include <cstring>
 
 #include <GL/glew.h>
 
 #include <glutils.h>
+#include <GLSLProgram.h>
 
 #include <grid_viewer.h>
 #include <grid_datamanager.h>
 #include <grid_mscomplex.h>
+#include <grid_mscomplex_ensure.h>
 #include <grid_dataset.h>
-#include <cstring>
+
+#include <shadersources.h>
+
+GLSLProgram * s_cell_shader = NULL;
+
 
 glutils::color_t g_grid_cp_colors[] =
 {
@@ -34,6 +41,35 @@ glutils::color_t g_grid_cp_conn_colors[] =
 
 namespace grid
 {
+  void disc_rendata_t::init()
+  {
+    if(s_cell_shader != NULL )
+      return;
+
+    s_cell_shader = GLSLProgram::createFromSourceStrings
+                    (cell_shader_vert_glsl,
+                     cell_shader_geom_glsl,
+                     std::string(),
+                     GL_POINTS,GL_TRIANGLES);
+
+    std::string log;
+
+    s_cell_shader->GetProgramLog ( log );
+
+    if(log.size() !=0 )
+      std::cout<<"cell_shader_log::\n"<<log<<"\n";
+
+  }
+
+  void disc_rendata_t::cleanup()
+  {
+    if(s_cell_shader == NULL )
+      return;
+
+    delete s_cell_shader;
+
+    s_cell_shader = NULL;
+  }
 
   grid_viewer_t::grid_viewer_t
       (data_manager_t * gdm,const rect_t &roi):
@@ -57,6 +93,8 @@ namespace grid
       delete m_grid_piece_rens[i];
 
     m_grid_piece_rens.clear();
+
+    disc_rendata_t::cleanup();
   }
 
   int grid_viewer_t::render()
@@ -83,6 +121,19 @@ namespace grid
   void grid_viewer_t::init()
   {
     glutils::init();
+
+    disc_rendata_t::init();
+
+    /*turn back face culling off */
+    glEnable ( GL_CULL_FACE );
+
+    /*cull backface */
+    glCullFace ( GL_BACK );
+
+    /*polymode */
+    glPolygonMode ( GL_FRONT, GL_FILL );
+
+    glPolygonMode ( GL_BACK, GL_LINE );
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
@@ -478,15 +529,25 @@ namespace grid
                                             boost::any &v,
                                             const eExchangeMode &m)
   {
+    if(idx[0] > 4)
+      throw std::logic_error("invalid index");
+
+    bool need_update = false;
+
     switch(idx[0])
     {
     case 0:return s_exchange_read_only(disc_rds[idx[1]]->cellid.to_string(),v,m);
-    case 1:return s_exchange_read_write(disc_rds[idx[1]]->m_bShowAsc,v,m);
+    case 1:need_update =  s_exchange_read_write(disc_rds[idx[1]]->m_bShowAsc,v,m);break;
     case 2:return s_exchange_read_write(disc_rds[idx[1]]->asc_color,v,m);
-    case 3:return s_exchange_read_write(disc_rds[idx[1]]->m_bShowDes,v,m);
+    case 3:need_update =  s_exchange_read_write(disc_rds[idx[1]]->m_bShowDes,v,m);break;
     case 4:return s_exchange_read_write(disc_rds[idx[1]]->des_color,v,m);
     };
-    throw std::logic_error("invalid index");
+
+    if(need_update && m == EXCHANGE_WRITE )
+      m_bNeedUpdateDiscRens = true;
+
+    return need_update;
+
   }
 
   std::string octtree_piece_rendata::get_header(int i)
@@ -522,61 +583,63 @@ namespace grid
   {
     uint dim = dataset_t::s_getCellDim(cellid);
 
-    if(m_bShowAsc || m_bShowDes)
+    s_cell_shader->use();
+
+    if(m_bShowDes)
     {
-//      glColor3dv(g_grid_cp_colors[dim].data());
-      glColor3dv(asc_color.data());
+      glColor3dv(g_grid_cp_colors[dim].data());
 
       glBegin(GL_POINTS);
       glVertex3sv(cellid.data());
       glEnd();
     }
 
-    bool *bShow[] = {&m_bShowAsc,&m_bShowDes};
-    glutils::renderable_t *ren[] = {asc_ren,des_ren};
-
-    for(uint i = 0 ;i <2 ;++i )
+    if(m_bShowDes && des_ren)
     {
-      if(*bShow[i] && ren[i])
-      {
-        ren[i]->render();
-      }
+      glColor3dv(des_color.data());
+
+      des_ren->render();
     }
+
+    s_cell_shader->disable();
   }
+
   bool disc_rendata_t::update(mscomplex_t *msc )
   {
     uint ret = false;
 
-    bool *bShow[] = {&m_bShowAsc,&m_bShowDes};
-    glutils::renderable_t **ren[] = {&asc_ren,&des_ren};
-
-    for(uint i = 0 ;i <2 ;++i )
+    if(m_bShowDes && this->des_ren == NULL && msc)
     {
-      if(bShow[i] && *ren[i] == NULL && msc != NULL)
+      ensure_cellid_critical(msc,cellid);
+
+      critpt_t *cp = msc->m_cps[msc->m_id_cp_map[cellid]];
+
+      std::vector<glutils::vertex_t> vlist;
+
+      for(uint i = 0; i < cp->des_disc.size(); ++i)
       {
-        if(msc->m_id_cp_map.count(cellid) == 0)
-          throw std::logic_error("cannot find cellid in id_cp_map while updating ren");
+        cellid_t c = cp->des_disc[i];
 
-        uint cp_idx = msc->m_id_cp_map[cellid];
-
-        std::vector<glutils::vertex_t> vlist;
-
-        *ren[i] = glutils::create_buffered_points_ren
-                  (glutils::make_buf_obj(vlist),
-                   glutils::make_buf_obj(),
-                   glutils::make_buf_obj());
-
-        ret = true;
+        vlist.push_back(glutils::vertex_t(c[0],c[1],c[2]));
       }
 
-      if(!bShow[i] && *ren[i] != NULL)
-      {
-        delete *ren[i];
-        *ren[i] = NULL;
-        ret = true;
-      }
+      des_ren = glutils::create_buffered_points_ren
+                (glutils::make_buf_obj(vlist),
+                 glutils::make_buf_obj(),
+                 glutils::make_buf_obj());
+
+      ret = true;
     }
 
+    if(!m_bShowDes && this->des_ren != NULL )
+    {
+      delete des_ren;
+
+      des_ren = NULL;
+
+      ret = true;
+
+    }
     return ret;
   }
 

@@ -37,12 +37,6 @@ namespace grid
     return cellid_t::base_t::static_size*2;
   }
 
-  int dataset_t::postMergeFillDiscs(mscomplex_t *msgraph)
-  {
-#warning "havent yet implemented postMergeFillDiscs "
-    return 0;
-  }
-
   inline bool lowestPairableCoFacet
       (dataset_t *dataset,
        cellid_t cellId,
@@ -135,6 +129,51 @@ namespace grid
           msgraph->connect_cps(start_cellId,cets[i]);
         }
         else
+        {
+          if ( !dataset->isCellExterior ( cets[i] ) )
+          {
+            id_type next_cell = dataset->getCellPairId ( cets[i] );
+
+            if ( dataset->getCellDim ( top_cell ) ==
+                 dataset->getCellDim ( next_cell ) &&
+                 next_cell != top_cell )
+            {
+              cell_queue.push ( next_cell );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void compute_disc_bfs
+      (dataset_t *dataset,
+       critpt_disc_t *disc,
+       cellid_t start_cellId,
+       eGradDirection gradient_dir
+       )
+  {
+    typedef cellid_t id_type;
+
+    std::queue<id_type> cell_queue;
+
+    cell_queue.push ( start_cellId );
+
+    while ( !cell_queue.empty() )
+    {
+      id_type top_cell = cell_queue.front();
+
+      cell_queue.pop();
+
+      disc->push_back(top_cell);
+
+      id_type cets[20];
+
+      uint cet_ct = ( dataset->*getcets[gradient_dir] ) ( top_cell,cets );
+
+      for ( uint i = 0 ; i < cet_ct ; i++ )
+      {
+        if ( !dataset->isCellCritical ( cets[i] ) )
         {
           if ( !dataset->isCellExterior ( cets[i] ) )
           {
@@ -440,18 +479,38 @@ namespace grid
 
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
-    using namespace boost::lambda;
-    using namespace std;
-
     for(uint i = 0 ; i < m_critical_cells.size();++i)
     {
       cellid_t c = m_critical_cells[i];
       msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c));
     }
 
-    for_each(m_critical_cells.begin(),m_critical_cells.end(),
-                  bind(track_gradient_tree_bfs,this,msgraph,_1,GRADIENT_DIR_DOWNWARD));
+    for(uint i = 0 ; i < m_critical_cells.size();++i)
+      track_gradient_tree_bfs
+          (this,msgraph,m_critical_cells[i],GRADIENT_DIR_DOWNWARD);
 
+  }
+
+  void dataset_t::postMergeFillDiscs(mscomplex_t *msgraph)
+  {
+    msgraph->add_disc_tracking_seed_cps();
+
+    for(uint i = 0 ; i < msgraph->m_cps.size() ; ++i)
+    {
+      critpt_t * cp = msgraph->m_cps[i];
+
+      if(cp->asc_disc.size() == 1)
+      {
+        cp->asc_disc.clear();
+        compute_disc_bfs(this,&cp->asc_disc,cp->cellid,GRADIENT_DIR_UPWARD);
+      }
+
+      if(cp->des_disc.size() == 1)
+      {
+        cp->des_disc.clear();
+        compute_disc_bfs(this,&cp->des_disc,cp->cellid,GRADIENT_DIR_DOWNWARD);
+      }
+    }
   }
 
   void dataset_t::log_flags()

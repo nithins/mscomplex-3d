@@ -2,82 +2,17 @@
 #include <queue>
 
 #include <grid_mscomplex.h>
+#include <grid_mscomplex_ensure.h>
 #include <grid_dataset.h>
 #include <fstream>
 #include <limits>
 
 namespace grid
 {
-
   inline void order_pr_by_cp_index(mscomplex_t *msc,uint_pair_t &e)
   {
     if(msc->m_cps[e[0]]->index > msc->m_cps[e[1]]->index)
       std::swap(e[0],e[1]);
-  }
-
-  inline void ensure_index_one_separation(mscomplex_t *msc,uint_pair_t e)
-  {
-    if(msc->m_cps[e[0]]->index +1 != msc->m_cps[e[1]]->index)
-      throw std::logic_error("index one separation violated");
-  }
-
-  inline void ensure_connectivity(mscomplex_t *msc,uint_pair_t e)
-  {
-    ensure_index_one_separation(msc,e);
-
-    if(msc->m_cps[e[0]]->asc.count(e[1]) == 0 ||
-       msc->m_cps[e[1]]->des.count(e[0]) == 0)
-      throw std::logic_error("connectivity violated");
-  }
-
-  inline void ensure_single_connectivity(mscomplex_t *msc,uint_pair_t e)
-  {
-    ensure_index_one_separation(msc,e);
-
-    if(msc->m_cps[e[0]]->asc.count(e[1]) != 1 ||
-       msc->m_cps[e[1]]->des.count(e[0]) != 1)
-      throw std::logic_error("single connectivity violated");
-  }
-
-  void ensure_cellid_critical(mscomplex_t * msc,cellid_t c)
-  {
-    if(msc->m_id_cp_map.count(c) == 0)
-      throw std::logic_error("cellid not entered as critical in msc");
-  }
-
-  inline void ensure_cp_is_cancelled(mscomplex_t *msc,uint i)
-  {
-    if(!msc->m_cps[i]->isCancelled)
-      throw std::logic_error("failed to ensure cp is not canceled");
-  }
-
-  inline void ensure_cp_is_not_cancelled(mscomplex_t *msc,uint i)
-  {
-    if(msc->m_cps[i]->isCancelled)
-      throw std::logic_error("failed to ensure cp is canceled");
-  }
-
-  inline void ensure_pairing(mscomplex_t *msc,uint_pair_t e)
-  {
-    if(!msc->m_cps[e[0]]->is_paired||
-       !msc->m_cps[e[1]]->is_paired||
-       msc->m_cps[e[1]]->pair_idx != e[0]||
-       msc->m_cps[e[0]]->pair_idx != e[1])
-      throw std::logic_error("failed to ensure that edge forms a sane pairing ");
-  }
-
-  inline void ensure_cp_is_paired(mscomplex_t *msc,uint c)
-  {
-    if(!msc->m_cps[c]->is_paired)
-      throw std::logic_error("failed to ensure cell is paired ");
-
-    ensure_pairing(msc,uint_pair_t(c,msc->m_cps[c]->pair_idx));
-  }
-
-  inline void ensure_cp_is_not_paired(mscomplex_t *msc,uint c)
-  {
-    if(msc->m_cps[c]->is_paired)
-      throw std::logic_error("failed to ensure cell is not paired ");
   }
 
   void mark_cancel_pair(mscomplex_t *msc,uint_pair_t e)
@@ -112,7 +47,7 @@ namespace grid
 
     order_pr_by_cp_index(this,e);
 
-    ensure_index_one_separation(this,e);
+    ensure_ordered_index_one_separation(this,e);
 
     m_cps[e[0]]->asc.insert(e[1]);
     m_cps[e[1]]->des.insert(e[0]);
@@ -717,6 +652,59 @@ namespace grid
     simplify(canc_pairs_list,simplification_treshold);
 
     un_simplify(canc_pairs_list);
+  }
+
+  void mscomplex_t::add_disc_tracking_seed_cps()
+  {
+    for(uint i = 0 ; i < m_cps.size(); ++i)
+    {
+      critpt_t * cp = m_cps[i];
+
+      if(cp->is_paired)
+      {
+        critpt_t * cp_pair = m_cps[cp->pair_idx];
+
+        if(cp->index < cp_pair->index)
+        {
+          uint_pair_t pr(i,cp->pair_idx);
+
+          ensure_ordered_index_one_separation(this,pr);
+
+          ensure_pairing(this,pr);
+
+          bool need_cp_pair_des= false;
+
+          for(conn_iter_t it = cp->asc.begin(); it != cp->asc.end(); ++it)
+          {
+            ensure_cp_is_not_paired(this,*it);
+
+            m_cps[*it]->des_contrib.push_back(cp->pair_idx);
+            need_cp_pair_des = true;
+          }
+
+          if(need_cp_pair_des)
+            cp_pair->des_disc.push_back(cp_pair->cellid);
+
+          bool need_cp_asc= false;
+
+          for(conn_iter_t it = cp_pair->des.begin(); it != cp_pair->des.end(); ++it)
+          {
+            ensure_cp_is_not_paired(this,*it);
+
+            m_cps[*it]->asc_contrib.push_back(i);
+            need_cp_asc = true;
+          }
+
+          if(need_cp_asc)
+            cp->asc_disc.push_back(cp->cellid);
+        }
+      }
+      else
+      {
+        cp->asc_disc.push_back(cp->cellid);
+        cp->des_disc.push_back(cp->cellid);
+      }
+    }
   }
 
   void write_disc(const critpt_disc_t *disc,

@@ -31,6 +31,12 @@ if(NOT Boost_FOUND)
   message(FATAL_ERROR "Cannot find boost")
 endif(NOT Boost_FOUND)
 
+find_package(PythonInterp)
+
+if(NOT PYTHONINTERP_FOUND OR NOT PYTHON_EXECUTABLE)
+  message(FATAL_ERROR "No python interpreter found .. needed for generating shader include files")
+endif(NOT PYTHONINTERP_FOUND OR NOT PYTHON_EXECUTABLE)
+
 # find_package(OpenCL)
 # 
 # if(NOT OPENCL_FOUND)
@@ -48,6 +54,7 @@ set(dmsc_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex_ensure.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_datamanager.h
@@ -82,6 +89,23 @@ set(viewer_UIS
 
 QT4_WRAP_UI(viewer_UI_SRCS ${viewer_UIS})
 
+file(GLOB viewer_shader_FILES
+  ${CMAKE_CURRENT_SOURCE_DIR}/viewer/shaders/cell_shader_geom.glsl
+  ${CMAKE_CURRENT_SOURCE_DIR}/viewer/shaders/cell_shader_vert.glsl
+  )
+
+set(viewer_shader_SRCS
+  ${CMAKE_CURRENT_BINARY_DIR}/viewer/shadersources.h
+  ${CMAKE_CURRENT_BINARY_DIR}/viewer/shadersources.cpp
+  )
+
+add_custom_command(
+  OUTPUT ${viewer_shader_SRCS}
+  COMMAND ${PYTHON_EXECUTABLE} ${utls_SOURCE_DIR}/copy_files_to_c_header.py
+  ${CMAKE_CURRENT_BINARY_DIR}/viewer/shadersources ${viewer_shader_FILES}
+  DEPENDS ${viewer_shader_FILES} ${utls_SOURCE_DIR}/copy_files_to_c_header.py
+  )
+
 set(main_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
   )
@@ -89,6 +113,7 @@ set(main_SRCS
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/
   ${CMAKE_CURRENT_SOURCE_DIR}/viewer/
+  ${CMAKE_CURRENT_BINARY_DIR}/viewer/
   ${utls_SOURCE_DIR}/include
   ${CMAKE_CURRENT_BINARY_DIR}
   ${OPENCL_INCLUDE_DIRS}
@@ -103,6 +128,7 @@ add_executable(${PROJECT_NAME}
   ${viewer_SRCS}
   ${viewer_MOC_SRCS}
   ${viewer_UI_SRCS}
+  ${viewer_shader_SRCS}
   ${main_SRCS}
   )
 
@@ -114,4 +140,4 @@ target_link_libraries(
   ${QT_LIBRARIES}
   ${QT_ADDITIONAL_LIBRARIES}
   ${QGLVIEWER_LIBRARY}
-)
+  )
