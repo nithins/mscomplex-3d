@@ -1,5 +1,8 @@
 #include <sstream>
 #include <cstring>
+#include <iostream>
+
+#include <boost/algorithm/string_regex.hpp>
 
 #include <GL/glew.h>
 
@@ -14,8 +17,7 @@
 
 #include <shadersources.h>
 
-GLSLProgram * s_cell_shader = NULL;
-
+GLSLProgram * s_cell_shaders[grid::DIRECTION_COUNT] = {NULL,NULL};
 
 glutils::color_t g_grid_cp_colors[] =
 {
@@ -32,6 +34,23 @@ glutils::color_t g_grid_grad_colors[] =
   glutils::color_t(0.5,0.5,0.0 ),
 };
 
+glutils::color_t g_disc_colors[][4] =
+{
+  {
+    glutils::color_t(0.15,0.45,0.35 ),
+    glutils::color_t(0.25,0.15,0.75 ),
+    glutils::color_t(0.65,0.95,0.35 ),
+    glutils::color_t(0.0,0.0,0.0 ),
+  },
+
+  {
+    glutils::color_t(0.0,0.0,0.0 ),
+    glutils::color_t(0.35,0.25,0.65 ),
+    glutils::color_t(0.65,0.25,0.15 ),
+    glutils::color_t(0.15,0.25,0.75 ),
+  },
+};
+
 glutils::color_t g_grid_cp_conn_colors[] =
 {
   glutils::color_t(0.0,0.5,0.5 ),
@@ -39,36 +58,59 @@ glutils::color_t g_grid_cp_conn_colors[] =
   glutils::color_t(0.5,0.5,0.0 ),
 };
 
+const char * shader_consts[grid::DIRECTION_COUNT]
+    = {"const float even_sz = 0.2;"\
+       "const float odd_sz  = 0.6;",
+       "const float even_sz = 0.6;"\
+       "const float odd_sz  = 0.2;"};
+
+
 namespace grid
 {
   void disc_rendata_t::init()
   {
-    if(s_cell_shader != NULL )
-      return;
+    for(uint i = 0 ;i < DIRECTION_COUNT;++i)
+    {
 
-    s_cell_shader = GLSLProgram::createFromSourceStrings
-                    (cell_shader_vert_glsl,
-                     cell_shader_geom_glsl,
-                     std::string(),
-                     GL_POINTS,GL_TRIANGLES);
+      if(s_cell_shaders[i] != NULL )
+        continue;
 
-    std::string log;
 
-    s_cell_shader->GetProgramLog ( log );
+      std::string geom_glsl(cell_shader_geom_glsl);
 
-    if(log.size() !=0 )
-      std::cout<<"cell_shader_log::\n"<<log<<"\n";
+      boost::replace_regex
+          ( geom_glsl,
+            boost::regex("//HEADER_REPLACE_BEGIN(.*)//HEADER_REPLACE_END"),
+            std::string(shader_consts[i]) );
+
+
+      s_cell_shaders[i] = GLSLProgram::createFromSourceStrings
+                          (cell_shader_vert_glsl,
+                           geom_glsl,
+                           std::string(),
+                           GL_POINTS,GL_TRIANGLES);
+
+      std::string log;
+
+      s_cell_shaders[i]->GetProgramLog ( log );
+
+      if(log.size() !=0 )
+        std::cout<<"shader log ::\n"<<log<<"\n";
+    }
 
   }
 
   void disc_rendata_t::cleanup()
   {
-    if(s_cell_shader == NULL )
-      return;
+    for(uint i = 0 ;i < DIRECTION_COUNT;++i)
+    {
+      if(s_cell_shaders[i] != NULL )
+        continue;
 
-    delete s_cell_shader;
+      delete s_cell_shaders[i];
 
-    s_cell_shader = NULL;
+      s_cell_shaders[i] = NULL;
+    }
   }
 
   grid_viewer_t::grid_viewer_t
@@ -243,7 +285,7 @@ namespace grid
 
     for(uint i = 0; i < dp->msgraph->m_cps.size(); ++i)
     {
-      if(dp->msgraph->m_cps[i]->isCancelled)
+      if(dp->msgraph->m_cps[i]->is_paired)
         continue;
 
       cellid_t c = (dp->msgraph->m_cps[i]->cellid);
@@ -570,8 +612,11 @@ namespace grid
 
   disc_rendata_t::disc_rendata_t(cellid_t c):cellid(c)
   {
-    color[0] = glutils::color_t(0.0,0.25,0.5);
-    color[1] = glutils::color_t(0.5,0.25,0.0);
+
+    uint dim = dataset_t::s_getCellDim(cellid);
+
+    color[0] = g_disc_colors[1][dim];
+    color[1] = g_disc_colors[0][dim];
 
     show[0] =false; ren[0] =NULL;
     show[1] =false; ren[1] =NULL;
@@ -590,28 +635,26 @@ namespace grid
   {
     uint dim = dataset_t::s_getCellDim(cellid);
 
-    s_cell_shader->use();
-
-    if(show[0] || show[1])
-    {
-      glColor3dv(g_grid_cp_colors[dim].data());
-
-      glBegin(GL_POINTS);
-      glVertex3sv(cellid.data());
-      glEnd();
-    }
-
     for(uint dir = 0 ; dir<2;++dir)
     {
+
+      s_cell_shaders[dir]->use();
+
       if(show[dir])
       {
+        glColor3dv(g_grid_cp_colors[dim].data());
+
+        glBegin(GL_POINTS);
+        glVertex3sv(cellid.data());
+        glEnd();
+
         glColor3dv(color[dir].data());
 
         ren[dir]->render();
       }
-    }
 
-    s_cell_shader->disable();
+      s_cell_shaders[dir]->disable();
+    }
   }
 
   bool disc_rendata_t::update(mscomplex_t *msc )
@@ -636,9 +679,9 @@ namespace grid
         }
 
         ren[dir] = glutils::create_buffered_points_ren
-                  (glutils::make_buf_obj(vlist),
-                   glutils::make_buf_obj(),
-                   glutils::make_buf_obj());
+                   (glutils::make_buf_obj(vlist),
+                    glutils::make_buf_obj(),
+                    glutils::make_buf_obj());
 
         ret = true;
       }

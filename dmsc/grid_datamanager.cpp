@@ -87,7 +87,7 @@ namespace grid
   {
     dp->dataset->postMergeFillDiscs(dp->msgraph);
 
-    dp->msgraph->write_discs("dp_disc_");
+//    dp->msgraph->write_discs("dp_disc_");
   }
 
   void data_manager_t::readDataToMem()

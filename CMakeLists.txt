@@ -25,7 +25,7 @@ if(NOT QGLVIEWER_FOUND)
   message(FATAL_ERROR "Failed to find QGLViewer .. quitting")
 endif(NOT QGLVIEWER_FOUND)
 
-find_package(Boost COMPONENTS program_options thread serialization)
+find_package(Boost COMPONENTS program_options thread serialization regex)
 
 if(NOT Boost_FOUND)
   message(FATAL_ERROR "Cannot find boost")
@@ -38,7 +38,7 @@ if(NOT PYTHONINTERP_FOUND OR NOT PYTHON_EXECUTABLE)
 endif(NOT PYTHONINTERP_FOUND OR NOT PYTHON_EXECUTABLE)
 
 # find_package(OpenCL)
-# 
+#
 # if(NOT OPENCL_FOUND)
 #   message(FATAL_ERROR "could not find openCL ..")
 # endif(NOT OPENCL_FOUND)
@@ -62,7 +62,7 @@ set(dmsc_SRCS
 
 #   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.h
 #   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/bitonic_sort.cpp
-# 
+#
 #   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.h
 #   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/prefix_scan.cpp
   )
