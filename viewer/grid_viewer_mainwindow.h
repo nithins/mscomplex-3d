@@ -61,6 +61,8 @@ namespace grid
 
     ~viewer_mainwindow();
 
+    void showEvent ( QShowEvent * );
+
   private slots:
     void on_datapiece_view_customContextMenuRequested ( const QPoint &p );
 
@@ -101,14 +103,14 @@ namespace grid
     void triggered(bool state);
   };
 
-  class configurable_item_model : public QAbstractListModel
+  class configurable_item_model : public QAbstractTableModel
   {
     Q_OBJECT
 
   public:
 
     configurable_item_model ( configurable_t *conf,QObject *parent = 0 ):
-        QAbstractListModel ( parent ),m_conf(conf){}
+        QAbstractTableModel ( parent ),m_conf(conf){}
 
     QVariant data ( const QModelIndex &index, int role ) const;
 
@@ -117,7 +119,11 @@ namespace grid
 
     int rowCount ( const QModelIndex &parent = QModelIndex() ) const;
 
+    int columnCount ( const QModelIndex &parent = QModelIndex() ) const;
+
     void reset_configurable(configurable_t *conf);
+
+    void force_reset(){reset();}
 
   private:
 

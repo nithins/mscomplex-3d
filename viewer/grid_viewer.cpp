@@ -565,15 +565,12 @@ namespace grid
   }
   int octtree_piece_rendata::columns()
   {
-    return 5;
+    return 6;
   }
   bool octtree_piece_rendata::exchange_data(const data_index_t &idx,
                                             boost::any &v,
                                             const eExchangeMode &m)
   {
-    if(idx[0] > 4)
-      throw std::logic_error("invalid index");
-
     bool need_update = false;
 
     int i = idx[0];
@@ -583,10 +580,12 @@ namespace grid
     case 0:
       return s_exchange_ro(disc_rds[idx[1]]->cellid.to_string(),v,m);
     case 1:
+      return s_exchange_ro((int)dataset_t::s_getCellDim(disc_rds[idx[1]]->cellid),v,m);
     case 2:
-      need_update =  s_exchange_rw(disc_rds[idx[1]]->show[i%2],v,m);break;
     case 3:
+      need_update =  s_exchange_rw(disc_rds[idx[1]]->show[i%2],v,m);break;
     case 4:
+    case 5:
       return s_exchange_rw(disc_rds[idx[1]]->color[i%2],v,m);
     };
 
@@ -602,10 +601,11 @@ namespace grid
     switch(i)
     {
     case 0: return "cellid";
-    case 1: return "asc disc";
+    case 1: return "index";
     case 2: return "des disc";
-    case 3: return "asc disc color";
+    case 3: return "asc disc";
     case 4: return "des disc color";
+    case 5: return "asc disc color";
     }
     throw std::logic_error("invalid index");
   }

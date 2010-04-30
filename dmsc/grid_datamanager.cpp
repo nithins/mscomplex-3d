@@ -96,6 +96,9 @@ namespace grid
 
     ifstream ifs(m_filename.c_str(),std::ios::in|std::ios::binary);
 
+    if(ifs.is_open() == false)
+      throw std::runtime_error("unable to open file");
+
     ifs.read((char*)(void*)m_pData,sizeof(cell_fn_t)*m_size[0]*m_size[1]*m_size[2]);
   }
 

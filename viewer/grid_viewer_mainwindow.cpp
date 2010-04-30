@@ -2,6 +2,7 @@
 #include <QTreeView>
 #include <QColorDialog>
 #include <QDebug>
+#include <QSortFilterProxyModel>
 
 #include <grid_viewer.h>
 #include <grid_viewer_mainwindow.h>
@@ -50,8 +51,12 @@ namespace grid
 
   void viewer_mainwindow::on_critpt_view_customContextMenuRequested ( const QPoint &p )
   {
+    QSortFilterProxyModel  * cp_model_proxy =
+        dynamic_cast<QSortFilterProxyModel *>(critpt_view->model());
 
-    QModelIndexList l =  critpt_view->selectionModel()->selectedIndexes();
+    QModelIndexList l =
+        cp_model_proxy->mapSelectionToSource
+        (critpt_view->selectionModel()->selection()).indexes();
 
     configurable_ctx_menu(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],
                           l,critpt_view->mapToGlobal(p));
@@ -66,8 +71,11 @@ namespace grid
 
     m_active_otp_idx = index.row();
 
+    QSortFilterProxyModel  * cp_model_proxy =
+        dynamic_cast<QSortFilterProxyModel *>(critpt_view->model());
+
     configurable_item_model * cp_model =
-        dynamic_cast<configurable_item_model *>(critpt_view->model());
+        dynamic_cast<configurable_item_model *>(cp_model_proxy->sourceModel());
 
     if(cp_model)
       cp_model->reset_configurable(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx]);
@@ -94,7 +102,27 @@ namespace grid
         = new configurable_item_model
           (m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],this);
 
-    critpt_view->setModel ( cp_model );
+    QSortFilterProxyModel * cp_model_proxy = new QSortFilterProxyModel(this);
+
+    cp_model_proxy->setSourceModel(cp_model);
+
+    connect(critpt_filter_edit,SIGNAL(textChanged(QString)),
+            cp_model_proxy,SLOT(setFilterFixedString(QString)));
+
+    critpt_view->setModel ( cp_model_proxy );
+  }
+
+  void viewer_mainwindow::showEvent ( QShowEvent * )
+  {
+    QSortFilterProxyModel  * cp_model_proxy =
+        dynamic_cast<QSortFilterProxyModel *>(critpt_view->model());
+
+    configurable_item_model * cp_model =
+        dynamic_cast<configurable_item_model *>(cp_model_proxy->sourceModel());
+
+    if(cp_model)
+      cp_model->force_reset();
+
   }
 
   viewer_mainwindow::~viewer_mainwindow()
@@ -108,9 +136,6 @@ namespace grid
     if ( !index.isValid() )
       return QVariant();
 
-    if ( role != Qt::DisplayRole )
-      return QVariant();
-
     if(index.column() >= m_conf->columns())
       return QVariant();
 
@@ -118,13 +143,34 @@ namespace grid
 
     boost::any val;
 
-    bool writeable = m_conf->exchange_data(idx,val,configurable_t::EXCHANGE_READ);
+    m_conf->exchange_data(idx,val,configurable_t::EXCHANGE_READ);
 
-    if(writeable == true)
-      return QVariant();
+    if(role == Qt::DisplayRole)
+    {
+      if(val.type() == typeid(std::string))
+        return QString(boost::any_cast<std::string>(val).c_str());
+      else if (val.type() == typeid(bool))
+        return boost::any_cast<bool>(val);
+      else if (val.type() == typeid(int))
+        return boost::any_cast<int>(val);
 
-    if(val.type() == typeid(std::string))
-      return QString(boost::any_cast<std::string>(val).c_str());
+    }
+    else if( role == Qt::DecorationRole)
+    {
+      if (val.type() == typeid(glutils::color_t))
+      {
+        glutils::color_t c = boost::any_cast<glutils::color_t>(val);
+
+        return QColor::fromRgbF(c[0],c[1],c[2]);
+      }
+    }
+
+    return QVariant();
+  }
+
+  int configurable_item_model::columnCount ( const QModelIndex &parent  ) const
+  {
+    return m_conf->columns();
   }
 
   QVariant configurable_item_model::headerData
