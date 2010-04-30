@@ -2,7 +2,6 @@
 #include <QTreeView>
 #include <QColorDialog>
 #include <QDebug>
-#include <QSortFilterProxyModel>
 
 #include <grid_viewer.h>
 #include <grid_viewer_mainwindow.h>
@@ -51,11 +50,9 @@ namespace grid
 
   void viewer_mainwindow::on_critpt_view_customContextMenuRequested ( const QPoint &p )
   {
-    QSortFilterProxyModel  * cp_model_proxy =
-        dynamic_cast<QSortFilterProxyModel *>(critpt_view->model());
 
     QModelIndexList l =
-        cp_model_proxy->mapSelectionToSource
+        m_cp_model_proxy->mapSelectionToSource
         (critpt_view->selectionModel()->selection()).indexes();
 
     configurable_ctx_menu(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],
@@ -71,14 +68,8 @@ namespace grid
 
     m_active_otp_idx = index.row();
 
-    QSortFilterProxyModel  * cp_model_proxy =
-        dynamic_cast<QSortFilterProxyModel *>(critpt_view->model());
-
-    configurable_item_model * cp_model =
-        dynamic_cast<configurable_item_model *>(cp_model_proxy->sourceModel());
-
-    if(cp_model)
-      cp_model->reset_configurable(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx]);
+    m_cp_model->reset_configurable
+        (m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx]);
   }
 
   viewer_mainwindow::viewer_mainwindow
@@ -93,36 +84,27 @@ namespace grid
 
     m_viewer->resize(glviewer->size());
 
-    configurable_item_model *otp_model
-        = new configurable_item_model (m_viewer->m_ren,this);
+    m_otp_model = new configurable_item_model (m_viewer->m_ren,this);
 
-    datapiece_view->setModel ( otp_model );
+    datapiece_view->setModel ( m_otp_model );
 
-    configurable_item_model *cp_model
-        = new configurable_item_model
-          (m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],this);
+    m_cp_model = new configurable_item_model
+                 (m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],this);
 
-    QSortFilterProxyModel * cp_model_proxy = new QSortFilterProxyModel(this);
+    m_cp_model_proxy = new QSortFilterProxyModel(this);
 
-    cp_model_proxy->setSourceModel(cp_model);
+    m_cp_model_proxy->setSourceModel(m_cp_model);
+
+    critpt_view->setModel ( m_cp_model_proxy );
 
     connect(critpt_filter_edit,SIGNAL(textChanged(QString)),
-            cp_model_proxy,SLOT(setFilterFixedString(QString)));
+            m_cp_model_proxy,SLOT(setFilterFixedString(QString)));
 
-    critpt_view->setModel ( cp_model_proxy );
   }
 
   void viewer_mainwindow::showEvent ( QShowEvent * )
   {
-    QSortFilterProxyModel  * cp_model_proxy =
-        dynamic_cast<QSortFilterProxyModel *>(critpt_view->model());
-
-    configurable_item_model * cp_model =
-        dynamic_cast<configurable_item_model *>(cp_model_proxy->sourceModel());
-
-    if(cp_model)
-      cp_model->force_reset();
-
+    m_cp_model->force_reset();
   }
 
   viewer_mainwindow::~viewer_mainwindow()
@@ -216,12 +198,11 @@ namespace grid
     {
       boost::any val;
 
-      bool writeable = c->exchange_data(configurable_t::data_index_t(i,first_row),
-                                        val,
-                                        configurable_t::EXCHANGE_READ);
+      configurable_t::data_index_t idx(i,first_row);
 
-      if(writeable == false)
-        continue;
+      bool is_rw = c->exchange_data(idx,val,configurable_t::EXCHANGE_READ);
+
+      if(is_rw == false) continue;
 
       QAction * action  = m.addAction ( c->get_header(i).c_str());
 
@@ -234,7 +215,8 @@ namespace grid
       configurable_ctx_menu_sig_collector * coll =
           new configurable_ctx_menu_sig_collector(c,val,i,l,&m);
 
-      coll->connect(action,SIGNAL ( triggered ( bool ) ),coll,SLOT(triggered ( bool )));
+      coll->connect(action,SIGNAL ( triggered ( bool ) ),
+                    coll,SLOT(triggered ( bool )));
     }
 
     m.exec(p);

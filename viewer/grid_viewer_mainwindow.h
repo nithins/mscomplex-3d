@@ -10,6 +10,7 @@
 #include <QItemSelectionModel>
 #include <QTreeView>
 #include <QGLViewer/qglviewer.h>
+#include <QSortFilterProxyModel>
 
 #include <ui_grid_viewer_mainwindow.h>
 #include <boost/any.hpp>
@@ -42,6 +43,8 @@ namespace grid
     virtual QString helpString() const;
   };
 
+  class configurable_item_model;
+
   class viewer_mainwindow:
       public QDialog,
       public Ui::grid_viewer_mainwindow_Dialog
@@ -55,6 +58,10 @@ namespace grid
     data_manager_t          *m_gdm;
 
     uint                     m_active_otp_idx;
+
+    QSortFilterProxyModel   *m_cp_model_proxy;
+    configurable_item_model *m_cp_model;
+    configurable_item_model *m_otp_model;
 
     viewer_mainwindow
         (data_manager_t *gdm,const rect_t & roi);
