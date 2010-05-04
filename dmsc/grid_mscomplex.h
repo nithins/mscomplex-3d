@@ -47,11 +47,13 @@ namespace grid
 
     bool isCancelled;
     bool is_paired;
+    bool is_strangulating;
 
     critpt_t()
     {
       isCancelled           = false;
       is_paired             = false;
+      is_strangulating      = false;
       pair_idx              = -1;
     }
 
@@ -77,6 +79,8 @@ namespace grid
     rect_t        m_ext_rect;
 
     void connect_cps(cellid_t c1,cellid_t c2);
+
+    void connect_cps(uint_pair_t p);
 
     void add_critpt(cellid_t c,uchar i,cell_fn_t f);
 
@@ -113,19 +117,24 @@ namespace grid
   typedef critpt_t::conn_t::iterator       conn_iter_t;
   typedef critpt_t::conn_t::const_iterator const_conn_iter_t;
 
-}
-
-
-#include <boost/serialization/array.hpp>
-#include <boost/serialization/base_object.hpp>
-
-namespace boost
-{
-  namespace serialization
+  inline void order_pr_by_cp_index(mscomplex_t *msc,uint_pair_t &e)
   {
-    template<class Archive>
-    void serialize(Archive & ar, grid::mscomplex_t & g, const unsigned int );
-
-  } // namespace serialization
+    if(msc->m_cps[e[0]]->index < msc->m_cps[e[1]]->index)
+      std::swap(e[0],e[1]);
+  }
 }
+
+
+//#include <boost/serialization/array.hpp>
+//#include <boost/serialization/base_object.hpp>
+//
+//namespace boost
+//{
+//  namespace serialization
+//  {
+//    template<class Archive>
+//    void serialize(Archive & ar, grid::mscomplex_t & g, const unsigned int );
+//
+//  } // namespace serialization
+//}
 #endif

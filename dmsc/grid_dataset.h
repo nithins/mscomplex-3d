@@ -118,8 +118,8 @@ namespace grid
     {
       static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
-      cell_fn_t f1 = (*m_vert_fns_ref)[c1[0]>>1][c1[1]>>1][c1[2]>>1];
-      cell_fn_t f2 = (*m_vert_fns_ref)[c2[0]>>1][c2[1]>>1][c2[2]>>1];
+      cell_fn_t f1 = (*m_vert_fns_ref)(c1/2);
+      cell_fn_t f2 = (*m_vert_fns_ref)(c2/2);
 
       if (f1 != f2)
         return f1 < f2;

@@ -1,5 +1,6 @@
 #include <cmath>
 #include <queue>
+#include <iostream>
 
 #include <grid_mscomplex.h>
 #include <grid_mscomplex_ensure.h>
@@ -9,12 +10,6 @@
 
 namespace grid
 {
-  inline void order_pr_by_cp_index(mscomplex_t *msc,uint_pair_t &e)
-  {
-    if(msc->m_cps[e[0]]->index < msc->m_cps[e[1]]->index)
-      std::swap(e[0],e[1]);
-  }
-
   void mark_cancel_pair(mscomplex_t *msc,uint_pair_t e)
   {
     critpt_t * cp1 = msc->m_cps[e[0]];
@@ -41,17 +36,31 @@ namespace grid
   void mscomplex_t::connect_cps(cellid_t c0,cellid_t c1)
   {
     ensure_cellid_critical(this,c0);
-
     ensure_cellid_critical(this,c1);
 
-    uint_pair_t e(m_id_cp_map[c0],m_id_cp_map[c1]);
+    connect_cps(uint_pair_t(m_id_cp_map[c0],m_id_cp_map[c1]));
+  }
 
+  void mscomplex_t::connect_cps(uint_pair_t e)
+  {
     order_pr_by_cp_index(this,e);
 
     ensure_ordered_index_one_separation(this,e);
 
     for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
       m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
+
+    log_line("connecting cps = ",edge_to_string(this,e));
+
+    if(is_multiple_edge(this,e))
+    {
+      log_line("multiple edge = ",edge_to_string(this,e));
+
+      for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+        if(is_saddle(this,e[dir]))
+          m_cps[e[dir]]->is_strangulating = true;
+    }
+
   }
 
   void cancelPairs ( mscomplex_t *msc,uint_pair_t e,
@@ -71,25 +80,30 @@ namespace grid
 
     // cps in lower of u except l
     for(it[0] = cp[0]->conn[0].begin();it[0] != cp[0]->conn[0].end();++it[0])
-      // cps in upper of l except u
       for(it[1] = cp[1]->conn[1].begin();it[1] != cp[1]->conn[1].end();++it[1])
-        for(uint dir = 0 ; dir < 2;++dir)
-          msc->m_cps[*it[dir]]->conn[dir^1].insert(*it[dir^1]);
+      {
+        ensure_not_cancelled(msc,*it[0]);
+        ensure_not_cancelled(msc,*it[1]);
+
+        msc->connect_cps(uint_pair_t(*it[0],*it[1]));
+      }
 
     if(new_edges)
-      // cps in lower of u except l
       for(it[0] = cp[0]->conn[0].begin();it[0] != cp[0]->conn[0].end();++it[0])
-        // cps in upper of l except u
         for(it[1] = cp[1]->conn[1].begin();it[1] != cp[1]->conn[1].end();++it[1])
-            new_edges->push_back(uint_pair_t(*it[0],*it[1]));
+            new_edges->push_back(uint_pair_t(*it[1],*it[0]));
 
     for(uint dir = 0 ; dir<2;++dir)
      for(conn_iter_t it = cp[dir]->conn[dir].begin();it != cp[dir]->conn[dir].end();++it)
-       msc->m_cps[*it]->conn[dir^1].erase(e[dir]);
+      {
+        msc->m_cps[*it]->conn[dir^1].erase(e[dir]);
+      }
 
     for(uint dir = 0 ; dir<2;++dir)
       for(conn_iter_t it = cp[dir]->conn[dir^1].begin();it != cp[dir]->conn[dir^1].end();++it)
+      {
         msc->m_cps[*it]->conn[dir].erase(e[dir]);
+      }
 
     for(uint dir = 0 ; dir < 2;++dir)
       cp[dir]->conn[dir].insert(e[dir^1]);
@@ -101,11 +115,14 @@ namespace grid
       cp[dir]->conn[dir^1].clear();
   }
 
-  void uncancel_pairs( mscomplex_t  *msc,uint_pair_t e)
+  void uncancel_pair( mscomplex_t  *msc,uint_pair_t e)
   {
     order_pr_by_cp_index(msc,e);
 
-    ensure_connectivity(msc,e);
+    ensure_ordered_connectivity(msc,e);
+
+    ensure_cp_is_cancelled(msc,e[0]);
+    ensure_cp_is_cancelled(msc,e[1]);
 
     critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
 
@@ -137,6 +154,8 @@ namespace grid
         {
           ensure_cp_is_not_paired(msc,*j_it);
 
+          ensure_index_one_separation(msc,uint_pair_t(*j_it,e[dir]));
+
           new_conn.insert(*j_it);
         }
       }
@@ -165,22 +184,21 @@ namespace grid
 
   void mscomplex_t::print_connections(std::ostream & os)
   {
+    const char *dir_txt[] = {"des","asc"};
+
     for(uint i = 0 ; i < m_cps.size();++i)
     {
-      os<<"des(";
       if(m_cps[i]->is_paired)
-        os<<"*";
-      os<<m_cps[i]->cellid<<") = ";
-      print_cp_connections(os,*this,m_cps[i]->conn[0]);
-      os<<std::endl;
+        continue;
 
-      os<<"asc(";
-      if(m_cps[i]->is_paired)
-        os<<"*";
-      os<<m_cps[i]->cellid<<") = ";
-      print_cp_connections(os,*this,m_cps[i]->conn[1]);
-      os<<std::endl;
-      os<<std::endl;
+      for(uint dir = 0 ; dir <2 ;++dir)
+      {
+        os<<dir_txt[dir];
+        os<<m_cps[i]->cellid;
+        print_cp_connections(os,*this,m_cps[i]->conn[dir]);
+        os<<'\n';
+      }
+      os<<'\n';
     }
   }
 
@@ -189,23 +207,23 @@ namespace grid
     clear();
   }
 
-  void shallow_replicate_cp(mscomplex_t &msc,const critpt_t &cp)
-  {
-    if(msc.m_id_cp_map.count(cp.cellid) != 0)
-      throw std::logic_error("this cp is present in msc");
-
-    critpt_t * dest_cp = new critpt_t;
-
-    dest_cp->isCancelled              = cp.isCancelled;
-    dest_cp->is_paired                = cp.is_paired;
-    dest_cp->cellid                   = cp.cellid;
-    dest_cp->fn                       = cp.fn;
-    dest_cp->index                    = cp.index;
-
-    msc.m_id_cp_map[dest_cp->cellid]  = msc.m_cps.size();
-    msc.m_cps.push_back(dest_cp);
-  }
-
+//  void shallow_replicate_cp(mscomplex_t &msc,const critpt_t &cp)
+//  {
+//    if(msc.m_id_cp_map.count(cp.cellid) != 0)
+//      throw std::logic_error("this cp is present in msc");
+//
+//    critpt_t * dest_cp = new critpt_t;
+//
+//    dest_cp->isCancelled              = cp.isCancelled;
+//    dest_cp->is_paired                = cp.is_paired;
+//    dest_cp->cellid                   = cp.cellid;
+//    dest_cp->fn                       = cp.fn;
+//    dest_cp->index                    = cp.index;
+//
+//    msc.m_id_cp_map[dest_cp->cellid]  = msc.m_cps.size();
+//    msc.m_cps.push_back(dest_cp);
+//  }
+//
 //  mscomplex_t * mscomplex_t::merge_up
 //      (const mscomplex_t& msc1,
 //       const mscomplex_t& msc2)
@@ -564,13 +582,60 @@ namespace grid
     for(uint dir = 0 ; dir < 2; ++dir)
       if(!msc->m_rect.isOnBoundry(cp[dir]->cellid) &&
          msc->m_rect.isOnBoundry(cp[dir^1]->cellid))
+      {
+        log_line("rejecting edge:(bndry/nonbndry)",edge_to_string(msc,e));
         return false;
+      }
 
     for(uint dir = 0 ; dir < 2; ++dir)
       if(cp[dir]->conn[dir].count(e[dir^1]) != 1)
+      {
+        log_line("rejecting edge:(incorrect strangulation pair)",edge_to_string(msc,e));
         return false;
+      }
 
     return true;
+  }
+
+  bool can_cancel_edge(mscomplex_t *msc,uint_pair_t e )
+  {
+    ensure_connectivity(msc,e);
+
+    if(msc->m_cps[e[0]]->is_strangulating == false &&
+       msc->m_cps[e[1]]->is_strangulating == false)
+      return true;
+
+    order_pr_by_cp_index(msc,e);
+
+    for(uint dir  = 0 ; dir < 2;++dir)
+    {
+      if(msc->m_cps[e[dir]]->is_strangulating &&
+         msc->m_cps[e[dir^1]]->conn[dir^1].size() == 1)
+        return true;
+    }
+
+    return false;
+
+  }
+
+  void log_all_to_file(mscomplex_t *msc,std::string filename,int filenno)
+  {
+    std::stringstream ss;
+    ss<<filename;
+
+    if(filenno >=0 )
+      ss<<"-"<<filenno;
+
+    ss<<".txt";
+
+    std::fstream of(ss.str().c_str(),std::ios::out);
+
+    if(!of.is_open())
+      throw std::runtime_error("unable to open file");
+
+    msc->print_connections(of);
+
+    of.close();
   }
 
   void mscomplex_t::simplify(uint_pair_list_t & canc_pairs_list,
@@ -606,6 +671,13 @@ namespace grid
 
     max_persistence = max_val - min_val;
 
+//    uint max_canc = 103;
+    uint num_canc = 0;
+
+    log_all_to_file(this,"ms_conns",num_canc);
+
+    uint_pair_list_t resubmit_list;
+
     while (canc_pair_priq.size() !=0)
     {
       uint_pair_t pr = canc_pair_priq.top();
@@ -615,14 +687,42 @@ namespace grid
       if(is_valid_canc_edge(this,pr) == false)
         continue;
 
+      if(can_cancel_edge(this,pr) == false)
+      {
+        resubmit_list.push_back(pr);
+        continue;
+      }
+
+
       cell_fn_t persistence = std::abs(m_cps[pr[0]]->fn-m_cps[pr[1]]->fn);
+
+      std::cout<<"canc no = "<<num_canc<<" edge = "<<edge_to_string(this,pr)<<"\n";
 
       if((double)persistence/(double)max_persistence > simplification_treshold)
         break;
 
+      if(num_canc == 433 )
+        log_all_to_file(this,"ms_conn_before",num_canc);
+
+//      if(num_canc == max_canc)
+//        break;
+
+      num_canc++;
+
       std::vector<uint_pair_t> new_edges;
 
-      cancelPairs ( this,pr,&new_edges);
+      try
+      {
+        cancelPairs ( this,pr,&new_edges);
+      }
+      catch (std::logic_error)
+      {
+        std::cout<<"caught something\n";
+
+        log_all_to_file(this,"ms_conns",num_canc);
+
+        throw;
+      }
 
       mark_cancel_pair(this,pr);
 
@@ -630,14 +730,29 @@ namespace grid
 
       for(uint i = 0 ; i < new_edges.size(); i++)
         canc_pair_priq.push(new_edges[i]);
+
+      for(uint i = 0 ; i < resubmit_list.size(); i++)
+        canc_pair_priq.push(resubmit_list[i]);
+
+      resubmit_list.clear();
     }
+
+    log_all_to_file(this,"final_msc",-1);
   }
 
   void mscomplex_t::un_simplify(const uint_pair_list_t &canc_pairs_list)
   {
+    uint num_uncanc = canc_pairs_list.size();
+
     for(uint_pair_list_t::const_reverse_iterator it = canc_pairs_list.rbegin();
     it != canc_pairs_list.rend() ; ++it)
-      uncancel_pairs(this,*it);
+    {
+      log_line("num_uncanc = ",num_uncanc--);
+
+      log_line("uncancelling ",edge_to_string(this,*it));
+
+      uncancel_pair(this,*it);
+    }
   }
 
   void mscomplex_t::simplify_un_simplify(double simplification_treshold)
@@ -737,119 +852,119 @@ namespace grid
 }
 
 
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/array.hpp>
-#include <boost/serialization/map.hpp>
-#include <boost/serialization/set.hpp>
-#include <boost/serialization/base_object.hpp>
-#include <boost/serialization/binary_object.hpp>
-
-#include <boost/archive/binary_iarchive.hpp>
-#include <boost/archive/binary_oarchive.hpp>
-
-using namespace grid;
-
-namespace boost
-{
-  namespace serialization
-  {
-    template<class Archive>
-    void serialize(Archive & ar, rect_range_t & r, const unsigned int )
-    {
-      typedef boost::array<rect_range_t::value_type,rect_range_t::static_size>
-          rect_range_base_t;
-
-      ar & boost::serialization::base_object<rect_range_base_t>(r);
-    }
-
-    template<class Archive>
-    void serialize(Archive & ar, rect_point_t & p, const unsigned int )
-    {
-      typedef boost::array<rect_point_t::value_type,rect_point_t::static_size>
-          rect_point_base_t;
-
-      ar & boost::serialization::base_object<rect_point_base_t>(p);
-    }
-
-    template<class Archive>
-    void serialize(Archive & ar, rect_t & r, const unsigned int )
-    {
-      typedef boost::array<rect_t::value_type,rect_t::static_size>
-          rect_base_t;
-
-      ar & boost::serialization::base_object<rect_base_t>(r);
-    }
-
-    template<class Archive>
-    void serialize(Archive & ar, critpt_t & c, const unsigned int )
-    {
-      ar & c.cellid;
-      for(uint dir = 0 ;dir <0 ;++dir)
-        ar& c.conn[dir];
-      ar & c.is_paired;
-      ar & c.isCancelled;
-      ar & c.pair_idx;
-      ar & c.fn;
-    }
-
-
-    template<class Archive>
-    void serialize(Archive & ar, mscomplex_t & g, const unsigned int )
-    {
-      ar & g.m_rect;
-      ar & g.m_ext_rect;
-      ar & g.m_id_cp_map;
-      ar & g.m_cps;
-    }
-
-    //    template<class Archive>
-    //    void serialize(Archive & ar, GridDataset & ds, const unsigned int )
-    //    {
-    //       ar & ds.m_rect;
-    //       ar & ds.m_ext_rect;
-    //
-    //       GridDataset::rect_size_t ext_sz = ds.m_ext_rect.size();
-    //       uint num_data_items = (ext_sz[0]+1)*(ext_sz[1]+1);
-    //
-    //       if(Archive::is_loading::value)
-    //         ds.init(NULL);
-    //
-    //       ar & make_binary_object(ds.(*m_cell_flags).data(),num_data_items*sizeof(GridDataset::cell_flag_t));
-    //       ar & make_binary_object(ds.m_cell_pairs.data(),num_data_items*sizeof(GridDataset::cellid_t));
-    //    }
-  }
-}
-
+//#include <boost/serialization/vector.hpp>
+//#include <boost/serialization/array.hpp>
+//#include <boost/serialization/map.hpp>
+//#include <boost/serialization/set.hpp>
+//#include <boost/serialization/base_object.hpp>
+//#include <boost/serialization/binary_object.hpp>
+//
+//#include <boost/archive/binary_iarchive.hpp>
+//#include <boost/archive/binary_oarchive.hpp>
+//
+//using namespace grid;
+//
+//namespace boost
+//{
+//  namespace serialization
+//  {
+//    template<class Archive>
+//    void serialize(Archive & ar, rect_range_t & r, const unsigned int )
+//    {
+//      typedef boost::array<rect_range_t::value_type,rect_range_t::static_size>
+//          rect_range_base_t;
+//
+//      ar & boost::serialization::base_object<rect_range_base_t>(r);
+//    }
+//
+//    template<class Archive>
+//    void serialize(Archive & ar, rect_point_t & p, const unsigned int )
+//    {
+//      typedef boost::array<rect_point_t::value_type,rect_point_t::static_size>
+//          rect_point_base_t;
+//
+//      ar & boost::serialization::base_object<rect_point_base_t>(p);
+//    }
+//
+//    template<class Archive>
+//    void serialize(Archive & ar, rect_t & r, const unsigned int )
+//    {
+//      typedef boost::array<rect_t::value_type,rect_t::static_size>
+//          rect_base_t;
+//
+//      ar & boost::serialization::base_object<rect_base_t>(r);
+//    }
+//
+//    template<class Archive>
+//    void serialize(Archive & ar, critpt_t & c, const unsigned int )
+//    {
+//      ar & c.cellid;
+//      for(uint dir = 0 ;dir <0 ;++dir)
+//        ar& c.conn[dir];
+//      ar & c.is_paired;
+//      ar & c.isCancelled;
+//      ar & c.pair_idx;
+//      ar & c.fn;
+//    }
+//
+//
+//    template<class Archive>
+//    void serialize(Archive & ar, mscomplex_t & g, const unsigned int )
+//    {
+//      ar & g.m_rect;
+//      ar & g.m_ext_rect;
+//      ar & g.m_id_cp_map;
+//      ar & g.m_cps;
+//    }
+//
+//    //    template<class Archive>
+//    //    void serialize(Archive & ar, GridDataset & ds, const unsigned int )
+//    //    {
+//    //       ar & ds.m_rect;
+//    //       ar & ds.m_ext_rect;
+//    //
+//    //       GridDataset::rect_size_t ext_sz = ds.m_ext_rect.size();
+//    //       uint num_data_items = (ext_sz[0]+1)*(ext_sz[1]+1);
+//    //
+//    //       if(Archive::is_loading::value)
+//    //         ds.init(NULL);
+//    //
+//    //       ar & make_binary_object(ds.(*m_cell_flags).data(),num_data_items*sizeof(GridDataset::cell_flag_t));
+//    //       ar & make_binary_object(ds.m_cell_pairs.data(),num_data_items*sizeof(GridDataset::cellid_t));
+//    //    }
+//  }
+//}
+//
+////// without the explicit instantiations below, the program will
+////// fail to link for lack of instantiantiation of the above function
+////// The impls are visible only in this file to save compilation time..
+////
+////template void boost::serialization::serialize<boost::archive::text_iarchive>(
+////    boost::archive::text_iarchive & ar,
+////    GridDataset & g,
+////    const unsigned int file_version
+////);
+////
+////template void boost::serialization::serialize<boost::archive::text_oarchive>(
+////    boost::archive::text_oarchive & ar,
+////    GridDataset & g,
+////    const unsigned int file_version
+////);
+//
+//
 //// without the explicit instantiations below, the program will
 //// fail to link for lack of instantiantiation of the above function
 //// The impls are visible only in this file to save compilation time..
 //
-//template void boost::serialization::serialize<boost::archive::text_iarchive>(
-//    boost::archive::text_iarchive & ar,
-//    GridDataset & g,
+//template void boost::serialization::serialize<boost::archive::binary_iarchive>(
+//    boost::archive::binary_iarchive & ar,
+//    mscomplex_t & g,
 //    const unsigned int file_version
-//);
+//    );
+//template void boost::serialization::serialize<boost::archive::binary_oarchive>(
+//    boost::archive::binary_oarchive & ar,
+//    mscomplex_t & g,
+//    const unsigned int file_version
+//    );
 //
-//template void boost::serialization::serialize<boost::archive::text_oarchive>(
-//    boost::archive::text_oarchive & ar,
-//    GridDataset & g,
-//    const unsigned int file_version
-//);
-
-
-// without the explicit instantiations below, the program will
-// fail to link for lack of instantiantiation of the above function
-// The impls are visible only in this file to save compilation time..
-
-template void boost::serialization::serialize<boost::archive::binary_iarchive>(
-    boost::archive::binary_iarchive & ar,
-    mscomplex_t & g,
-    const unsigned int file_version
-    );
-template void boost::serialization::serialize<boost::archive::binary_oarchive>(
-    boost::archive::binary_oarchive & ar,
-    mscomplex_t & g,
-    const unsigned int file_version
-    );
-
-
+//

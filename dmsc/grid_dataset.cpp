@@ -13,6 +13,14 @@ namespace bl = boost::lambda;
 namespace grid
 {
 
+
+  inline void ensure_cell_not_marked(dataset_t * ds,cellid_t c)
+  {
+    if(ds->isCellMarked(c) == true)
+      throw std::logic_error("failed to ensure that cell is not marked");
+  }
+
+
   cellid_t get_cp_cellid(mscomplex_t *msgraph,uint idx)
   {
     return msgraph->m_cps[idx]->cellid;
@@ -106,19 +114,17 @@ namespace grid
        eDirection gradient_dir
        )
   {
-    typedef cellid_t id_type;
-
-    std::queue<id_type> cell_queue;
+    std::queue<cellid_t> cell_queue;
 
     cell_queue.push ( start_cellId );
 
     while ( !cell_queue.empty() )
     {
-      id_type top_cell = cell_queue.front();
+      cellid_t top_cell = cell_queue.front();
 
       cell_queue.pop();
 
-      id_type      cets[20];
+      cellid_t      cets[20];
 
       uint cet_ct = ( dataset->*getcets[gradient_dir] ) ( top_cell,cets );
 
@@ -132,7 +138,7 @@ namespace grid
         {
           if ( !dataset->isCellExterior ( cets[i] ) )
           {
-            id_type next_cell = dataset->getCellPairId ( cets[i] );
+            cellid_t next_cell = dataset->getCellPairId ( cets[i] );
 
             if ( dataset->getCellDim ( top_cell ) ==
                  dataset->getCellDim ( next_cell ) &&
@@ -448,7 +454,17 @@ namespace grid
             continue;
 
           if (lowestPairableCoFacet (this,c,p))
-            pairCells (c,p);
+          {
+//            ensure_cell_not_marked(this,c);
+
+            if(isCellMarked(p))
+            {
+              std::cout<<"attempting to pair  "<<c<<p<<"\n";
+              std::cout<<"p is already paired "<<p<<getCellPairId(p)<<"\n";
+            }
+            else
+              pairCells (c,p);
+          }
         }
       }
     }
