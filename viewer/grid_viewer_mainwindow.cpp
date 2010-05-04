@@ -215,7 +215,7 @@ namespace grid
       configurable_ctx_menu_sig_collector * coll =
           new configurable_ctx_menu_sig_collector(c,val,i,l,&m);
 
-      coll->connect(action,SIGNAL ( triggered ( bool ) ),
+      m.connect(action,SIGNAL ( triggered ( bool ) ),
                     coll,SLOT(triggered ( bool )));
     }
 

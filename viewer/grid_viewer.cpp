@@ -24,7 +24,7 @@ glutils::color_t g_grid_cp_colors[] =
   glutils::color_t(0.0,0.0,1.0),
   glutils::color_t(0.0,1.0,0.0),
   glutils::color_t(1.0,0.0,0.0),
-  glutils::color_t(1.0,0.0,1.0),
+  glutils::color_t(0.0,1.0,1.0),
 };
 
 glutils::color_t g_grid_grad_colors[] =
@@ -59,11 +59,10 @@ glutils::color_t g_grid_cp_conn_colors[] =
 };
 
 const char * shader_consts[grid::DIRECTION_COUNT]
-    = {"const float even_sz = 0.2;"\
-       "const float odd_sz  = 0.6;",
-       "const float even_sz = 0.6;"\
-       "const float odd_sz  = 0.2;"};
-
+    = {"const float even_sz = 0.1;"\
+       "const float odd_sz  = 0.7;",
+       "const float even_sz = 0.7;"\
+       "const float odd_sz  = 0.1;"};
 
 namespace grid
 {
@@ -431,6 +430,10 @@ namespace grid
       if(dp->msgraph->m_cps[i]->is_paired) continue;
 
       sptr.reset(new disc_rendata_t(dp->msgraph->m_cps[i]->cellid));
+
+      dp->msgraph->m_cps[i]->contrib[0].push_back(i);
+      dp->msgraph->m_cps[i]->contrib[1].push_back(i);
+
       disc_rds.push_back(sptr);
     }
   }
@@ -671,11 +674,18 @@ namespace grid
 
         std::vector<glutils::vertex_t> vlist;
 
-        for(uint i = 0; i < cp->disc[dir].size(); ++i)
+        for(uint j = 0 ; j < cp->contrib[dir].size();++j)
         {
-          cellid_t c = cp->disc[dir][i];
 
-          vlist.push_back(glutils::vertex_t(c[0],c[1],c[2]));
+          critpt_t *cp_contrib = msc->m_cps[cp->contrib[dir][j]];
+
+
+          for(uint i = 0; i < cp_contrib->disc[dir].size(); ++i)
+          {
+            cellid_t c = cp_contrib->disc[dir][i];
+
+            vlist.push_back(glutils::vertex_t(c[0],c[1],c[2]));
+          }
         }
 
         ren[dir] = glutils::create_buffered_points_ren
