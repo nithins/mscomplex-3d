@@ -60,8 +60,8 @@ glutils::color_t g_grid_cp_conn_colors[] =
 
 const char * shader_consts[grid::DIRECTION_COUNT]
     = {"const float even_sz = 0.1;"\
-       "const float odd_sz  = 0.7;",
-       "const float even_sz = 0.7;"\
+       "const float odd_sz  = 1.0;",
+       "const float even_sz = 1.0;"\
        "const float odd_sz  = 0.1;"};
 
 namespace grid
@@ -430,9 +430,6 @@ namespace grid
       if(dp->msgraph->m_cps[i]->is_paired) continue;
 
       sptr.reset(new disc_rendata_t(dp->msgraph->m_cps[i]->cellid));
-
-      dp->msgraph->m_cps[i]->contrib[0].push_back(i);
-      dp->msgraph->m_cps[i]->contrib[1].push_back(i);
 
       disc_rds.push_back(sptr);
     }

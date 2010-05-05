@@ -70,6 +70,32 @@ namespace grid
     return ss.str();
   }
 
+  inline void ensure_max_two_connectivity(mscomplex_t *msc,uint_pair_t e)
+  {
+#ifdef USE_ENSURE_PREDICATES
+
+    order_pr_by_cp_index(msc,e);
+
+    if(msc->m_cps[e[1]]->index +1 == msc->m_cps[e[0]]->index)
+    {
+      if(msc->m_cps[e[0]]->conn[0].count(e[1]) > 2 ||
+         msc->m_cps[e[1]]->conn[1].count(e[0]) > 2)
+      {
+
+        std::stringstream ss;
+
+        ss<<"failed to ensure max two connectivity\n"<<
+            edge_to_string(msc,e)<<"\n";
+
+        throw std::logic_error(ss.str());
+      }
+    }
+
+
+#endif
+
+  }
+
 
   inline bool is_multiple_edge(mscomplex_t *msc,uint_pair_t e)
   {

@@ -56,6 +56,8 @@ namespace grid
     {
       log_line("multiple edge = ",edge_to_string(this,e));
 
+      ensure_max_two_connectivity(this,e);
+
       for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
         if(is_saddle(this,e[dir]))
           m_cps[e[dir]]->is_strangulating = true;
@@ -191,10 +193,12 @@ namespace grid
       if(m_cps[i]->is_paired)
         continue;
 
+      os<<"cellid = "<<m_cps[i]->cellid<<"\n";
+      os<<"is_strangulating="<<m_cps[i]->is_strangulating<<"\n";
+
       for(uint dir = 0 ; dir <2 ;++dir)
       {
-        os<<dir_txt[dir];
-        os<<m_cps[i]->cellid;
+        os<<dir_txt[dir]<<"=";
         print_cp_connections(os,*this,m_cps[i]->conn[dir]);
         os<<'\n';
       }
@@ -666,7 +670,13 @@ namespace grid
 
       for(const_conn_iter_t it = cp->conn[0].begin();it != cp->conn[0].end() ;++it)
         if(is_valid_canc_edge(this,uint_pair_t(i,*it)))
-          canc_pair_priq.push(uint_pair_t(i,*it));
+        {
+          uint_pair_t pr(i,*it);
+
+          canc_pair_priq.push(pr);
+
+          std::cout<<"inserting edge to priq"<<edge_to_string(this,pr)<<"\n";
+        }
     }
 
     max_persistence = max_val - min_val;
@@ -682,32 +692,36 @@ namespace grid
     {
       uint_pair_t pr = canc_pair_priq.top();
 
+      std::cout<<"popped from priq"<<edge_to_string(this,pr)<<"\n";
+
       canc_pair_priq.pop();
 
       if(is_valid_canc_edge(this,pr) == false)
         continue;
 
-      if(can_cancel_edge(this,pr) == false)
-      {
-        resubmit_list.push_back(pr);
-        continue;
-      }
+//      if(can_cancel_edge(this,pr) == false)
+//      {
+//        resubmit_list.push_back(pr);
+//        continue;
+//      }
 
 
       cell_fn_t persistence = std::abs(m_cps[pr[0]]->fn-m_cps[pr[1]]->fn);
 
-      std::cout<<"canc no = "<<num_canc<<" edge = "<<edge_to_string(this,pr)<<"\n";
-
       if((double)persistence/(double)max_persistence > simplification_treshold)
         break;
-
-      if(num_canc == 433 )
-        log_all_to_file(this,"ms_conn_before",num_canc);
 
 //      if(num_canc == max_canc)
 //        break;
 
       num_canc++;
+
+      std::cout<<"canc no = "<<num_canc<<" edge = "<<edge_to_string(this,pr)<<"\n";
+
+      if(num_canc == 459)
+      {
+        log_all_to_file(this,"ms_conns",num_canc);
+      }
 
       std::vector<uint_pair_t> new_edges;
 
@@ -719,22 +733,24 @@ namespace grid
       {
         std::cout<<"caught something\n";
 
-        log_all_to_file(this,"ms_conns",num_canc);
+        log_all_to_file(this,"ms_conns_failure",num_canc);
 
         throw;
       }
 
       mark_cancel_pair(this,pr);
 
+      std::cout<<"new_edge.size() = "<<new_edges.size()<<"\n";
+
       canc_pairs_list.push_back(pr);
 
       for(uint i = 0 ; i < new_edges.size(); i++)
         canc_pair_priq.push(new_edges[i]);
 
-      for(uint i = 0 ; i < resubmit_list.size(); i++)
-        canc_pair_priq.push(resubmit_list[i]);
-
-      resubmit_list.clear();
+//      for(uint i = 0 ; i < resubmit_list.size(); i++)
+//        canc_pair_priq.push(resubmit_list[i]);
+//
+//      resubmit_list.clear();
     }
 
     log_all_to_file(this,"final_msc",-1);
@@ -804,7 +820,10 @@ namespace grid
       else
       {
         for(uint dir = 0 ; dir < 2 ;++dir)
+        {
           m_cps[i]->disc[dir].push_back(m_cps[i]->cellid);
+          m_cps[i]->contrib[dir].push_back(i);
+        }
       }
     }
   }
