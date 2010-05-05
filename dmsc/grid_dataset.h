@@ -38,6 +38,7 @@ namespace grid
 
   public:
 
+    // used as a bit mask.. cells can be critical and paired..in theory they all are
     enum eCellFlags
     {
       CELLFLAG_UNKNOWN = 0,
@@ -45,37 +46,33 @@ namespace grid
       CELLFLAG_CRITCAL = 2,
     };
 
-    typedef int8_t                                          cell_flag_t;
-    typedef boost::multi_array<cell_fn_t,gc_grid_dim>       varray_t;
-    typedef boost::multi_array<cellid_t,gc_grid_dim>        cellpair_array_t;
+    enum eCellAdjDirection
+    {
+      CELLADJDIR_UNKNOWN   = (0),
+      CELLADJDIR_LEFT      = (1),
+      CELLADJDIR_RIGHT     = (2),
+      CELLADJDIR_DOWN      = (3),
+      CELLADJDIR_UP        = (4),
+      CELLADJDIR_BACK      = (5),
+      CELLADJDIR_FRONT     = (6),
+    };
+
+
+    typedef u_int8_t                                        cell_flag_t;
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
     typedef boost::multi_array_ref<cell_fn_t,gc_grid_dim>   varray_ref_t;
 
   public:
-
-    class pt_comp_t
-    {
-      dataset_t *pOwn;
-    public:
-      pt_comp_t(dataset_t *o):pOwn(o){}
-
-      bool operator()(cellid_t c1,cellid_t c2)
-      {
-        return pOwn->ptLt(c1,c2);
-      }
-    };
-
 
     rect_t             m_rect;
     rect_t             m_ext_rect;
 
     varray_ref_t      *m_vert_fns_ref;
 
-    cellpair_array_t  *m_cell_pairs;
     cellflag_array_t  *m_cell_flags;
+    cellflag_array_t  *m_cell_pairs;
+    cellflag_array_t  *m_cell_mxfct;
     cellid_list_t      m_critical_cells;
-
-    pt_comp_t          m_ptcomp;
 
   public:
 
@@ -104,6 +101,8 @@ namespace grid
 
     void  assignGradients();
 
+    void  assignMaxFacets();
+
     void  collateCriticalPoints();
 
     void  postMergeFillDiscs(mscomplex_t *msgraph);
@@ -114,10 +113,12 @@ namespace grid
 
     cellid_t   getCellPairId ( cellid_t ) const;
 
+    cellid_t   getCellMaxFacetId ( cellid_t ) const;
+
+    cellid_t   getCellSecondMaxFacetId ( cellid_t ) const;
+
     inline bool   ptLt ( cellid_t c1,cellid_t c2) const
     {
-      static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
-
       cell_fn_t f1 = (*m_vert_fns_ref)(c1/2);
       cell_fn_t f2 = (*m_vert_fns_ref)(c2/2);
 
@@ -147,6 +148,8 @@ namespace grid
 
     void   pairCells ( cellid_t c,cellid_t p );
 
+    void   setCellMaxFacet (cellid_t c,cellid_t f);
+
     void   markCellCritical ( cellid_t c );
 
     inline uint getCellDim ( cellid_t c ) const;
@@ -156,10 +159,6 @@ namespace grid
     bool   isFakeBoundryCell ( cellid_t c ) const;
 
     bool   isCellExterior ( cellid_t c ) const;
-
-    std::string  getCellFunctionDescription ( cellid_t pt ) const;
-
-    std::string getCellDescription ( cellid_t cellid ) const;
 
     // misc functions
   public:
@@ -211,13 +210,13 @@ namespace grid
 
 }
 
-namespace boost
-{
-  namespace serialization
-  {
-    template<class Archive>
-    void serialize(Archive & ar, grid::dataset_t & d, const unsigned int );
-
-  } // namespace serialization
-}
+//namespace boost
+//{
+//  namespace serialization
+//  {
+//    template<class Archive>
+//    void serialize(Archive & ar, grid::dataset_t & d, const unsigned int );
+//
+//  } // namespace serialization
+//}
 #endif

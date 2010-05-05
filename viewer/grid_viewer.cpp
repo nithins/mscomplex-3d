@@ -17,7 +17,7 @@
 
 #include <shadersources.h>
 
-GLSLProgram * s_cell_shaders[grid::DIRECTION_COUNT] = {NULL,NULL};
+GLSLProgram * s_cell_shaders[grid::GRADDIR_COUNT] = {NULL,NULL};
 
 glutils::color_t g_grid_cp_colors[] =
 {
@@ -34,7 +34,7 @@ glutils::color_t g_grid_grad_colors[] =
   glutils::color_t(0.5,0.5,0.0 ),
 };
 
-glutils::color_t g_disc_colors[][4] =
+glutils::color_t g_disc_colors[grid::GRADDIR_COUNT][grid::gc_grid_dim+1] =
 {
   {
     glutils::color_t(0.15,0.45,0.35 ),
@@ -58,17 +58,17 @@ glutils::color_t g_grid_cp_conn_colors[] =
   glutils::color_t(0.5,0.5,0.0 ),
 };
 
-const char * shader_consts[grid::DIRECTION_COUNT]
+const char * shader_consts[grid::GRADDIR_COUNT]
     = {"const float even_sz = 0.1;"\
-       "const float odd_sz  = 1.0;",
-       "const float even_sz = 1.0;"\
+       "const float odd_sz  = 0.9;",
+       "const float even_sz = 0.9;"\
        "const float odd_sz  = 0.1;"};
 
 namespace grid
 {
   void disc_rendata_t::init()
   {
-    for(uint i = 0 ;i < DIRECTION_COUNT;++i)
+    for(uint i = 0 ;i < GRADDIR_COUNT;++i)
     {
 
       if(s_cell_shaders[i] != NULL )
@@ -101,7 +101,7 @@ namespace grid
 
   void disc_rendata_t::cleanup()
   {
-    for(uint i = 0 ;i < DIRECTION_COUNT;++i)
+    for(uint i = 0 ;i < GRADDIR_COUNT;++i)
     {
       if(s_cell_shaders[i] != NULL )
         continue;

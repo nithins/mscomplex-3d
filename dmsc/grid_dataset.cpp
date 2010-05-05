@@ -2,25 +2,18 @@
 
 #include <boost/lambda/lambda.hpp>
 #include <boost/lambda/bind.hpp>
+#include <boost/typeof/typeof.hpp>
 
 #include <logutil.h>
 
 #include <grid_dataset.h>
+#include <grid_dataset_ensure.h>
 #include <grid_mscomplex.h>
 
 namespace bl = boost::lambda;
 
 namespace grid
 {
-
-
-  inline void ensure_cell_not_marked(dataset_t * ds,cellid_t c)
-  {
-    if(ds->isCellMarked(c) == true)
-      throw std::logic_error("failed to ensure that cell is not marked");
-  }
-
-
   cellid_t get_cp_cellid(mscomplex_t *msgraph,uint idx)
   {
     return msgraph->m_cps[idx]->cellid;
@@ -48,12 +41,9 @@ namespace grid
   inline bool lowestPairableCoFacet
       (dataset_t *dataset,
        cellid_t cellId,
-       cellid_t& pairid
-       )
+       cellid_t& pairid)
   {
-    typedef cellid_t id_type;
-
-    id_type cofacets[20];
+    cellid_t cofacets[20];
     bool    cofacet_usable[20];
 
     uint cofacet_count = dataset->getCellCofacets ( cellId,cofacets );
@@ -63,26 +53,14 @@ namespace grid
     // for each co facet
     for ( uint i = 0 ; i < cofacet_count ; i++ )
     {
-      id_type facets[20];
-      uint facet_count = dataset->getCellFacets ( cofacets[i],facets );
-
-      cofacet_usable[i] = true;
+      cofacet_usable[i] = false;
 
       if ( isTrueBoundryCell &&
            !dataset->isTrueBoundryCell ( cofacets[i] ) )
-      {
-        cofacet_usable[i] = false;
         continue;
-      }
 
-      for ( uint j = 0 ; j < facet_count ; j++ )
-      {
-        if ( dataset->compareCells ( cellId,facets[j] ))
-        {
-          cofacet_usable[i] = false;
-          break;
-        }
-      }
+      if(dataset->getCellMaxFacetId(cofacets[i]) == cellId)
+        cofacet_usable[i] = true;
     }
 
     bool pairid_usable = false;
@@ -111,7 +89,7 @@ namespace grid
       (dataset_t *dataset,
        mscomplex_t *msgraph,
        cellid_t start_cellId,
-       eDirection gradient_dir
+       eGradientDirection gradient_dir
        )
   {
     std::queue<cellid_t> cell_queue;
@@ -156,7 +134,7 @@ namespace grid
       (dataset_t *dataset,
        critpt_disc_t *disc,
        cellid_t start_cellId,
-       eDirection gradient_dir
+       eGradientDirection gradient_dir
        )
   {
     typedef cellid_t id_type;
@@ -198,8 +176,7 @@ namespace grid
   }
 
   dataset_t::dataset_t (const rect_t &r,const rect_t &e) :
-      m_rect (r),m_ext_rect (e),m_ptcomp(this),
-      m_vert_fns_ref(NULL)
+      m_rect (r),m_ext_rect (e)
   {
 
     // TODO: assert that the given rect is of even size..
@@ -209,15 +186,17 @@ namespace grid
     m_vert_fns_ref = NULL;
     m_cell_flags   = NULL;
     m_cell_pairs   = NULL;
+    m_cell_mxfct   = NULL;
 
   }
 
-  dataset_t::dataset_t () :
-      m_ptcomp(this)
+  dataset_t::dataset_t ()
   {
     m_vert_fns_ref = NULL;
     m_cell_flags   = NULL;
     m_cell_pairs   = NULL;
+    m_cell_mxfct   = NULL;
+
   }
 
   dataset_t::~dataset_t ()
@@ -234,21 +213,34 @@ namespace grid
 
     rect_size_t   s = m_ext_rect.size();
 
-    m_cell_flags = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],boost::fortran_storage_order());
-    m_cell_pairs = new cellpair_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],boost::fortran_storage_order());
+    m_cell_flags = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],
+                                        boost::fortran_storage_order());
+    m_cell_pairs = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],
+                                        boost::fortran_storage_order());
+    m_cell_mxfct = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],
+                                        boost::fortran_storage_order());
 
     cellid_t c;
 
     for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+    {
       for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+      {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+        {
           (*m_cell_flags)(c) = CELLFLAG_UNKNOWN;
+          (*m_cell_pairs)(c) = CELLADJDIR_UNKNOWN;
+          (*m_cell_mxfct)(c) = CELLADJDIR_UNKNOWN;
+        }
+      }
+    }
 
 
     rect_point_t bl = m_ext_rect.lower_corner();
 
     (*m_cell_flags).reindex (bl);
     (*m_cell_pairs).reindex (bl);
+    (*m_cell_mxfct).reindex (bl);
   }
 
   void  dataset_t::clear()
@@ -259,10 +251,15 @@ namespace grid
     if(m_cell_pairs != NULL)
       delete m_cell_pairs;
 
+    if(m_cell_mxfct != NULL)
+      delete m_cell_mxfct;
+
     m_critical_cells.clear();
 
     m_cell_flags   = NULL;
     m_cell_pairs   = NULL;
+    m_cell_mxfct   = NULL;
+
   }
 
   void dataset_t::init_fnref(cell_fn_t * pData)
@@ -289,31 +286,68 @@ namespace grid
     m_vert_fns_ref = NULL;
   }
 
-  cellid_t   dataset_t::getCellPairId (cellid_t c) const
+  inline cellid_t get_adj_cell(cellid_t c,uint d)
   {
-    if ((*m_cell_flags) (c) &CELLFLAG_PAIRED == 0)
-      throw std::logic_error ("invalid pair requested");
+    c[(d-1)>>1] += (d&1)?(-1):(+1);
+    return c;
+  }
 
-    return (*m_cell_pairs) (c);
+  inline uint get_cell_adj_dir(cellid_t c,cellid_t p)
+  {
+    ensure_cell_incidence(c,p);
+
+    for(uint i = 0 ;i < gc_grid_dim;++i)
+      if(c[i] != p[i])
+        return (1+i*2+(((c[i]-p[i])==1)?(0):(1)));
+
+    ensure_never_reached("cell coords are the same");
+
+    return (uint)-1;
+  }
+
+  cellid_t dataset_t::getCellPairId (cellid_t c) const
+  {
+    ensure_cell_paired(this,c);
+
+    return get_adj_cell(c,(*m_cell_pairs)(c));
+  }
+
+  cellid_t dataset_t::getCellMaxFacetId (cellid_t c) const
+  {
+    ensure_cell_max_facet_known(this,c);
+
+    return get_adj_cell(c,(*m_cell_mxfct)(c));
+  }
+
+  cellid_t dataset_t::getCellSecondMaxFacetId (cellid_t c) const
+  {
+    ensure_cell_max_facet_known(this,c);
+
+    uint mxfct = (*m_cell_mxfct)(c);
+    return get_adj_cell(c,(mxfct&1)?(mxfct+1):(mxfct-1));
   }
 
   bool dataset_t::compareCells( cellid_t c1,cellid_t  c2 ) const
   {
+    ensure_cell_dim(this,c1,getCellDim(c2));
+
+    if(c1 == c2)
+      return false;
+
     if(getCellDim(c1) == 0)
       return ptLt(c1,c2);
 
-    cellid_t pts1[20];
-    cellid_t pts2[20];
+    cellid_t f1 = getCellMaxFacetId(c1);
+    cellid_t f2 = getCellMaxFacetId(c2);
 
-    uint pts1_ct = getCellPoints ( c1,pts1);
-    uint pts2_ct = getCellPoints ( c2,pts2);
 
-    std::sort ( pts1,pts1+pts1_ct,m_ptcomp );
-    std::sort ( pts2,pts2+pts2_ct,m_ptcomp);
+    if(f1 == f2)
+    {
+      f1 = getCellSecondMaxFacetId(c1);
+      f2 = getCellSecondMaxFacetId(c2);
+    }
 
-    return std::lexicographical_compare
-        ( pts1,pts1+pts1_ct,pts2,pts2+pts2_ct,
-          m_ptcomp );
+    return compareCells(f1,f2);
   }
 
   uint dataset_t::getCellPoints (cellid_t c,cellid_t  *p) const
@@ -404,16 +438,23 @@ namespace grid
 
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
-    (*m_cell_pairs) (c) = p;
-    (*m_cell_pairs) (p) = c;
+    (*m_cell_pairs)(c) = get_cell_adj_dir(c,p);
+    (*m_cell_pairs)(p) = get_cell_adj_dir(p,c);
 
-    (*m_cell_flags) (c) = (*m_cell_flags) (c) |CELLFLAG_PAIRED;
-    (*m_cell_flags) (p) = (*m_cell_flags) (p) |CELLFLAG_PAIRED;
+    (*m_cell_flags) (c) |= CELLFLAG_PAIRED;
+    (*m_cell_flags) (p) |= CELLFLAG_PAIRED;
+  }
+
+  void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
+  {
+    ensure_cell_dim(this,f,getCellDim(c)-1);
+
+    (*m_cell_mxfct)(c) = get_cell_adj_dir(c,f);
   }
 
   void dataset_t::markCellCritical (cellid_t c)
   {
-    (*m_cell_flags) (c) = (*m_cell_flags) (c) |CELLFLAG_CRITCAL;
+    (*m_cell_flags) (c) |= CELLFLAG_CRITICAL;
   }
 
   bool dataset_t::isTrueBoundryCell (cellid_t c) const
@@ -433,9 +474,47 @@ namespace grid
 
   void dataset_t::work()
   {
+    assignMaxFacets();
+
     assignGradients();
 
     collateCriticalPoints();
+  }
+
+  void dataset_t::assignMaxFacets()
+  {
+    using namespace boost::lambda;
+
+    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,this,_1,_2));
+
+    cellid_t f[20],c;
+
+    for(uint dim = 1 ; dim <= gc_grid_dim; ++dim)
+    {
+      cellid_t   seq(cellid_t::zero);
+
+      std::for_each(seq.begin(),seq.begin()+dim,_1=1);
+
+      do
+      {
+        static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+        for(c[2] = m_rect[2][0] + seq[2] ; c[2] <= m_rect[2][1]; c[2] += 2)
+        {
+          for(c[1] = m_rect[1][0] + seq[1]; c[1] <= m_rect[1][1]; c[1] += 2)
+          {
+            for(c[0] = m_rect[0][0] + seq[0]; c[0] <= m_rect[0][1]; c[0] += 2)
+            {
+              int f_ct = getCellFacets(c,f);
+
+              setCellMaxFacet(c,*std::max_element(f,f+f_ct,cmp));
+
+            }
+          }
+        }
+      }
+      while(std::next_permutation(seq.rbegin(),seq.rend()));
+    }
   }
 
   void  dataset_t::assignGradients()
@@ -450,20 +529,13 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          if (isCellMarked (c))
-            continue;
-
           if (lowestPairableCoFacet (this,c,p))
           {
-//            ensure_cell_not_marked(this,c);
+            ensure_cell_not_marked(this,c);
 
-            if(isCellMarked(p))
-            {
-              std::cout<<"attempting to pair  "<<c<<p<<"\n";
-              std::cout<<"p is already paired "<<p<<getCellPairId(p)<<"\n";
-            }
-            else
-              pairCells (c,p);
+            ensure_cell_not_marked(this,p);
+
+            pairCells (c,p);
           }
         }
       }
@@ -486,6 +558,7 @@ namespace grid
           if (!isCellMarked (c) )
           {
             markCellCritical(c);
+
             m_critical_cells.push_back(c);
           }
         }
@@ -503,7 +576,7 @@ namespace grid
 
     for(uint i = 0 ; i < m_critical_cells.size();++i)
       track_gradient_tree_bfs
-          (this,msgraph,m_critical_cells[i],DIRECTION_DESCENDING);
+          (this,msgraph,m_critical_cells[i],GRADDIR_DESCENDING);
 
   }
 
@@ -515,12 +588,12 @@ namespace grid
     {
       critpt_t * cp = msgraph->m_cps[i];
 
-      for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+      for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       {
         if(cp->disc[dir].size() == 1)
         {
           cp->disc[dir].clear();
-          compute_disc_bfs(this,&cp->disc[dir],cp->cellid,(eDirection)dir);
+          compute_disc_bfs(this,&cp->disc[dir],cp->cellid,(eGradientDirection)dir);
         }
       }
     }
@@ -558,7 +631,7 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          std::cout<<(*m_cell_pairs)(c)<<" ";
+          std::cout<<getCellPairId(c)<<" ";
         }
         std::cout<<std::endl;
       }

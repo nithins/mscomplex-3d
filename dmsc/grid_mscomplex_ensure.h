@@ -125,7 +125,7 @@ namespace grid
 #ifdef USE_ENSURE_PREDICATES
     ensure_ordered_index_one_separation(msc,e);
 
-    for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+    for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       if(msc->m_cps[e[dir]]->conn[dir].count(e[dir^1]) == 0)
       {
 
@@ -156,7 +156,7 @@ namespace grid
 #ifdef USE_ENSURE_PREDICATES
     ensure_ordered_index_one_separation(msc,e);
 
-    for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+    for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       if(msc->m_cps[e[dir]]->conn[dir].count(e[dir^1]) != 1)
         throw std::logic_error("connectivity violated");
 #endif

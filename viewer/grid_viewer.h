@@ -22,9 +22,9 @@ namespace grid
 
     cellid_t               cellid;
 
-    glutils::renderable_t *ren[DIRECTION_COUNT];
-    bool                   show[DIRECTION_COUNT];
-    glutils::color_t       color[DIRECTION_COUNT];
+    glutils::renderable_t *ren[GRADDIR_COUNT];
+    bool                   show[GRADDIR_COUNT];
+    glutils::color_t       color[GRADDIR_COUNT];
 
     disc_rendata_t(cellid_t c);
     ~disc_rendata_t();

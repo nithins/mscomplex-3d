@@ -59,9 +59,9 @@ namespace grid
 
     // list of idx's of cancelled cps that contribute their disc to this cp
 
-    disc_contrib_t contrib[DIRECTION_COUNT];
-    disc_t         disc[DIRECTION_COUNT] ;
-    conn_t         conn[DIRECTION_COUNT];
+    disc_contrib_t contrib[GRADDIR_COUNT];
+    disc_t         disc[GRADDIR_COUNT] ;
+    conn_t         conn[GRADDIR_COUNT];
   };
 
 

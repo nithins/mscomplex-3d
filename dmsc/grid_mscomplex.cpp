@@ -47,7 +47,7 @@ namespace grid
 
     ensure_ordered_index_one_separation(this,e);
 
-    for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+    for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
 
     log_line("connecting cps = ",edge_to_string(this,e));
@@ -56,9 +56,9 @@ namespace grid
     {
       log_line("multiple edge = ",edge_to_string(this,e));
 
-      ensure_max_two_connectivity(this,e);
+//      ensure_max_two_connectivity(this,e);
 
-      for(uint dir = 0 ; dir < DIRECTION_COUNT;++dir)
+      for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
         if(is_saddle(this,e[dir]))
           m_cps[e[dir]]->is_strangulating = true;
     }
@@ -75,7 +75,7 @@ namespace grid
 
     critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
 
-    conn_iter_t it[DIRECTION_COUNT];
+    conn_iter_t it[GRADDIR_COUNT];
 
     for(uint dir = 0 ; dir < 2;++dir)
       cp[dir]->conn[dir].erase(e[dir^1]);

@@ -51,6 +51,7 @@ set(dmsc_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset_ensure.h
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex.h
