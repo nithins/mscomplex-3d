@@ -41,9 +41,9 @@ namespace grid
     // used as a bit mask.. cells can be critical and paired..in theory they all are
     enum eCellFlags
     {
-      CELLFLAG_UNKNOWN = 0,
-      CELLFLAG_PAIRED  = 1,
-      CELLFLAG_CRITCAL = 2,
+      CELLFLAG_UNKNOWN  = 0,
+      CELLFLAG_PAIRED   = 1,
+      CELLFLAG_CRITICAL = 2,
     };
 
     enum eCellAdjDirection

@@ -428,7 +428,7 @@ namespace grid
 
   bool dataset_t::isCellCritical (cellid_t c) const
   {
-    return ((*m_cell_flags) (c) & CELLFLAG_CRITCAL);
+    return ((*m_cell_flags) (c) & CELLFLAG_CRITICAL);
   }
 
   bool dataset_t::isCellPaired (cellid_t c) const
