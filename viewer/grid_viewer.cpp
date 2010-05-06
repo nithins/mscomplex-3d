@@ -292,7 +292,7 @@ namespace grid
       if(!roi.contains(c))
         continue;
 
-      uint dim = dataset_t::s_getCellDim(c);
+      uint index = dp->msgraph->m_cps[i]->index;
 
       std::stringstream ss;
 
@@ -300,9 +300,9 @@ namespace grid
 
       if(!dp->msgraph->m_cps[i]->is_paired)
       {
-        crit_labels[dim].push_back(ss.str());
-        crit_label_locations[dim].push_back(glutils::vertex_t(c[0],c[1],c[2]) );
-        crit_pt_idxs[dim].push_back(i);
+        crit_labels[index].push_back(ss.str());
+        crit_label_locations[index].push_back(glutils::vertex_t(c[0],c[1],c[2]) );
+        crit_pt_idxs[index].push_back(i);
       }
     }
 
@@ -331,7 +331,7 @@ namespace grid
       if(!roi.contains(c))
         continue;
 
-      uint dim = dataset_t::s_getCellDim(c);
+      uint index = dp->msgraph->m_cps[i]->index;
 
       for(conn_iter_t it  = dp->msgraph->m_cps[i]->conn[0].begin();
       it != dp->msgraph->m_cps[i]->conn[0].end(); ++it)
@@ -339,7 +339,7 @@ namespace grid
         if(!roi.contains(dp->msgraph->m_cps[*it]->cellid))
           continue;
 
-        crit_conn_idxs[dim-1].push_back
+        crit_conn_idxs[index-1].push_back
             (glutils::line_idx_t(i,*it));
       }
     }
@@ -376,7 +376,7 @@ namespace grid
       {
         for(c[0] = r[0][0] ; c[0] <= r[0][1]; ++c[0])
         {
-          uint dim = dataset_t::s_getCellDim(c);
+          uint dim = dp->dataset->getCellDim(c);
 
           if(dp->dataset->isCellPaired(c))
           {
@@ -427,9 +427,11 @@ namespace grid
 
     for(uint i = 0 ; i < dp->msgraph->m_cps.size();++i)
     {
-      if(dp->msgraph->m_cps[i]->is_paired) continue;
+      critpt_t * cp = dp->msgraph->m_cps[i];
 
-      sptr.reset(new disc_rendata_t(dp->msgraph->m_cps[i]->cellid));
+      if(cp->is_paired) continue;
+
+      sptr.reset(new disc_rendata_t(cp->cellid,cp->index));
 
       disc_rds.push_back(sptr);
     }
@@ -580,7 +582,7 @@ namespace grid
     case 0:
       return s_exchange_ro(disc_rds[idx[1]]->cellid.to_string(),v,m);
     case 1:
-      return s_exchange_ro((int)dataset_t::s_getCellDim(disc_rds[idx[1]]->cellid),v,m);
+      return s_exchange_ro((int)disc_rds[idx[1]]->index,v,m);
     case 2:
     case 3:
       need_update =  s_exchange_rw(disc_rds[idx[1]]->show[i%2],v,m);break;
@@ -610,13 +612,10 @@ namespace grid
     throw std::logic_error("invalid index");
   }
 
-  disc_rendata_t::disc_rendata_t(cellid_t c):cellid(c)
+  disc_rendata_t::disc_rendata_t(cellid_t c,uint i):cellid(c),index(i)
   {
-
-    uint dim = dataset_t::s_getCellDim(cellid);
-
-    color[0] = g_disc_colors[1][dim];
-    color[1] = g_disc_colors[0][dim];
+    color[0] = g_disc_colors[1][index];
+    color[1] = g_disc_colors[0][index];
 
     show[0] =false; ren[0] =NULL;
     show[1] =false; ren[1] =NULL;
@@ -633,8 +632,6 @@ namespace grid
 
   void disc_rendata_t::render()
   {
-    uint dim = dataset_t::s_getCellDim(cellid);
-
     for(uint dir = 0 ; dir<2;++dir)
     {
 
@@ -642,7 +639,7 @@ namespace grid
 
       if(show[dir])
       {
-        glColor3dv(g_grid_cp_colors[dim].data());
+        glColor3dv(g_grid_cp_colors[index].data());
 
         glBegin(GL_POINTS);
         glVertex3sv(cellid.data());

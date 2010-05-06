@@ -162,15 +162,6 @@ namespace grid
 
     // misc functions
   public:
-    inline static uint s_getCellDim ( cellid_t c )
-    {
-      uint dim = 0;
-
-      for (size_t i = 0 ; i < gc_grid_dim;++i)
-        dim += ( c[i]&0x01 );
-
-      return (dim);
-    }
 
     inline cell_fn_t get_cell_fn(cellid_t c)
     {
@@ -205,7 +196,12 @@ namespace grid
 
   inline uint dataset_t::getCellDim ( cellid_t c ) const
   {
-    return ( s_getCellDim(c));
+    uint dim = 0;
+
+    for (size_t i = 0 ; i < gc_grid_dim;++i)
+      dim += ( c[i]&0x01 );
+
+    return (dim);
   }
 
 }
