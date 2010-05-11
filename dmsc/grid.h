@@ -129,6 +129,11 @@ namespace grid
       {
         return range_def(std::min(r[0],(*this)[0]),std::max(r[1],(*this)[1]));
       }
+
+      inline coord_type span()
+      {
+        return ((*this)[1]-(*this)[0]);
+      }
     };
 
     struct rectangle_def:public three_tuple_t<range_def>

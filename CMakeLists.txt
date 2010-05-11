@@ -25,6 +25,15 @@ if(NOT QGLVIEWER_FOUND)
   message(FATAL_ERROR "Failed to find QGLViewer .. quitting")
 endif(NOT QGLVIEWER_FOUND)
 
+SET(QXT_USE_QXTCORE TRUE)
+SET(QXT_USE_QXTGUI TRUE)
+
+find_package(Qxt)
+
+if(NOT QXT_FOUND_QXTGUI)
+  message(FATAL_ERROR "Failed to find QXT .. quitting")
+endif(NOT QXT_FOUND_QXTGUI)
+
 find_package(Boost COMPONENTS program_options thread serialization regex)
 
 if(NOT Boost_FOUND)
@@ -121,6 +130,7 @@ include_directories(
   ${QT_ADDITIONAL_INCLUDE_PATHS}
   ${QGLVIEWER_INCLUDE_DIR}
   ${Boost_INCLUDE_DIRS}
+  ${QXT_INCLUDE_DIRS}
   )
 
 add_executable(${PROJECT_NAME}
@@ -141,4 +151,5 @@ target_link_libraries(
   ${QT_LIBRARIES}
   ${QT_ADDITIONAL_LIBRARIES}
   ${QGLVIEWER_LIBRARY}
+  ${QXT_LIBRARIES}
   )

@@ -41,10 +41,11 @@ namespace grid
   {
   public:
 
+    typedef boost::shared_ptr<glutils::renderable_t> renderable_sp_t;
+
     octtree_piece * dp;
 
     // set externally to control what is rendered
-    bool m_bShowSurface;
     bool m_bShowCps;
     bool m_bShowCpLabels;
     bool m_bShowMsGraph;
@@ -55,14 +56,13 @@ namespace grid
     // set externally .. cleared by render
     bool m_bNeedUpdateDiscRens;
 
-    glutils::renderable_t  *ren_surf;
-    glutils::renderable_t  *ren_grad[gc_grid_dim];
-    glutils::renderable_t  *ren_cp_labels[gc_grid_dim+1];
-    glutils::renderable_t  *ren_cp[gc_grid_dim+1];
-    glutils::renderable_t  *ren_cp_conns[gc_grid_dim];
-    glutils::renderable_t  *ren_canc_cp_labels[gc_grid_dim+1];
-    glutils::renderable_t  *ren_canc_cp[gc_grid_dim+1];
-    glutils::renderable_t  *ren_canc_cp_conns[gc_grid_dim];
+    renderable_sp_t ren_grad[gc_grid_dim];
+    renderable_sp_t ren_cp_labels[gc_grid_dim+1];
+    renderable_sp_t ren_cp[gc_grid_dim+1];
+    renderable_sp_t ren_cp_conns[gc_grid_dim];
+    renderable_sp_t ren_canc_cp_labels[gc_grid_dim+1];
+    renderable_sp_t ren_canc_cp[gc_grid_dim+1];
+    renderable_sp_t ren_canc_cp_conns[gc_grid_dim];
 
     glutils::bufobj_ptr_t   cp_loc_bo;
 
@@ -75,10 +75,9 @@ namespace grid
     void update_active_disc_rens();
 
     void create_cp_loc_bo();
-
     void create_cp_rens(const rect_t &roi);
     void create_grad_rens(const rect_t &roi);
-    void create_surf_ren(const rect_t &roi);
+
     void render() ;
 
     octtree_piece_rendata(octtree_piece *);
@@ -88,7 +87,7 @@ namespace grid
   public:
     int rows();
     int columns();
-    bool exchange_data(const data_index_t &,boost::any &,const eExchangeMode &);
+    bool exchange_data(const data_index_t &,boost::any &);
     std::string get_header(int i);
   };
 
@@ -102,25 +101,38 @@ namespace grid
     std::vector<octtree_piece_rendata * >  m_grid_piece_rens;
     cellid_t                               m_size;
     rect_t                                 m_roi;
+    double                                 m_scale_factor;
+
+  public:
+    bool                                   m_bShowRoiBB;
+    bool                                   m_bRebuildRens;
 
   public:
 
-    grid_viewer_t(data_manager_t * p ,const rect_t &roi);
+    grid_viewer_t(data_manager_t * p);
 
     ~grid_viewer_t();
 
+    // ensure normalization of l and u, l < u , dim in {0,1,2}
+    void set_roi_dim_range_nrm(double l,double u,int dim);
 
-    void init();
+  private:
+
+
+    void build_rens();
 
     // renderable_t interface
   public:
+
+    void init();
+
     int  render();
 
     // configurable_t interface
   public:
     int rows();
     int columns();
-    bool exchange_data(const data_index_t &,boost::any &,const eExchangeMode &);
+    bool exchange_data(const data_index_t &,boost::any &);
     std::string get_header(int i);
   };
 }

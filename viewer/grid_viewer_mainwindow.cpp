@@ -3,6 +3,8 @@
 #include <QColorDialog>
 #include <QDebug>
 
+#include <boost/typeof/typeof.hpp>
+
 #include <grid_viewer.h>
 #include <grid_viewer_mainwindow.h>
 #include <grid_datamanager.h>
@@ -23,9 +25,9 @@ namespace grid
     m_ren->init();
   }
 
-  glviewer_t::glviewer_t(data_manager_t * gdm ,const rect_t &r)
+  glviewer_t::glviewer_t(data_manager_t * gdm)
   {
-    m_ren = new grid_viewer_t(gdm,r);
+    m_ren = new grid_viewer_t(gdm);
   }
 
   glviewer_t::~glviewer_t()
@@ -72,13 +74,67 @@ namespace grid
         (m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx]);
   }
 
+  inline double get_nrm_value(double d_val,double d_min,double d_max)
+  {
+    return (d_val - d_min)/(d_max - d_min);
+  }
+
+  void viewer_mainwindow::on_xroi_spanslider_spanChanged(int l , int u )
+  {
+    BOOST_AUTO(sldr,xroi_spanslider);
+
+    m_viewer->m_ren->set_roi_dim_range_nrm
+        (get_nrm_value(l,sldr->minimum(),sldr->maximum()),
+         get_nrm_value(u,sldr->minimum(),sldr->maximum()),0);
+
+    m_viewer->m_ren->m_bShowRoiBB = true;
+
+    m_viewer->updateGL();
+  }
+
+  void viewer_mainwindow::on_yroi_spanslider_spanChanged(int l , int u )
+  {
+    BOOST_AUTO(sldr,yroi_spanslider);
+
+    m_viewer->m_ren->set_roi_dim_range_nrm
+        (get_nrm_value(l,sldr->minimum(),sldr->maximum()),
+         get_nrm_value(u,sldr->minimum(),sldr->maximum()),1);
+
+    m_viewer->m_ren->m_bShowRoiBB = true;
+
+    m_viewer->updateGL();
+  }
+
+  void viewer_mainwindow::on_zroi_spanslider_spanChanged(int l , int u )
+  {
+    BOOST_AUTO(sldr,zroi_spanslider);
+
+    m_viewer->m_ren->set_roi_dim_range_nrm
+        (get_nrm_value(l,sldr->minimum(),sldr->maximum()),
+         get_nrm_value(u,sldr->minimum(),sldr->maximum()),2);
+
+    m_viewer->m_ren->m_bShowRoiBB = true;
+
+    m_viewer->updateGL();
+  }
+
+  void viewer_mainwindow::on_update_roi_pushButton_clicked(bool)
+  {
+    m_viewer->m_ren->m_bRebuildRens = true;
+
+    m_viewer->m_ren->m_bShowRoiBB = false;
+
+    m_viewer->updateGL();
+  }
+
+
   viewer_mainwindow::viewer_mainwindow
-      (data_manager_t * gdm,const rect_t & roi):m_gdm(gdm),
+      (data_manager_t * gdm):m_gdm(gdm),
       m_active_otp_idx(NULL)
   {
     setupUi (this);
 
-    m_viewer = new glviewer_t(gdm,roi);
+    m_viewer = new glviewer_t(gdm);
 
     m_viewer->setParent(glviewer);
 
@@ -125,7 +181,7 @@ namespace grid
 
     boost::any val;
 
-    m_conf->exchange_data(idx,val,configurable_t::EXCHANGE_READ);
+    m_conf->exchange_data(idx,val);
 
     if(role == Qt::DisplayRole)
     {
@@ -200,7 +256,7 @@ namespace grid
 
       configurable_t::data_index_t idx(i,first_row);
 
-      bool is_rw = c->exchange_data(idx,val,configurable_t::EXCHANGE_READ);
+      bool is_rw = c->exchange_data(idx,val);
 
       if(is_rw == false) continue;
 
@@ -251,7 +307,7 @@ namespace grid
       idx[1] = m_rows[i].row();
       idx[0] = m_col;
 
-      m_conf->exchange_data(idx,out_val,configurable_t::EXCHANGE_WRITE);
+      m_conf->exchange_data(idx,out_val);
     }
   }
 

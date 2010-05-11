@@ -32,7 +32,7 @@ namespace grid
 
     grid_viewer_t *m_ren;
 
-    glviewer_t(data_manager_t * p ,const rect_t &r);
+    glviewer_t(data_manager_t * p);
 
     ~glviewer_t();
 
@@ -63,8 +63,7 @@ namespace grid
     configurable_item_model *m_cp_model;
     configurable_item_model *m_otp_model;
 
-    viewer_mainwindow
-        (data_manager_t *gdm,const rect_t & roi);
+    viewer_mainwindow(data_manager_t *gdm);
 
     ~viewer_mainwindow();
 
@@ -76,6 +75,14 @@ namespace grid
     void on_critpt_view_customContextMenuRequested ( const QPoint &p );
 
     void on_datapiece_view_activated ( const QModelIndex & index  );
+
+    void on_xroi_spanslider_spanChanged(int l , int u );
+
+    void on_yroi_spanslider_spanChanged(int l , int u );
+
+    void on_zroi_spanslider_spanChanged(int l , int u );
+
+    void on_update_roi_pushButton_clicked(bool);
   };
 
   void configurable_ctx_menu

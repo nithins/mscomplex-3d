@@ -32,9 +32,9 @@
   <widget class="QTableView" name="datapiece_view">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>189</x>
      <y>650</y>
-     <width>410</width>
+     <width>241</width>
      <height>171</height>
     </rect>
    </property>
@@ -128,7 +128,111 @@
     <bool>false</bool>
    </property>
   </widget>
+  <widget class="QxtSpanSlider" name="xroi_spanslider">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>650</y>
+     <width>171</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+   <property name="tickPosition">
+    <enum>QSlider::NoTicks</enum>
+   </property>
+   <property name="lowerValue">
+    <number>0</number>
+   </property>
+   <property name="upperValue">
+    <number>99</number>
+   </property>
+   <property name="upperPosition">
+    <number>99</number>
+   </property>
+   <property name="handleMovementMode">
+    <enum>QxtSpanSlider::NoOverlapping</enum>
+   </property>
+  </widget>
+  <widget class="QxtSpanSlider" name="yroi_spanslider">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>675</y>
+     <width>171</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+   <property name="tickPosition">
+    <enum>QSlider::NoTicks</enum>
+   </property>
+   <property name="lowerValue">
+    <number>0</number>
+   </property>
+   <property name="upperValue">
+    <number>99</number>
+   </property>
+   <property name="upperPosition">
+    <number>99</number>
+   </property>
+   <property name="handleMovementMode">
+    <enum>QxtSpanSlider::NoOverlapping</enum>
+   </property>
+  </widget>
+  <widget class="QxtSpanSlider" name="zroi_spanslider">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>700</y>
+     <width>171</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+   <property name="tickPosition">
+    <enum>QSlider::NoTicks</enum>
+   </property>
+   <property name="lowerValue">
+    <number>0</number>
+   </property>
+   <property name="upperValue">
+    <number>99</number>
+   </property>
+   <property name="upperPosition">
+    <number>99</number>
+   </property>
+   <property name="handleMovementMode">
+    <enum>QxtSpanSlider::NoOverlapping</enum>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="update_roi_pushButton">
+   <property name="geometry">
+    <rect>
+     <x>50</x>
+     <y>730</y>
+     <width>97</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>update roi</string>
+   </property>
+  </widget>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QxtSpanSlider</class>
+   <extends>QSlider</extends>
+   <header>QxtSpanSlider</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

@@ -8,6 +8,7 @@
 
 #include <glutils.h>
 #include <GLSLProgram.h>
+#include <logutil.h>
 
 #include <grid_viewer.h>
 #include <grid_datamanager.h>
@@ -57,6 +58,8 @@ glutils::color_t g_grid_cp_conn_colors[] =
   glutils::color_t(0.5,0.0,0.5 ),
   glutils::color_t(0.5,0.5,0.0 ),
 };
+
+glutils::color_t g_roiaabb_color = glutils::color_t(0.85,0.75,0.65);
 
 const char * shader_consts[grid::GRADDIR_COUNT]
     = {"const float even_sz = 0.1;"\
@@ -113,15 +116,11 @@ namespace grid
   }
 
   grid_viewer_t::grid_viewer_t
-      (data_manager_t * gdm,const rect_t &roi):
-      m_size(gdm->m_size)
+      (data_manager_t * gdm):
+      m_size(gdm->m_size),m_scale_factor(0),
+      m_bRebuildRens(true),m_bShowRoiBB(false)
   {
     m_roi = rect_t(cellid_t::zero,(m_size-cellid_t::one)*2);
-
-    rect_t s_roi(roi.lower_corner()*2,roi.upper_corner()*2);
-
-    if(m_roi.intersects(s_roi))
-      m_roi.intersection(s_roi,m_roi);
 
     for(uint i = 0 ;i < gdm->m_pieces.size();++i)
       m_grid_piece_rens.push_back(new octtree_piece_rendata(gdm->m_pieces.at(i)));
@@ -138,18 +137,50 @@ namespace grid
     disc_rendata_t::cleanup();
   }
 
+  void grid_viewer_t::set_roi_dim_range_nrm(double l,double u,int dim)
+  {
+    if(!(l<u && 0.0 <= l && u <=1.0 && 0<=dim && dim < 3))
+      return;
+
+    rect_t roi = rect_t(cellid_t::zero,(m_size-cellid_t::one)*2);
+
+    double span = roi[dim].span();
+
+    m_roi[dim][0]  = (uint)(l*span);
+    m_roi[dim][1]  = (uint)(u*span);
+  }
+
   int grid_viewer_t::render()
   {
+    if(m_bRebuildRens)
+    {
+      build_rens();
+
+      m_bRebuildRens = false;
+    }
 
     glPushAttrib(GL_ENABLE_BIT);
 
     glEnable(GL_NORMALIZE);
 
-    glTranslatef(-0.5,-0.5,-0.5);
+    glScalef(m_scale_factor,
+             m_scale_factor,
+             m_scale_factor);
 
-    glScalef(0.5/std::max(1.0,(double)(m_size[0]-1)),
-             0.5/std::max(1.0,(double)(m_size[1]-1)),
-             0.5/std::max(1.0,(double)(m_size[2]-1)));
+    glTranslatef(-m_size[0],-m_size[1],-m_size[2]);
+
+    if(m_bShowRoiBB)
+    {
+      glPushAttrib(GL_ENABLE_BIT);
+
+      glDisable(GL_LIGHTING);
+
+      glColor3dv(g_roiaabb_color.data());
+
+      glutils::draw_aabb_line(m_roi.lower_corner(),m_roi.upper_corner());
+
+      glPopAttrib();
+    }
 
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
@@ -159,11 +190,23 @@ namespace grid
     glPopAttrib();
   }
 
+  void grid_viewer_t::build_rens()
+  {
+    for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
+    {
+      m_grid_piece_rens[i]->create_cp_rens(m_roi);
+      m_grid_piece_rens[i]->create_grad_rens(m_roi);
+    }
+  }
+
   void grid_viewer_t::init()
   {
     glutils::init();
 
     disc_rendata_t::init();
+
+    m_scale_factor = 0.5/ std::max((double) *std::max_element
+                                   (m_size.begin(),m_size.end())-1.0,1.0);
 
     /*turn back face culling off */
     glEnable ( GL_CULL_FACE );
@@ -179,13 +222,8 @@ namespace grid
     for ( uint i = 0 ; i < m_grid_piece_rens.size();i++ )
     {
       m_grid_piece_rens[i]->create_cp_loc_bo();
-
-      m_grid_piece_rens[i]->create_cp_rens(m_roi);
-      m_grid_piece_rens[i]->create_grad_rens(m_roi);
-      m_grid_piece_rens[i]->create_surf_ren(m_roi);
       m_grid_piece_rens[i]->create_disc_rds();
     }
-
   }
 
   int grid_viewer_t::rows()
@@ -195,23 +233,20 @@ namespace grid
   }
   int grid_viewer_t::columns()
   {
-    return 8;
+    return 7;
   }
-  bool grid_viewer_t::exchange_data(const data_index_t &idx,
-                                    boost::any &v,
-                                    const eExchangeMode &m)
+  bool grid_viewer_t::exchange_data(const data_index_t &idx,boost::any &v)
   {
 
     switch(idx[0])
     {
-    case 0: return s_exchange_ro(m_grid_piece_rens[idx[1]]->dp->label(),v,m);
-    case 1: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowSurface,v,m);
-    case 2: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps,v,m);
-    case 3: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v,m);
-    case 4: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v,m);
-    case 5: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowGrad,v,m);
-    case 6: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v,m);
-    case 7: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v,m);
+    case 0: return s_exchange_ro(m_grid_piece_rens[idx[1]]->dp->label(),v);
+    case 1: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps,v);
+    case 2: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v);
+    case 3: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v);
+    case 4: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowGrad,v);
+    case 5: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v);
+    case 6: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v);
     }
 
     throw std::logic_error("unknown index");
@@ -222,13 +257,12 @@ namespace grid
     {
 
     case 0: return "oct tree piece";
-    case 1: return "surface";
-    case 2: return "cps";
-    case 3: return "cp labels";
-    case 4: return "msgraph";
-    case 5: return "gradient";
-    case 6: return "cancelled cps";
-    case 7: return "cancelled cp msgraph";
+    case 1: return "cps";
+    case 2: return "cp labels";
+    case 3: return "msgraph";
+    case 4: return "gradient";
+    case 5: return "cancelled cps";
+    case 6: return "cancelled cp msgraph";
     }
 
     throw std::logic_error("unknown index");
@@ -236,7 +270,6 @@ namespace grid
 
 
   octtree_piece_rendata::octtree_piece_rendata (octtree_piece * _dp):
-      m_bShowSurface ( false ),
       m_bShowCps ( false ),
       m_bShowCpLabels ( false ),
       m_bShowMsGraph ( false ),
@@ -246,14 +279,6 @@ namespace grid
       m_bNeedUpdateDiscRens(false),
       dp(_dp)
   {
-    memset(ren_cp,0,sizeof(ren_cp));
-    memset(&ren_surf,0,sizeof(ren_surf));
-    memset(ren_grad,0,sizeof(ren_grad));
-    memset(ren_cp_labels,0,sizeof(ren_cp_labels));
-    memset(ren_cp_conns,0,sizeof(ren_cp_conns));
-    memset(ren_canc_cp,0,sizeof(ren_canc_cp));
-    memset(ren_canc_cp_labels,0,sizeof(ren_canc_cp_labels));
-    memset(ren_canc_cp_conns,0,sizeof(ren_canc_cp_conns));
   }
 
   void octtree_piece_rendata::create_cp_loc_bo()
@@ -308,14 +333,13 @@ namespace grid
 
     for(uint i = 0 ; i < gc_grid_dim+1; ++i)
     {
-      ren_cp_labels[i] =
-          glutils::create_buffered_text_ren
-          (crit_labels[i],crit_label_locations[i]);
+      ren_cp_labels[i].reset(glutils::create_buffered_text_ren
+                             (crit_labels[i],crit_label_locations[i]));
 
-      ren_cp[i] =glutils::create_buffered_points_ren
-                 (cp_loc_bo,
-                  glutils::make_buf_obj(crit_pt_idxs[i]),
-                  glutils::make_buf_obj());
+      ren_cp[i].reset(glutils::create_buffered_points_ren
+                      (cp_loc_bo,
+                       glutils::make_buf_obj(crit_pt_idxs[i]),
+                       glutils::make_buf_obj()));
     }
 
     for(uint i = 0 ; i < dp->msgraph->m_cps.size(); ++i)
@@ -346,10 +370,10 @@ namespace grid
 
     for(uint i = 0 ; i < gc_grid_dim; ++i)
     {
-      ren_cp_conns[i] = glutils::create_buffered_lines_ren
-                        (cp_loc_bo,
-                         glutils::make_buf_obj(crit_conn_idxs[i]),
-                         glutils::make_buf_obj());
+      ren_cp_conns[i].reset(glutils::create_buffered_lines_ren
+                            (cp_loc_bo,
+                             glutils::make_buf_obj(crit_conn_idxs[i]),
+                             glutils::make_buf_obj()));
     }
 
   }
@@ -402,21 +426,13 @@ namespace grid
     for(uint i = 0 ; i < gc_grid_dim; ++i)
 
     {
-      ren_grad[i] = glutils::create_buffered_lines_ren
-                    (cell_bo,
-                     glutils::make_buf_obj(pair_idxs[i]),
-                     glutils::make_buf_obj());
+      ren_grad[i].reset(glutils::create_buffered_lines_ren
+                        (cell_bo,
+                         glutils::make_buf_obj(pair_idxs[i]),
+                         glutils::make_buf_obj()));
     }
   }
 
-  void octtree_piece_rendata::create_surf_ren(const rect_t & roi)
-  {
-    if(dp->dataset == NULL)
-      return;
-
-#warning "create surf ren not implemented"
-
-  }
 
   void octtree_piece_rendata::create_disc_rds()
   {
@@ -468,12 +484,6 @@ namespace grid
 
     glPushMatrix();
     glPushAttrib ( GL_ENABLE_BIT );
-
-    if ( m_bShowSurface && ren_surf)
-    {
-      glColor3f ( 0.75,0.75,0.75 );
-      ren_surf->render();
-    }
 
     glDisable ( GL_LIGHTING );
 
@@ -569,29 +579,30 @@ namespace grid
   {
     return 6;
   }
-  bool octtree_piece_rendata::exchange_data(const data_index_t &idx,
-                                            boost::any &v,
-                                            const eExchangeMode &m)
+  bool octtree_piece_rendata::exchange_data
+      (const data_index_t &idx,boost::any &v)
   {
     bool need_update = false;
+
+    bool is_read     = v.empty();
 
     int i = idx[0];
 
     switch(i)
     {
     case 0:
-      return s_exchange_ro(disc_rds[idx[1]]->cellid.to_string(),v,m);
+      return s_exchange_ro(disc_rds[idx[1]]->cellid.to_string(),v);
     case 1:
-      return s_exchange_ro((int)disc_rds[idx[1]]->index,v,m);
+      return s_exchange_ro((int)disc_rds[idx[1]]->index,v);
     case 2:
     case 3:
-      need_update =  s_exchange_rw(disc_rds[idx[1]]->show[i%2],v,m);break;
+      need_update =  s_exchange_rw(disc_rds[idx[1]]->show[i%2],v);break;
     case 4:
     case 5:
-      return s_exchange_rw(disc_rds[idx[1]]->color[i%2],v,m);
+      return s_exchange_rw(disc_rds[idx[1]]->color[i%2],v);
     };
 
-    if(need_update && m == EXCHANGE_WRITE )
+    if(need_update && is_read == false )
       m_bNeedUpdateDiscRens = true;
 
     return need_update;
