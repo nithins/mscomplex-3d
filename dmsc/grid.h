@@ -50,7 +50,7 @@ namespace grid
         point_def ret;
 
         for(size_t i = 0 ; i < base_t::static_size;++i )
-          ret[i] = (*this)[i]-o[i];
+          ret[i] = (*this)[i]+o[i];
 
         return ret;
       }
