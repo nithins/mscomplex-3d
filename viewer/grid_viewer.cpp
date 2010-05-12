@@ -118,7 +118,7 @@ namespace grid
   grid_viewer_t::grid_viewer_t
       (data_manager_t * gdm):
       m_size(gdm->m_size),m_scale_factor(0),
-      m_bRebuildRens(true),m_bShowRoiBB(false)
+      m_bRebuildRens(true),m_bShowRoiBB(false),m_bCenterToRoi(false)
   {
     m_roi = rect_t(cellid_t::zero,(m_size-cellid_t::one)*2);
 
@@ -148,6 +148,8 @@ namespace grid
 
     m_roi[dim][0]  = (uint)(l*span);
     m_roi[dim][1]  = (uint)(u*span);
+
+    m_roi_base_pt  = ((m_roi.upper_corner() +  m_roi.lower_corner())/2);
   }
 
   int grid_viewer_t::render()
@@ -167,7 +169,10 @@ namespace grid
              m_scale_factor,
              m_scale_factor);
 
-    glTranslatef(-m_size[0],-m_size[1],-m_size[2]);
+    if(m_bCenterToRoi)
+      glTranslatef(-m_roi_base_pt[0],-m_roi_base_pt[1],-m_roi_base_pt[2]);
+    else
+      glTranslatef(-m_size[0],-m_size[1],-m_size[2]);
 
     if(m_bShowRoiBB)
     {

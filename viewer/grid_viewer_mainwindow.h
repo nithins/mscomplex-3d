@@ -9,8 +9,10 @@
 #include <QVariant>
 #include <QItemSelectionModel>
 #include <QTreeView>
-#include <QGLViewer/qglviewer.h>
 #include <QSortFilterProxyModel>
+#include <QTimer>
+
+#include <QGLViewer/qglviewer.h>
 
 #include <ui_grid_viewer_mainwindow.h>
 #include <boost/any.hpp>
@@ -62,6 +64,7 @@ namespace grid
     QSortFilterProxyModel   *m_cp_model_proxy;
     configurable_item_model *m_cp_model;
     configurable_item_model *m_otp_model;
+    QTimer                  *m_clear_roi_aabb_timer;
 
     viewer_mainwindow(data_manager_t *gdm);
 
@@ -83,6 +86,11 @@ namespace grid
     void on_zroi_spanslider_spanChanged(int l , int u );
 
     void on_update_roi_pushButton_clicked(bool);
+
+    void on_center_to_roi_checkBox_clicked(bool);
+
+  private slots:
+    void clear_roi_aabb();
   };
 
   void configurable_ctx_menu

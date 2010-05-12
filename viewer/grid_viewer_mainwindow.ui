@@ -240,6 +240,19 @@
      <enum>QxtSpanSlider::NoOverlapping</enum>
     </property>
    </widget>
+   <widget class="QCheckBox" name="center_to_roi_checkBox">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>150</y>
+      <width>141</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Center View To ROI</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <customwidgets>

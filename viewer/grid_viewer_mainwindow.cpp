@@ -9,6 +9,8 @@
 #include <grid_viewer_mainwindow.h>
 #include <grid_datamanager.h>
 
+const int g_roi_show_aabb_time_msec = 5*1000;
+
 namespace grid
 {
 
@@ -90,6 +92,8 @@ namespace grid
     m_viewer->m_ren->m_bShowRoiBB = true;
 
     m_viewer->updateGL();
+
+    m_clear_roi_aabb_timer->start();
   }
 
   void viewer_mainwindow::on_yroi_spanslider_spanChanged(int l , int u )
@@ -103,6 +107,8 @@ namespace grid
     m_viewer->m_ren->m_bShowRoiBB = true;
 
     m_viewer->updateGL();
+
+    m_clear_roi_aabb_timer->start();
   }
 
   void viewer_mainwindow::on_zroi_spanslider_spanChanged(int l , int u )
@@ -116,17 +122,32 @@ namespace grid
     m_viewer->m_ren->m_bShowRoiBB = true;
 
     m_viewer->updateGL();
+
+    m_clear_roi_aabb_timer->start();
   }
 
   void viewer_mainwindow::on_update_roi_pushButton_clicked(bool)
   {
     m_viewer->m_ren->m_bRebuildRens = true;
 
-    m_viewer->m_ren->m_bShowRoiBB = false;
+    m_clear_roi_aabb_timer->stop();
+
+    clear_roi_aabb();
+  }
+
+  void viewer_mainwindow::on_center_to_roi_checkBox_clicked(bool state)
+  {
+    m_viewer->m_ren->m_bCenterToRoi = state;
 
     m_viewer->updateGL();
   }
 
+  void viewer_mainwindow::clear_roi_aabb()
+  {
+    m_viewer->m_ren->m_bShowRoiBB = false;
+
+    m_viewer->updateGL();
+  }
 
   viewer_mainwindow::viewer_mainwindow
       (data_manager_t * gdm):m_gdm(gdm),
@@ -156,6 +177,13 @@ namespace grid
     connect(critpt_filter_edit,SIGNAL(textChanged(QString)),
             m_cp_model_proxy,SLOT(setFilterFixedString(QString)));
 
+    m_clear_roi_aabb_timer = new QTimer(this);
+
+    m_clear_roi_aabb_timer->setSingleShot(true);
+
+    m_clear_roi_aabb_timer->setInterval(g_roi_show_aabb_time_msec);
+
+    connect(m_clear_roi_aabb_timer,SIGNAL(timeout()),this,SLOT(clear_roi_aabb()));
   }
 
   void viewer_mainwindow::showEvent ( QShowEvent * )
@@ -310,5 +338,4 @@ namespace grid
       m_conf->exchange_data(idx,out_val);
     }
   }
-
 }

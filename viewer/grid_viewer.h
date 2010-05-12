@@ -102,10 +102,12 @@ namespace grid
     cellid_t                               m_size;
     rect_t                                 m_roi;
     double                                 m_scale_factor;
+    cellid_t                               m_roi_base_pt;
 
   public:
     bool                                   m_bShowRoiBB;
     bool                                   m_bRebuildRens;
+    bool                                   m_bCenterToRoi;
 
   public:
 
