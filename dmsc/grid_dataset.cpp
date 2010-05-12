@@ -27,7 +27,7 @@ namespace grid
 
   inline uint   dataset_t::getCellIncCells( cellid_t c,cellid_t * inc) const
   {
-    for(uint i = 0; i < cellid_t::base_t::static_size; ++i)
+    for(uint i = 0; i < gc_grid_dim; ++i)
     {
       inc[i*2+0] = c;
       inc[i*2+1] = c;
@@ -35,7 +35,7 @@ namespace grid
       inc[i*2+0][i] -= 1;
       inc[i*2+0][i] += 1;
     }
-    return cellid_t::base_t::static_size*2;
+    return gc_grid_dim*2;
   }
 
   inline bool lowestPairableCoFacet

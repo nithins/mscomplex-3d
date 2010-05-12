@@ -24,8 +24,8 @@ glutils::color_t g_grid_cp_colors[] =
 {
   glutils::color_t(0.0,0.0,1.0),
   glutils::color_t(0.0,1.0,0.0),
-  glutils::color_t(1.0,0.0,0.0),
   glutils::color_t(0.0,1.0,1.0),
+  glutils::color_t(1.0,0.0,0.0),
 };
 
 glutils::color_t g_grid_grad_colors[] =
@@ -63,8 +63,8 @@ glutils::color_t g_roiaabb_color = glutils::color_t(0.85,0.75,0.65);
 
 const char * shader_consts[grid::GRADDIR_COUNT]
     = {"const float even_sz = 0.1;"\
-       "const float odd_sz  = 0.9;",
-       "const float even_sz = 0.9;"\
+       "const float odd_sz  = 1.0;",
+       "const float even_sz = 1.0;"\
        "const float odd_sz  = 0.1;"};
 
 namespace grid
@@ -682,7 +682,7 @@ namespace grid
 
         critpt_t *cp = msc->m_cps[msc->m_id_cp_map[cellid]];
 
-        std::vector<glutils::vertex_t> vlist;
+        std::set<cellid_t> vset;
 
         for(uint j = 0 ; j < cp->contrib[dir].size();++j)
         {
@@ -694,9 +694,13 @@ namespace grid
           {
             cellid_t c = cp_contrib->disc[dir][i];
 
-            vlist.push_back(glutils::vertex_t(c[0],c[1],c[2]));
+            if(vset.count(c) == 0)
+              vset.insert(c);
           }
         }
+
+        std::vector<glutils::vertex_t> vlist(vset.size());
+        std::copy(vset.begin(),vset.end(),vlist.begin());
 
         ren[dir] = glutils::create_buffered_points_ren
                    (glutils::make_buf_obj(vlist),

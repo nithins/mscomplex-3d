@@ -6,51 +6,27 @@ cmake_minimum_required(VERSION 2.6)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+find_package(Boost COMPONENTS program_options thread serialization regex REQUIRED)
+
 set(QT_MIN_VERSION "4.5.0")
-find_package(Qt4 REQUIRED)
-
-if(NOT QT4_FOUND)
-  message(FATAL_ERROR "Failed to find Qt 4.5 or greater.")
-endif(NOT QT4_FOUND)
-
 set(QT_USE_QTGUI TRUE)
 set(QT_USE_QTOPENGL TRUE)
 set(QT_USE_QTXML TRUE)
 
+find_package(Qt4 REQUIRED)
+
 include(${QT_USE_FILE})
 
-find_package(QGLViewer)
-
-if(NOT QGLVIEWER_FOUND)
-  message(FATAL_ERROR "Failed to find QGLViewer .. quitting")
-endif(NOT QGLVIEWER_FOUND)
+find_package(QGLViewer REQUIRED)
 
 SET(QXT_USE_QXTCORE TRUE)
 SET(QXT_USE_QXTGUI TRUE)
 
-find_package(Qxt)
+find_package(Qxt REQUIRED)
 
-if(NOT QXT_FOUND_QXTGUI)
-  message(FATAL_ERROR "Failed to find QXT .. quitting")
-endif(NOT QXT_FOUND_QXTGUI)
+find_package(PythonInterp REQUIRED)
 
-find_package(Boost COMPONENTS program_options thread serialization regex)
-
-if(NOT Boost_FOUND)
-  message(FATAL_ERROR "Cannot find boost")
-endif(NOT Boost_FOUND)
-
-find_package(PythonInterp)
-
-if(NOT PYTHONINTERP_FOUND OR NOT PYTHON_EXECUTABLE)
-  message(FATAL_ERROR "No python interpreter found .. needed for generating shader include files")
-endif(NOT PYTHONINTERP_FOUND OR NOT PYTHON_EXECUTABLE)
-
-# find_package(OpenCL)
-#
-# if(NOT OPENCL_FOUND)
-#   message(FATAL_ERROR "could not find openCL ..")
-# endif(NOT OPENCL_FOUND)
+# find_package(OpenCL REQUIRED)
 
 add_subdirectory(utls)
 
