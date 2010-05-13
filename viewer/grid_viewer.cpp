@@ -125,6 +125,8 @@ namespace grid
     for(uint i = 0 ;i < gdm->m_pieces.size();++i)
       m_grid_piece_rens.push_back(new octtree_piece_rendata(gdm->m_pieces.at(i)));
 
+    m_roi_base_pt  = ((m_roi.upper_corner() +  m_roi.lower_corner())/2);
+
   }
 
   grid_viewer_t::~grid_viewer_t()
@@ -170,9 +172,13 @@ namespace grid
              m_scale_factor);
 
     if(m_bCenterToRoi)
-      glTranslatef(-m_roi_base_pt[0],-m_roi_base_pt[1],-m_roi_base_pt[2]);
+      glTranslatef(-m_roi_base_pt[0],
+                   -m_roi_base_pt[1],
+                   -m_roi_base_pt[2]);
     else
-      glTranslatef(-m_size[0],-m_size[1],-m_size[2]);
+      glTranslatef(std::min(-m_size[0]+1,-1),
+                   std::min(-m_size[1]+1,-1),
+                   std::min(-m_size[2]+1,-1));
 
     if(m_bShowRoiBB)
     {

@@ -34,6 +34,8 @@ namespace grid
 
     grid_viewer_t *m_ren;
 
+    bool m_is_recording;
+
     glviewer_t(data_manager_t * p);
 
     ~glviewer_t();
@@ -43,6 +45,8 @@ namespace grid
     virtual void draw();
     virtual void init();
     virtual QString helpString() const;
+    virtual void keyPressEvent(QKeyEvent *e);
+
   };
 
   class configurable_item_model;
@@ -66,11 +70,18 @@ namespace grid
     configurable_item_model *m_otp_model;
     QTimer                  *m_clear_roi_aabb_timer;
 
+  public:
+
     viewer_mainwindow(data_manager_t *gdm);
 
     ~viewer_mainwindow();
 
-    void showEvent ( QShowEvent * );
+    void update_roi_box(double l,double u,uint dim);
+
+
+  public:
+
+    virtual void showEvent ( QShowEvent * );
 
   private slots:
     void on_datapiece_view_customContextMenuRequested ( const QPoint &p );

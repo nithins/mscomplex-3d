@@ -2,6 +2,7 @@
 #include <QTreeView>
 #include <QColorDialog>
 #include <QDebug>
+#include <QKeyEvent>
 
 #include <boost/typeof/typeof.hpp>
 
@@ -21,13 +22,12 @@ namespace grid
 
   void glviewer_t::init()
   {
-    // Restore previous viewer state.
     restoreStateFromFile();
 
     m_ren->init();
   }
 
-  glviewer_t::glviewer_t(data_manager_t * gdm)
+  glviewer_t::glviewer_t(data_manager_t * gdm):m_is_recording(false)
   {
     m_ren = new grid_viewer_t(gdm);
   }
@@ -35,6 +35,35 @@ namespace grid
   glviewer_t::~glviewer_t()
   {
     delete m_ren;
+  }
+
+  void glviewer_t::keyPressEvent(QKeyEvent *e)
+  {
+    const Qt::KeyboardModifiers modifiers = e->modifiers();
+
+    bool handled = false;
+    if ((e->key()==Qt::Key_R) && (modifiers==Qt::ControlModifier))
+    {
+      m_is_recording = !m_is_recording;
+
+      if(m_is_recording)
+        connect(this, SIGNAL(drawFinished(bool)),this, SLOT(saveSnapshot(bool)));
+      else
+        disconnect(this, SIGNAL(drawFinished(bool)),this, SLOT(saveSnapshot(bool)));
+
+      handled = true;
+    }
+    else if ((e->key()==Qt::Key_B) && (modifiers==Qt::ControlModifier))
+    {
+      m_ren->m_bShowRoiBB = !m_ren->m_bShowRoiBB;
+      handled = true;
+    }
+
+    if (handled)
+      updateGL();
+    else
+      QGLViewer::keyPressEvent(e);
+
   }
 
   QString glviewer_t::helpString() const
@@ -55,9 +84,8 @@ namespace grid
   void viewer_mainwindow::on_critpt_view_customContextMenuRequested ( const QPoint &p )
   {
 
-    QModelIndexList l =
-        m_cp_model_proxy->mapSelectionToSource
-        (critpt_view->selectionModel()->selection()).indexes();
+    QModelIndexList l = m_cp_model_proxy->mapSelectionToSource
+                        (critpt_view->selectionModel()->selection()).indexes();
 
     configurable_ctx_menu(m_viewer->m_ren->m_grid_piece_rens[m_active_otp_idx],
                           l,critpt_view->mapToGlobal(p));
@@ -81,58 +109,53 @@ namespace grid
     return (d_val - d_min)/(d_max - d_min);
   }
 
+  void viewer_mainwindow::update_roi_box(double l,double u,uint dim)
+  {
+    m_viewer->m_ren->set_roi_dim_range_nrm(l,u,dim);
+
+    if (m_clear_roi_aabb_timer->isActive() ||
+        m_viewer->m_ren->m_bShowRoiBB == false)
+    {
+      m_viewer->m_ren->m_bShowRoiBB = true;
+
+      m_clear_roi_aabb_timer->start();
+    }
+
+    m_viewer->updateGL();
+  }
+
   void viewer_mainwindow::on_xroi_spanslider_spanChanged(int l , int u )
   {
     BOOST_AUTO(sldr,xroi_spanslider);
 
-    m_viewer->m_ren->set_roi_dim_range_nrm
-        (get_nrm_value(l,sldr->minimum(),sldr->maximum()),
-         get_nrm_value(u,sldr->minimum(),sldr->maximum()),0);
+    update_roi_box(get_nrm_value(l,sldr->minimum(),sldr->maximum()),
+                   get_nrm_value(u,sldr->minimum(),sldr->maximum()),0);
 
-    m_viewer->m_ren->m_bShowRoiBB = true;
-
-    m_viewer->updateGL();
-
-    m_clear_roi_aabb_timer->start();
   }
 
   void viewer_mainwindow::on_yroi_spanslider_spanChanged(int l , int u )
   {
     BOOST_AUTO(sldr,yroi_spanslider);
 
-    m_viewer->m_ren->set_roi_dim_range_nrm
-        (get_nrm_value(l,sldr->minimum(),sldr->maximum()),
-         get_nrm_value(u,sldr->minimum(),sldr->maximum()),1);
+    update_roi_box(get_nrm_value(l,sldr->minimum(),sldr->maximum()),
+                   get_nrm_value(u,sldr->minimum(),sldr->maximum()),1);
 
-    m_viewer->m_ren->m_bShowRoiBB = true;
-
-    m_viewer->updateGL();
-
-    m_clear_roi_aabb_timer->start();
   }
 
   void viewer_mainwindow::on_zroi_spanslider_spanChanged(int l , int u )
   {
     BOOST_AUTO(sldr,zroi_spanslider);
 
-    m_viewer->m_ren->set_roi_dim_range_nrm
-        (get_nrm_value(l,sldr->minimum(),sldr->maximum()),
-         get_nrm_value(u,sldr->minimum(),sldr->maximum()),2);
+    update_roi_box(get_nrm_value(l,sldr->minimum(),sldr->maximum()),
+                   get_nrm_value(u,sldr->minimum(),sldr->maximum()),2);
 
-    m_viewer->m_ren->m_bShowRoiBB = true;
-
-    m_viewer->updateGL();
-
-    m_clear_roi_aabb_timer->start();
   }
 
   void viewer_mainwindow::on_update_roi_pushButton_clicked(bool)
   {
     m_viewer->m_ren->m_bRebuildRens = true;
 
-    m_clear_roi_aabb_timer->stop();
-
-    clear_roi_aabb();
+    m_viewer->updateGL();
   }
 
   void viewer_mainwindow::on_center_to_roi_checkBox_clicked(bool state)
