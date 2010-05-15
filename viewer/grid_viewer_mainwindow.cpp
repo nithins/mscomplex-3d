@@ -219,6 +219,11 @@ namespace grid
     delete m_gdm;
   }
 
+  inline QColor to_qcolor (const glutils::color_t & c)
+  {
+    return QColor::fromRgbF(c[0],c[1],c[2]);
+  }
+
   QVariant configurable_item_model::data
       ( const QModelIndex &index, int role ) const
   {
@@ -242,16 +247,13 @@ namespace grid
         return boost::any_cast<bool>(val);
       else if (val.type() == typeid(int))
         return boost::any_cast<int>(val);
-
+      else if (val.type() == typeid(glutils::color_t))
+        return to_qcolor(boost::any_cast<glutils::color_t>(val));
     }
     else if( role == Qt::DecorationRole)
     {
       if (val.type() == typeid(glutils::color_t))
-      {
-        glutils::color_t c = boost::any_cast<glutils::color_t>(val);
-
-        return QColor::fromRgbF(c[0],c[1],c[2]);
-      }
+        return to_qcolor(boost::any_cast<glutils::color_t>(val));
     }
 
     return QVariant();

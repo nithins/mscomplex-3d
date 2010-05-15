@@ -50,19 +50,6 @@ namespace grid
     for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
 
-    log_line("connecting cps = ",edge_to_string(this,e));
-
-    if(is_multiple_edge(this,e))
-    {
-      log_line("multiple edge = ",edge_to_string(this,e));
-
-//      ensure_max_two_connectivity(this,e);
-
-      for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
-        if(is_saddle(this,e[dir]))
-          m_cps[e[dir]]->is_strangulating = true;
-    }
-
   }
 
   void cancelPairs ( mscomplex_t *msc,uint_pair_t e,
@@ -132,7 +119,7 @@ namespace grid
 
     for(uint dir = 0 ; dir <2 ; ++dir)
     {
-      conn_t new_conn;
+      conn_set_t new_conn;
 
       for(i_it = cp[dir]->conn[dir].begin();i_it != cp[dir]->conn[dir].end() ; ++i_it )
       {
@@ -169,7 +156,7 @@ namespace grid
   }
 
   void print_cp_connections(std::ostream & os,const mscomplex_t &msc,
-                            const conn_t &conn)
+                            const conn_set_t &conn)
   {
 
     os<<"{ ";
@@ -194,7 +181,6 @@ namespace grid
         continue;
 
       os<<"cellid = "<<m_cps[i]->cellid<<"\n";
-      os<<"is_strangulating="<<m_cps[i]->is_strangulating<<"\n";
 
       for(uint dir = 0 ; dir <2 ;++dir)
       {
@@ -553,8 +539,8 @@ namespace grid
       cellid_t c3 = m_msc->m_cps[p1[0]]->cellid;
       cellid_t c4 = m_msc->m_cps[p1[1]]->cellid;
 
-      d1 = (c1-c2)*(c1-c2);
-      d2 = (c3-c4)*(c3-c4);
+      d1 = dot_product((c1-c2),(c1-c2));
+      d2 = dot_product((c3-c4),(c3-c4));
 
       if(d1 != d2)
         return d1>d2;
@@ -601,27 +587,6 @@ namespace grid
     return true;
   }
 
-  bool can_cancel_edge(mscomplex_t *msc,uint_pair_t e )
-  {
-    ensure_connectivity(msc,e);
-
-    if(msc->m_cps[e[0]]->is_strangulating == false &&
-       msc->m_cps[e[1]]->is_strangulating == false)
-      return true;
-
-    order_pr_by_cp_index(msc,e);
-
-    for(uint dir  = 0 ; dir < 2;++dir)
-    {
-      if(msc->m_cps[e[dir]]->is_strangulating &&
-         msc->m_cps[e[dir^1]]->conn[dir^1].size() == 1)
-        return true;
-    }
-
-    return false;
-
-  }
-
   void log_all_to_file(mscomplex_t *msc,std::string filename,int filenno)
   {
     std::stringstream ss;
@@ -655,8 +620,6 @@ namespace grid
 
     // add every edge in the descending manifold of the critical point
 
-    cell_fn_t max_persistence = 0.0;
-
     cell_fn_t max_val = std::numeric_limits<cell_fn_t>::min();
     cell_fn_t min_val = std::numeric_limits<cell_fn_t>::max();
 
@@ -679,14 +642,12 @@ namespace grid
         }
     }
 
-    max_persistence = max_val - min_val;
+    cell_fn_t max_persistence = max_val - min_val;
 
 //    uint max_canc = 103;
     uint num_canc = 0;
 
     log_all_to_file(this,"ms_conns",num_canc);
-
-    uint_pair_list_t resubmit_list;
 
     while (canc_pair_priq.size() !=0)
     {
@@ -698,13 +659,6 @@ namespace grid
 
       if(is_valid_canc_edge(this,pr) == false)
         continue;
-
-//      if(can_cancel_edge(this,pr) == false)
-//      {
-//        resubmit_list.push_back(pr);
-//        continue;
-//      }
-
 
       cell_fn_t persistence = std::abs(m_cps[pr[0]]->fn-m_cps[pr[1]]->fn);
 
@@ -746,11 +700,6 @@ namespace grid
 
       for(uint i = 0 ; i < new_edges.size(); i++)
         canc_pair_priq.push(new_edges[i]);
-
-//      for(uint i = 0 ; i < resubmit_list.size(); i++)
-//        canc_pair_priq.push(resubmit_list[i]);
-//
-//      resubmit_list.clear();
     }
 
     log_all_to_file(this,"final_msc",-1);

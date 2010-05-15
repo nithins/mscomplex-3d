@@ -31,12 +31,12 @@ namespace grid
 
   typedef std::vector<uint>         critpt_idx_list_t;
   typedef std::vector<cell_fn_t>    cp_fn_list_t;
-  typedef two_tuple_t<uint>         uint_pair_t;
+  typedef n_vector_t<uint,2>         uint_pair_t;
   typedef std::vector<uint_pair_t>  uint_pair_list_t;
 
   struct critpt_t
   {
-    typedef std::multiset<uint>     conn_t;
+    typedef std::multiset<uint>     conn_set_t;
     typedef std::vector<cellid_t>   disc_t;
     typedef std::vector<uint>       disc_contrib_t;
 
@@ -47,13 +47,11 @@ namespace grid
 
     bool isCancelled;
     bool is_paired;
-    bool is_strangulating;
 
     critpt_t()
     {
       isCancelled           = false;
       is_paired             = false;
-      is_strangulating      = false;
       pair_idx              = -1;
     }
 
@@ -61,7 +59,7 @@ namespace grid
 
     disc_contrib_t contrib[GRADDIR_COUNT];
     disc_t         disc[GRADDIR_COUNT] ;
-    conn_t         conn[GRADDIR_COUNT];
+    conn_set_t     conn[GRADDIR_COUNT];
   };
 
 
@@ -111,11 +109,11 @@ namespace grid
     void print_connections(std::ostream & os);
   };
 
-  typedef mscomplex_t::critpt_list_t       critpt_list_t;
-  typedef critpt_t::conn_t                 conn_t;
-  typedef critpt_t::disc_t                 critpt_disc_t;
-  typedef critpt_t::conn_t::iterator       conn_iter_t;
-  typedef critpt_t::conn_t::const_iterator const_conn_iter_t;
+  typedef mscomplex_t::critpt_list_t           critpt_list_t;
+  typedef critpt_t::conn_set_t                 conn_set_t;
+  typedef critpt_t::disc_t                     critpt_disc_t;
+  typedef critpt_t::conn_set_t::iterator       conn_iter_t;
+  typedef critpt_t::conn_set_t::const_iterator const_conn_iter_t;
 
   inline void order_pr_by_cp_index(mscomplex_t *msc,uint_pair_t &e)
   {
