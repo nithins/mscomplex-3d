@@ -41,11 +41,30 @@ namespace grid
     connect_cps(uint_pair_t(m_id_cp_map[c0],m_id_cp_map[c1]));
   }
 
+  bool is_saddle_extremum_pair(mscomplex_t * msc,uint_pair_t e)
+  {
+
+    order_pr_by_cp_index(msc,e);
+
+    ensure_index_one_separation(msc,e);
+
+    if(msc->m_cps[e[0]]->index == gc_grid_dim ||
+       msc->m_cps[e[1]]->index == 0)
+      return true;
+
+    return false;
+
+  }
+
   void mscomplex_t::connect_cps(uint_pair_t e)
   {
     order_pr_by_cp_index(this,e);
 
     ensure_ordered_index_one_separation(this,e);
+
+    for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
+      if(m_cps[e[dir]]->conn[dir].count(e[dir^1]) == 2)
+        return;
 
     for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
@@ -145,7 +164,8 @@ namespace grid
 
           ensure_index_one_separation(msc,uint_pair_t(*j_it,e[dir]));
 
-          new_conn.insert(*j_it);
+          if(new_conn.count(*j_it) == 0)
+            new_conn.insert(*j_it);
         }
       }
 
@@ -533,6 +553,12 @@ namespace grid
       if(d1 != d2)
         return d1>d2;
 
+      if(is_saddle_extremum_pair(m_msc,p1) && !is_saddle_extremum_pair(m_msc,p2))
+        return true;
+
+      if(is_saddle_extremum_pair(m_msc,p2) && !is_saddle_extremum_pair(m_msc,p1))
+        return false;
+
       cellid_t c1 = m_msc->m_cps[p1[0]]->cellid;
       cellid_t c2 = m_msc->m_cps[p1[1]]->cellid;
 
@@ -644,7 +670,6 @@ namespace grid
 
     cell_fn_t max_persistence = max_val - min_val;
 
-//    uint max_canc = 103;
     uint num_canc = 0;
 
     log_all_to_file(this,"ms_conns",num_canc);
@@ -652,8 +677,6 @@ namespace grid
     while (canc_pair_priq.size() !=0)
     {
       uint_pair_t pr = canc_pair_priq.top();
-
-      std::cout<<"popped from priq"<<edge_to_string(this,pr)<<"\n";
 
       canc_pair_priq.pop();
 
@@ -665,32 +688,13 @@ namespace grid
       if((double)persistence/(double)max_persistence > simplification_treshold)
         break;
 
-//      if(num_canc == max_canc)
-//        break;
-
       num_canc++;
 
       std::cout<<"canc no = "<<num_canc<<" edge = "<<edge_to_string(this,pr)<<"\n";
 
-      if(num_canc == 459)
-      {
-        log_all_to_file(this,"ms_conns",num_canc);
-      }
-
       std::vector<uint_pair_t> new_edges;
 
-      try
-      {
-        cancelPairs ( this,pr,&new_edges);
-      }
-      catch (std::logic_error)
-      {
-        std::cout<<"caught something\n";
-
-        log_all_to_file(this,"ms_conns_failure",num_canc);
-
-        throw;
-      }
+      cancelPairs ( this,pr,&new_edges);
 
       mark_cancel_pair(this,pr);
 
