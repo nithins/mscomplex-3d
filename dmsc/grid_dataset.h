@@ -44,6 +44,7 @@ namespace grid
       CELLFLAG_UNKNOWN  = 0,
       CELLFLAG_PAIRED   = 1,
       CELLFLAG_CRITICAL = 2,
+      CELLFLAG_MASK     = 0x03,
     };
 
     enum eCellAdjDirection
@@ -101,6 +102,10 @@ namespace grid
 
     void  assignGradients();
 
+    void  assignGradients_boundry_adjustment();
+
+    void  assignGradients_boundry_correction();
+
     void  assignMaxFacets();
 
     void  collateCriticalPoints();
@@ -146,7 +151,11 @@ namespace grid
 
     bool   isCellPaired ( cellid_t c ) const;
 
+    bool   areCellsIncident(cellid_t c1,cellid_t c2) const;
+
     void   pairCells ( cellid_t c,cellid_t p );
+
+    void   unpairCells ( cellid_t c,cellid_t p );
 
     void   setCellMaxFacet (cellid_t c,cellid_t f);
 

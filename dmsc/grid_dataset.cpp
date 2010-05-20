@@ -38,50 +38,135 @@ namespace grid
     return gc_grid_dim*2;
   }
 
-  inline bool lowestPairableCoFacet
-      (dataset_t *dataset,
-       cellid_t cellId,
-       cellid_t& pairid)
+  inline void pair_with_lowest_cofacet (dataset_t *dataset,cellid_t c)
   {
-    cellid_t cofacets[20];
-    bool    cofacet_usable[20];
+    cellid_t p;
 
-    uint cofacet_count = dataset->getCellCofacets ( cellId,cofacets );
+    cellid_t cf[20];
 
-    bool isTrueBoundryCell = dataset->isTrueBoundryCell ( cellId ) ;
+    uint cf_count = dataset->getCellCofacets ( c,cf );
 
-    // for each co facet
-    for ( uint i = 0 ; i < cofacet_count ; i++ )
+    bool p_usable = false;
+
+    for ( uint i =0 ; i < cf_count;i++ )
     {
-      cofacet_usable[i] = false;
-
-      if ( isTrueBoundryCell &&
-           !dataset->isTrueBoundryCell ( cofacets[i] ) )
-        continue;
-
-      if(dataset->getCellMaxFacetId(cofacets[i]) == cellId)
-        cofacet_usable[i] = true;
-    }
-
-    bool pairid_usable = false;
-
-    for ( uint i =0 ; i < cofacet_count;i++ )
-    {
-      if ( cofacet_usable[i] == false )
-        continue;
-
-      if(pairid_usable == false)
+      if(dataset->getCellMaxFacetId(cf[i]) == c)
       {
-        pairid_usable = true;
-        pairid = cofacets[i];
-        continue;
+        if(p_usable == false ||
+           dataset->compareCells ( cf[i],p ))
+        {
+          p_usable = true;
+          p = cf[i];
+        }
       }
-
-      if ( dataset->compareCells ( cofacets[i],pairid ) )
-        pairid = cofacets[i];
-
     }
-    return pairid_usable;
+
+    if(p_usable)
+      dataset->pairCells(c,p);
+
+  }
+
+  inline void adjust_boundry_pairing (dataset_t *dataset,cellid_t c)
+  {
+
+    if(dataset->isCellPaired(c) == false)
+      return;
+
+    cellid_t op = dataset->getCellPairId(c);
+
+    if(!dataset->isPairOrientationCorrect(c,op))
+      return;
+
+    cellid_t np;
+
+    cellid_t cf[20];
+
+    uint cf_count = dataset->getCellCofacets ( c,cf );
+
+    bool np_usable = false;
+
+    bool is_c_bndry = dataset->isTrueBoundryCell(c);
+
+    for ( uint i =0 ; i < cf_count;i++ )
+    {
+      bool is_cf_bndry = dataset->isTrueBoundryCell(cf[i]);
+
+      if(dataset->getCellMaxFacetId(cf[i]) == c )
+      {
+        if( is_c_bndry == is_cf_bndry)
+        {
+          if(np_usable == false || dataset->compareCells ( cf[i],np ))
+          {
+            np_usable = true;
+            np = cf[i];
+          }
+        }
+      }
+    }
+
+    ensure_valid_pair(dataset,c,op);
+
+    if(np_usable && np != op)
+    {
+      if(dataset->isCellPaired(np))
+      {
+        cellid_t np_op = dataset->getCellPairId(np);
+
+        if( dataset->areCellsIncident(op,np_op) )
+        {
+          dataset->unpairCells(c,op);
+          dataset->unpairCells(np,np_op);
+          dataset->pairCells(op,np_op);
+          dataset->pairCells(c,np);
+        }
+      }
+    }
+  }
+
+  inline void correct_boundry_pairing (dataset_t *dataset,cellid_t c)
+  {
+
+    if(dataset->isCellPaired(c) == false)
+      return;
+
+    cellid_t op = dataset->getCellPairId(c);
+
+    if(!dataset->isPairOrientationCorrect(c,op))
+      return;
+
+    cellid_t np;
+
+    cellid_t cf[20];
+
+    uint cf_count = dataset->getCellCofacets ( c,cf );
+
+    bool np_usable = false;
+
+    bool is_c_bndry = dataset->isTrueBoundryCell(c);
+
+    for ( uint i =0 ; i < cf_count;i++ )
+    {
+      bool is_cf_bndry = dataset->isTrueBoundryCell(cf[i]);
+
+      if(dataset->getCellMaxFacetId(cf[i]) == c )
+      {
+        if( is_c_bndry == is_cf_bndry)
+        {
+          if(np_usable == false || dataset->compareCells ( cf[i],np ))
+          {
+            np_usable = true;
+            np = cf[i];
+          }
+        }
+      }
+    }
+
+    ensure_valid_pair(dataset,c,op);
+
+    if(!np_usable || np != op)
+    {
+      dataset->unpairCells(c,op);
+    }
   }
 
 
@@ -305,6 +390,16 @@ namespace grid
     return (uint)-1;
   }
 
+  bool   dataset_t::areCellsIncident(cellid_t c1,cellid_t c2) const
+  {
+    uint dim_diff;
+
+    for(uint i = 0 ;i < gc_grid_dim;++i)
+      dim_diff += (c1[i] >c2[i])?(c1[i] - c2[i]):(c2[i]  - c1[i]);
+
+    return (dim_diff == 1);
+  }
+
   cellid_t dataset_t::getCellPairId (cellid_t c) const
   {
     ensure_cell_paired(this,c);
@@ -438,11 +533,30 @@ namespace grid
 
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
+    ensure_cell_not_paired(this,c);
+    ensure_cell_not_paired(this,p);
+
     (*m_cell_pairs)(c) = get_cell_adj_dir(c,p);
     (*m_cell_pairs)(p) = get_cell_adj_dir(p,c);
 
     (*m_cell_flags) (c) |= CELLFLAG_PAIRED;
     (*m_cell_flags) (p) |= CELLFLAG_PAIRED;
+
+    ensure_valid_pair(this,p,c);
+  }
+
+  void  dataset_t::unpairCells ( cellid_t c,cellid_t p )
+  {
+    ensure_valid_pair(this,p,c);
+
+    (*m_cell_pairs)(c) = CELLADJDIR_UNKNOWN;
+    (*m_cell_pairs)(p) = CELLADJDIR_UNKNOWN;
+
+    (*m_cell_flags) (c) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
+    (*m_cell_flags) (p) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
+
+    ensure_cell_not_paired(this,c);
+    ensure_cell_not_paired(this,p);
   }
 
   void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
@@ -477,6 +591,10 @@ namespace grid
     assignMaxFacets();
 
     assignGradients();
+
+    assignGradients_boundry_adjustment();
+
+    assignGradients_boundry_correction();
 
     collateCriticalPoints();
   }
@@ -521,7 +639,7 @@ namespace grid
   {
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
-    cellid_t c,p;
+    cellid_t c;
 
     for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
     {
@@ -529,18 +647,84 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          if (lowestPairableCoFacet (this,c,p))
-          {
-            ensure_cell_not_marked(this,c);
-
-            ensure_cell_not_marked(this,p);
-
-            pairCells (c,p);
-          }
+          pair_with_lowest_cofacet(this,c);
         }
       }
     }
-#warning "havent implemnted mark boundry critpts yet"
+  }
+
+  void  dataset_t::assignGradients_boundry_adjustment()
+  {
+    using namespace boost::lambda;
+
+    for(uint dim = 1 ; dim <= gc_grid_dim; ++dim)
+    {
+      cellid_t   seq(cellid_t::zero);
+
+      std::for_each(seq.begin(),seq.begin()+dim,_1=1);
+
+      do
+      {
+        cellid_t c_b = m_rect.lower_corner() + cellid_t::one;
+        cellid_t c_e = m_rect.upper_corner() - cellid_t::one;
+        cellid_t c_i = m_rect.size();
+
+        std::transform(seq.begin(),seq.end(),c_b.begin(),c_b.begin(),_2 -_1);
+        std::transform(seq.begin(),seq.end(),c_e.begin(),c_e.begin(),_2 +_1);
+        std::transform(seq.begin(),seq.end(),c_i.begin(),c_i.begin(),_2*_1+(!_1));
+
+        cellid_t c;
+
+        for(c[2] = c_b[2] ; c[2] <= c_e[2]; c[2] += c_i[2])
+        {
+          for(c[1] = c_b[1] ; c[1] <= c_e[1]; c[1] += c_i[1])
+          {
+            for(c[0] = c_b[0] ; c[0] <= c_e[0]; c[0] += c_i[0])
+            {
+              adjust_boundry_pairing(this,c);
+            }
+          }
+        }
+      }
+      while(std::next_permutation(seq.rbegin(),seq.rend()));
+    }
+  }
+
+  void  dataset_t::assignGradients_boundry_correction()
+  {
+    using namespace boost::lambda;
+
+    for(uint dim = 1 ; dim <= gc_grid_dim; ++dim)
+    {
+      cellid_t   seq(cellid_t::zero);
+
+      std::for_each(seq.begin(),seq.begin()+dim,_1=1);
+
+      do
+      {
+        cellid_t c_b = m_rect.lower_corner() + cellid_t::one;
+        cellid_t c_e = m_rect.upper_corner() - cellid_t::one;
+        cellid_t c_i = m_rect.size();
+
+        std::transform(seq.begin(),seq.end(),c_b.begin(),c_b.begin(),_2 -_1);
+        std::transform(seq.begin(),seq.end(),c_e.begin(),c_e.begin(),_2 +_1);
+        std::transform(seq.begin(),seq.end(),c_i.begin(),c_i.begin(),_2*_1+(!_1));
+
+        cellid_t c;
+
+        for(c[2] = c_b[2] ; c[2] <= c_e[2]; c[2] += c_i[2])
+        {
+          for(c[1] = c_b[1] ; c[1] <= c_e[1]; c[1] += c_i[1])
+          {
+            for(c[0] = c_b[0] ; c[0] <= c_e[0]; c[0] += c_i[0])
+            {
+              correct_boundry_pairing(this,c);
+            }
+          }
+        }
+      }
+      while(std::next_permutation(seq.rbegin(),seq.rend()));
+    }
   }
 
   void  dataset_t::collateCriticalPoints()

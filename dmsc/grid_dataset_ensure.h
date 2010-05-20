@@ -12,14 +12,6 @@
 
 namespace grid
 {
-  inline void ensure_cell_paired(const dataset_t *ds , cellid_t c)
-  {
-#ifdef USE_ENSURE_PREDICATES
-    if((*ds->m_cell_flags)(c)&dataset_t::CELLFLAG_PAIRED == 0 ||
-       (*ds->m_cell_pairs)(c) == dataset_t::CELLADJDIR_UNKNOWN )
-      throw std::logic_error("failed to ensure cell is paired");
-#endif
-  }
 
   inline void ensure_cell_max_facet_known(const dataset_t *ds , cellid_t c)
   {
@@ -72,11 +64,28 @@ namespace grid
 
   }
 
-  inline void ensure_cell_not_marked(dataset_t * ds,cellid_t c)
+  inline void ensure_cell_not_paired(dataset_t * ds,cellid_t c)
   {
 #ifdef USE_ENSURE_PREDICATES
-    if(ds->isCellMarked(c) == true)
-      throw std::logic_error("failed to ensure that cell is not marked");
+    if(ds->isCellPaired(c) == true)
+      throw std::logic_error("failed to ensure that cell is not paired");
+#endif
+  }
+
+  inline void ensure_cell_paired(const dataset_t *ds , cellid_t c)
+  {
+#ifdef USE_ENSURE_PREDICATES
+    if(ds->isCellPaired(c) == false)
+      throw std::logic_error("failed to ensure that cell is paired");
+#endif
+  }
+
+  inline void ensure_valid_pair(const dataset_t *ds , cellid_t c,cellid_t p)
+  {
+#ifdef USE_ENSURE_PREDICATES
+    if(ds->getCellPairId(c) != p ||
+       ds->getCellPairId(p) != c)
+      throw std::logic_error("failed to ensure valid pairing");
 #endif
   }
 
