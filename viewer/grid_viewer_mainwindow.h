@@ -61,8 +61,6 @@ namespace grid
   public:
 
     glviewer_t              *m_viewer;
-    data_manager_t          *m_gdm;
-
     uint                     m_active_otp_idx;
 
     QSortFilterProxyModel   *m_cp_model_proxy;

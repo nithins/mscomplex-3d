@@ -554,10 +554,10 @@ namespace grid
         return d1>d2;
 
       if(is_saddle_extremum_pair(m_msc,p1) && !is_saddle_extremum_pair(m_msc,p2))
-        return true;
+        return false;
 
       if(is_saddle_extremum_pair(m_msc,p2) && !is_saddle_extremum_pair(m_msc,p1))
-        return false;
+        return true;
 
       cellid_t c1 = m_msc->m_cps[p1[0]]->cellid;
       cellid_t c2 = m_msc->m_cps[p1[1]]->cellid;

@@ -15,6 +15,8 @@ using namespace std;
 
 namespace bpo = boost::program_options ;
 
+grid::data_manager_t * s_gdm = NULL;
+
 int main(int ac , char **av)
 {
   string filename;
@@ -36,7 +38,6 @@ int main(int ac , char **av)
       ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
       ("gui,g","show gui")
       ;
-
 
   bpo::variables_map vm;
   bpo::store(bpo::parse_command_line(ac, av, desc), vm);
@@ -67,18 +68,15 @@ int main(int ac , char **av)
   if (vm.count("gui"))
     gui = true;
 
-  grid::data_manager_t * gdm = new grid::data_manager_t
-                          (filename,size,
-                           use_ocl,
-                           simp_tresh);
+  s_gdm = new grid::data_manager_t(filename,size,use_ocl,simp_tresh);
 
-  gdm->work();
+  s_gdm->work();
 
   if(gui)
   {
     QApplication application(ac,av);
 
-    grid::viewer_mainwindow gvmw(gdm);
+    grid::viewer_mainwindow gvmw(s_gdm);
 
     gvmw.setWindowTitle("ms complex vis");
 
@@ -88,6 +86,6 @@ int main(int ac , char **av)
   }
   else
   {
-    delete gdm;
+    delete s_gdm;
   }
 }

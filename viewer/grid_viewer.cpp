@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include <boost/algorithm/string_regex.hpp>
+#include <boost/lambda/lambda.hpp>
 
 #include <GL/glew.h>
 
@@ -118,12 +119,14 @@ namespace grid
   grid_viewer_t::grid_viewer_t
       (data_manager_t * gdm):
       m_size(gdm->m_size),m_scale_factor(0),
-      m_bRebuildRens(true),m_bShowRoiBB(false),m_bCenterToRoi(false)
+      m_bRebuildRens(true),m_bShowRoiBB(false),m_bCenterToRoi(false),
+      m_gdm(gdm)
+
   {
     m_roi = rect_t(cellid_t::zero,(m_size-cellid_t::one)*2);
 
-    for(uint i = 0 ;i < gdm->m_pieces.size();++i)
-      m_grid_piece_rens.push_back(new octtree_piece_rendata(gdm->m_pieces.at(i)));
+    for(uint i = 0 ;i < m_gdm->m_pieces.size();++i)
+      m_grid_piece_rens.push_back(new octtree_piece_rendata(m_gdm->m_pieces.at(i)));
 
     m_roi_base_pt  = ((m_roi.upper_corner() +  m_roi.lower_corner())/2);
 
@@ -137,6 +140,8 @@ namespace grid
     m_grid_piece_rens.clear();
 
     disc_rendata_t::cleanup();
+
+    delete m_gdm;
   }
 
   void grid_viewer_t::set_roi_dim_range_nrm(double l,double u,int dim)
@@ -244,7 +249,7 @@ namespace grid
   }
   int grid_viewer_t::columns()
   {
-    return 7;
+    return 11;
   }
   bool grid_viewer_t::exchange_data(const data_index_t &idx,boost::any &v)
   {
@@ -252,28 +257,36 @@ namespace grid
     switch(idx[0])
     {
     case 0: return s_exchange_ro(m_grid_piece_rens[idx[1]]->dp->label(),v);
-    case 1: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps,v);
-    case 2: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v);
-    case 3: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v);
-    case 4: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowGrad,v);
-    case 5: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v);
-    case 6: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v);
+    case 1: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowAllCps,v);
+    case 2: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps[0],v);
+    case 3: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps[1],v);
+    case 4: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps[2],v);
+    case 5: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCps[3],v);
+    case 6: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCpLabels,v);
+    case 7: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowMsGraph,v);
+    case 8: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowGrad,v);
+    case 9: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancCps,v);
+    case 10: return s_exchange_rw(m_grid_piece_rens[idx[1]]->m_bShowCancMsGraph,v);
     }
 
     throw std::logic_error("unknown index");
   }
-  std::string grid_viewer_t::get_header(int i)
+  boost::any grid_viewer_t::get_header(int i)
   {
     switch(i)
     {
 
-    case 0: return "oct tree piece";
-    case 1: return "cps";
-    case 2: return "cp labels";
-    case 3: return "msgraph";
-    case 4: return "gradient";
-    case 5: return "cancelled cps";
-    case 6: return "cancelled cp msgraph";
+    case 0: return std::string("oct tree piece");
+    case 1: return std::string("all cps");
+    case 2: return std::string("minima");
+    case 3: return std::string("1 saddle");
+    case 4: return std::string("2 saddle");
+    case 5: return std::string("maxima");
+    case 6: return std::string("cp labels");
+    case 7: return std::string("msgraph");
+    case 8: return std::string("gradient");
+    case 9: return std::string("cancelled cps");
+    case 10: return std::string("cancelled cp msgraph");
     }
 
     throw std::logic_error("unknown index");
@@ -281,7 +294,7 @@ namespace grid
 
 
   octtree_piece_rendata::octtree_piece_rendata (octtree_piece * _dp):
-      m_bShowCps ( false ),
+      m_bShowAllCps(false),
       m_bShowCpLabels ( false ),
       m_bShowMsGraph ( false ),
       m_bShowGrad ( false ),
@@ -290,6 +303,10 @@ namespace grid
       m_bNeedUpdateDiscRens(false),
       dp(_dp)
   {
+    using namespace boost::lambda;
+
+    std::for_each(m_bShowCps,m_bShowCps+gc_grid_dim+1,_1 = false);
+
   }
 
   void octtree_piece_rendata::create_cp_loc_bo()
@@ -513,21 +530,19 @@ namespace grid
 
     glPointSize ( 4.0 );
 
-    if ( m_bShowCps)
+    for(uint i = 0 ; i < gc_grid_dim+1;++i)
     {
-      for(uint i = 0 ; i < gc_grid_dim+1;++i)
+      if(ren_cp[i]&& (m_bShowCps[i]||m_bShowAllCps))
       {
-        if(ren_cp[i])
-        {
-          glColor3dv(g_grid_cp_colors[i].data());
+        glColor3dv(g_grid_cp_colors[i].data());
 
-          ren_cp[i]->render();
+        ren_cp[i]->render();
 
-          if(ren_cp_labels[i] && m_bShowCpLabels)
-            ren_cp_labels[i]->render();
-        }
+        if(ren_cp_labels[i] && m_bShowCpLabels)
+          ren_cp_labels[i]->render();
       }
     }
+
 
     if ( m_bShowCancCps)
     {
@@ -620,16 +635,16 @@ namespace grid
 
   }
 
-  std::string octtree_piece_rendata::get_header(int i)
+  boost::any octtree_piece_rendata::get_header(int i)
   {
     switch(i)
     {
-    case 0: return "cellid";
-    case 1: return "index";
-    case 2: return "des disc";
-    case 3: return "asc disc";
-    case 4: return "des disc color";
-    case 5: return "asc disc color";
+    case 0: return std::string("cellid");
+    case 1: return std::string("index");
+    case 2: return std::string("des disc");
+    case 3: return std::string("asc disc");
+    case 4: return std::string("des disc color");
+    case 5: return std::string("asc disc color");
     }
     throw std::logic_error("invalid index");
   }

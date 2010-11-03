@@ -46,7 +46,8 @@ namespace grid
     octtree_piece * dp;
 
     // set externally to control what is rendered
-    bool m_bShowCps;
+    bool m_bShowCps[gc_grid_dim+1];
+    bool m_bShowAllCps;
     bool m_bShowCpLabels;
     bool m_bShowMsGraph;
     bool m_bShowGrad;
@@ -88,7 +89,7 @@ namespace grid
     int rows();
     int columns();
     bool exchange_data(const data_index_t &,boost::any &);
-    std::string get_header(int i);
+    boost::any get_header(int i);
   };
 
   class data_manager_t;
@@ -109,9 +110,11 @@ namespace grid
     bool                                   m_bRebuildRens;
     bool                                   m_bCenterToRoi;
 
+    data_manager_t *                       m_gdm;
+
   public:
 
-    grid_viewer_t(data_manager_t * p);
+    grid_viewer_t(data_manager_t * );
 
     ~grid_viewer_t();
 
@@ -135,7 +138,7 @@ namespace grid
     int rows();
     int columns();
     bool exchange_data(const data_index_t &,boost::any &);
-    std::string get_header(int i);
+    boost::any get_header(int i);
   };
 }
 #endif //VIEWER_H_INCLUDED

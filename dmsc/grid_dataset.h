@@ -178,14 +178,14 @@ namespace grid
 
       uint f_ct = getCellPoints(c,f);
 
-      cell_fn_t ret = 0.0;
+      cell_fn_t ret = (*m_vert_fns_ref)(f[0]/2);
 
-      for(uint i = 0 ;i < f_ct;++i)
+      for(uint i = 1 ;i < f_ct;++i)
       {
-        ret += (*m_vert_fns_ref)(f[i]/2);
+        ret = std::max(ret,(*m_vert_fns_ref)(f[i]/2));
       }
 
-      return ret/f_ct;
+      return ret;
     }
 
     inline rect_t get_rect()

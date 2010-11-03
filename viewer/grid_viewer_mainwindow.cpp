@@ -22,7 +22,8 @@ namespace grid
 
   void glviewer_t::init()
   {
-    restoreStateFromFile();
+    setSnapshotFormat("PNG");
+    setSnapshotQuality(100);
 
     m_ren->init();
   }
@@ -50,6 +51,8 @@ namespace grid
         connect(this, SIGNAL(drawFinished(bool)),this, SLOT(saveSnapshot(bool)));
       else
         disconnect(this, SIGNAL(drawFinished(bool)),this, SLOT(saveSnapshot(bool)));
+
+      std::cout<<"Recording state::"<<m_is_recording<<"\n";
 
       handled = true;
     }
@@ -173,8 +176,8 @@ namespace grid
   }
 
   viewer_mainwindow::viewer_mainwindow
-      (data_manager_t * gdm):m_gdm(gdm),
-      m_active_otp_idx(NULL)
+      (data_manager_t * gdm):
+      m_active_otp_idx(0)
   {
     setupUi (this);
 
@@ -216,7 +219,6 @@ namespace grid
 
   viewer_mainwindow::~viewer_mainwindow()
   {
-    delete m_gdm;
   }
 
   inline QColor to_qcolor (const glutils::color_t & c)
@@ -271,7 +273,11 @@ namespace grid
          role == Qt::DisplayRole &&
          section < m_conf->columns())
     {
-      return m_conf->get_header(section).c_str();
+
+      boost::any h  = m_conf->get_header(section);
+
+      if(h.type() == typeid(std::string))
+        return (boost::any_cast<std::string>(h)).c_str();
     }
     return QVariant();
   }
@@ -313,7 +319,14 @@ namespace grid
 
       if(is_rw == false) continue;
 
-      QAction * action  = m.addAction ( c->get_header(i).c_str());
+      boost::any h  = c->get_header(i);
+
+      std::string hdr("could not read column header");
+
+      if(h.type() == typeid(std::string))
+        hdr = (boost::any_cast<std::string>(h)).c_str();
+
+      QAction * action  = m.addAction ( hdr.c_str());
 
       if(val.type() == typeid(bool))
       {
