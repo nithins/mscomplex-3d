@@ -83,13 +83,11 @@ namespace grid
 
     octtree_piece_rendata(octtree_piece *);
 
-
     // configurable_t interface
   public:
-    int rows();
-    int columns();
-    bool exchange_data(const data_index_t &,boost::any &);
-    boost::any get_header(int i);
+    virtual data_index_t dim();
+    virtual bool exchange_field(const data_index_t &,boost::any &);
+    virtual eFieldType exchange_header(const int &,boost::any &);
   };
 
   class data_manager_t;
@@ -135,10 +133,9 @@ namespace grid
 
     // configurable_t interface
   public:
-    int rows();
-    int columns();
-    bool exchange_data(const data_index_t &,boost::any &);
-    boost::any get_header(int i);
+    virtual data_index_t dim();
+    virtual bool exchange_field(const data_index_t &,boost::any &);
+    virtual eFieldType exchange_header(const int &,boost::any &);
   };
 }
 #endif //VIEWER_H_INCLUDED
