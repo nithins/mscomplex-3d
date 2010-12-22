@@ -48,12 +48,16 @@ namespace grid
 
     bool p_usable = false;
 
+    bool is_c_boundry = dataset->isTrueBoundryCell(c);
+
     for ( uint i =0 ; i < cf_count;i++ )
     {
+      bool is_p_boundry = dataset->isTrueBoundryCell(cf[i]);
+
       if(dataset->getCellMaxFacetId(cf[i]) == c)
       {
-        if(p_usable == false ||
-           dataset->compareCells ( cf[i],p ))
+        if((p_usable == false ||dataset->compareCells ( cf[i],p )) &&
+           (is_c_boundry == is_p_boundry))
         {
           p_usable = true;
           p = cf[i];
@@ -286,6 +290,9 @@ namespace grid
 
     m_cell_flags.resize(boost::extents[s[0]][s[1]][s[2]]);
 
+    m_cell_eff_dim = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],
+                                         boost::fortran_storage_order());
+
     m_cell_pairs.resize(boost::extents[s[0]][s[1]][s[2]]);
 
     m_cell_mxfct.resize(boost::extents[s[0]][s[1]][s[2]]);
@@ -303,6 +310,7 @@ namespace grid
     m_cell_flags.reindex (bl);
     m_cell_pairs.reindex (bl);
     m_cell_mxfct.reindex (bl);
+    (*m_cell_eff_dim).reindex (bl);
   }
 
   void  dataset_t::clear()
@@ -312,6 +320,9 @@ namespace grid
     m_cell_flags.resize(cellid_t::zero);
     m_cell_pairs.resize(cellid_t::zero);
     m_cell_mxfct.resize(cellid_t::zero);
+
+    if(m_cell_eff_dim != NULL)
+      delete m_cell_eff_dim;
   }
 
   void dataset_t::init_fnref(cell_fn_t * pData)
@@ -388,10 +399,22 @@ namespace grid
 
   bool dataset_t::compareCells( cellid_t c1,cellid_t  c2 ) const
   {
-    ensure_cell_dim(this,c1,getCellDim(c2));
+    uint c1_dim = getCellDim(c1);
+    uint c2_dim = getCellDim(c2);
 
     if(c1 == c2)
       return false;
+
+    if(c1_dim != c2_dim)
+    {
+      cellid_t &p = (c1_dim>c2_dim)?(c1):(c2);
+      uint d  = std::min(c1_dim,c2_dim);
+
+      do p = getCellMaxFacetId(p); while(getCellDim(p) !=d );
+
+      if(c1 == c2)
+        return (c1_dim <c2_dim);
+    }
 
     if(getCellDim(c1) == 0)
       return ptLt(c1,c2);
@@ -497,8 +520,7 @@ namespace grid
 
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
-    ensure_cell_not_paired(this,c);
-    ensure_cell_not_paired(this,p);
+    ensure_pairable(this,c,p);
 
     m_cell_pairs (c) = get_cell_adj_dir(c,p);
     m_cell_pairs (p) = get_cell_adj_dir(p,c);
@@ -525,7 +547,7 @@ namespace grid
 
   void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
   {
-    ensure_cell_dim(this,f,getCellDim(c)-1);
+    ensure_cell_dim(f,getCellDim(c)-1);
 
     m_cell_mxfct (c) = get_cell_adj_dir(c,f);
   }
@@ -556,11 +578,13 @@ namespace grid
 
     assignGradients();
 
-    assignGradients_boundry_adjustment();
+//    assignGradients_boundry_adjustment();
 
-    assignGradients_boundry_correction();
+//    assignGradients_boundry_correction();
 
     collateCriticalPoints();
+
+    aggregateEffCellDim();
   }
 
   void dataset_t::assignMaxFacets()
@@ -714,6 +738,64 @@ namespace grid
     }
   }
 
+  void  dataset_t::aggregateEffCellDim()
+  {
+    using namespace boost::lambda;
+
+    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,this,_1,_2));
+
+    cellid_list_t c_list;
+
+    cellid_t c,p;
+
+    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
+
+    for(c[2] = m_ext_rect[2][0] ; c[2] <= m_ext_rect[2][1]; ++c[2])
+    {
+      for(c[1] = m_ext_rect[1][0] ; c[1] <= m_ext_rect[1][1]; ++c[1])
+      {
+        for(c[0] = m_ext_rect[0][0] ; c[0] <= m_ext_rect[0][1]; ++c[0])
+        {
+          (*m_cell_eff_dim)(c) = getCellDim(c);
+
+          c_list.push_back(c);
+        }
+      }
+    }
+
+    std::sort(c_list.begin(),c_list.end(),cmp);
+
+    for(int i = 0 ; i< c_list.size();++i)
+    {
+      c = c_list[i];
+
+      if(isCellCritical(c))
+      {
+        continue;
+      }
+
+      p = getCellPairId(c);
+
+      if(getCellDim(c) < getCellDim(p))
+        continue;
+
+      cellid_list_t fcts(20);
+
+      fcts.resize(getCellFacets(c,fcts.data()));
+
+      fcts.erase(std::find(fcts.begin(),fcts.end(),p));
+
+      std::vector<uint> fcts_eff_dim(fcts.size());
+
+      std::transform(fcts.begin(),fcts.end(),fcts_eff_dim.begin(),(*m_cell_eff_dim));
+
+      uint d = *std::max_element(fcts_eff_dim.begin(),fcts_eff_dim.end());
+
+      (*m_cell_eff_dim)(c) = d;
+      (*m_cell_eff_dim)(p) = d;
+    }
+  }
+
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
     for(uint i = 0 ; i < m_critical_cells.size();++i)
@@ -784,6 +866,26 @@ namespace grid
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
           std::cout<<getCellPairId(c)<<" ";
+        }
+        std::cout<<std::endl;
+      }
+      std::cout<<std::endl;
+    }
+  }
+
+  void dataset_t::log_eff_dim()
+  {
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+    {
+      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+      {
+        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+        {
+          std::cout<<(int)(*m_cell_eff_dim)(c)<<" ";
         }
         std::cout<<std::endl;
       }

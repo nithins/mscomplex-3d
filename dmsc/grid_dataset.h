@@ -76,6 +76,7 @@ namespace grid
     cellflag_array_t   m_cell_flags;
     cellflag_array_t   m_cell_pairs;
     cellflag_array_t   m_cell_mxfct;
+    cellflag_array_t  *m_cell_eff_dim;
     cellid_list_t      m_critical_cells;
 
   public:
@@ -112,6 +113,8 @@ namespace grid
     void  collateCriticalPoints();
 
     void  postMergeFillDiscs(mscomplex_t *msgraph);
+
+    void  aggregateEffCellDim();
 
 
     // dataset interface
@@ -202,6 +205,8 @@ namespace grid
     void log_flags();
 
     void log_pairs();
+
+    void log_eff_dim();
   };
 
   inline uint dataset_t::getCellDim ( cellid_t c ) const

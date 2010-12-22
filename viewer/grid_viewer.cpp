@@ -212,6 +212,7 @@ namespace grid
     {
       m_grid_piece_rens[i]->create_cp_rens(m_roi);
       m_grid_piece_rens[i]->create_grad_rens(m_roi);
+      m_grid_piece_rens[i]->create_structure_rens(m_roi);
     }
   }
 
@@ -244,7 +245,7 @@ namespace grid
 
   configurable_t::data_index_t grid_viewer_t::dim()
   {
-    return data_index_t(11,m_grid_piece_rens.size());
+    return data_index_t(13,m_grid_piece_rens.size());
   }
   bool grid_viewer_t::exchange_field(const data_index_t &i,boost::any &v)
   {
@@ -263,6 +264,9 @@ namespace grid
     case 8: return s_exchange_data_rw(dprd->m_bShowGrad,v);
     case 9: return s_exchange_data_rw(dprd->m_bShowCancCps,v);
     case 10: return s_exchange_data_rw(dprd->m_bShowCancMsGraph,v);
+    case 11: return s_exchange_data_rw(dprd->m_bShowStructure[1],v);
+    case 12: return s_exchange_data_rw(dprd->m_bShowStructure[2],v);
+
     }
 
     throw std::logic_error("unknown index");
@@ -284,6 +288,9 @@ namespace grid
     case 8: v =  std::string("gradient");return EFT_DATA_RW;
     case 9: v =  std::string("cancelled cps");return EFT_DATA_RW;
     case 10: v =  std::string("cancelled cp msgraph");return EFT_DATA_RW;
+    case 11: v =  std::string("structure 1");return EFT_DATA_RW;
+    case 12: v =  std::string("structure 2");return EFT_DATA_RW;
+
     }
 
     throw std::logic_error("unknown index");
@@ -302,6 +309,7 @@ namespace grid
     using namespace boost::lambda;
 
     std::for_each(m_bShowCps,m_bShowCps+gc_grid_dim+1,_1 = false);
+    std::for_each(m_bShowStructure,m_bShowStructure+gc_grid_dim+1,_1 = false);
 
   }
 
@@ -395,6 +403,41 @@ namespace grid
       ren_cp_conns[i].reset(glutils::create_buffered_lines_ren
                             (cp_loc_bo,
                              glutils::make_buf_obj(crit_conn_idxs[i])));
+    }
+
+  }
+
+  void octtree_piece_rendata::create_structure_rens(const rect_t & roi)
+  {
+    if(dp->dataset == NULL)
+      return;
+
+    rect_t r;
+    if(!dp->dataset->get_ext_rect().intersection(roi,r))
+      return;
+
+    std::vector<glutils::vertex_t>  cell_locations[gc_grid_dim+1];
+
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = r[2][0] ; c[2] <= r[2][1]; ++c[2])
+    {
+      for(c[1] = r[1][0] ; c[1] <= r[1][1]; ++c[1])
+      {
+        for(c[0] = r[0][0] ; c[0] <= r[0][1]; ++c[0])
+        {
+          cell_locations[(*dp->dataset->m_cell_eff_dim)(c)].push_back
+              (glutils::vertex_t(c[0],c[1],c[2]));
+        }
+      }
+    }
+
+    for(uint i = 0 ; i < gc_grid_dim+1; ++i)
+    {
+      ren_structure[i].reset(glutils::create_buffered_points_ren
+                        (glutils::make_buf_obj(cell_locations[i])));
     }
 
   }
@@ -518,6 +561,20 @@ namespace grid
           ren_grad[i]->render();
         }
       }
+    }
+
+    for(uint i = 0 ; i < gc_grid_dim+1; ++i)
+    {
+      s_cell_shaders[grid::GRADDIR_ASCENDING]->use();
+
+      if(ren_grad[i] && m_bShowStructure[i])
+      {
+        glColor3dv ( g_disc_colors[grid::GRADDIR_ASCENDING][i].data() );
+
+        ren_structure[i]->render();
+      }
+
+      s_cell_shaders[grid::GRADDIR_ASCENDING]->disable();
     }
 
     glPointSize ( 4.0 );
