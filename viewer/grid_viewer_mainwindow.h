@@ -14,7 +14,6 @@
 
 #include <QGLViewer/qglviewer.h>
 
-#include <ui_grid_viewer_mainwindow.h>
 #include <boost/any.hpp>
 
 class configurable_t;
@@ -35,8 +34,12 @@ namespace grid
     grid_viewer_t *m_ren;
 
     bool m_is_recording;
+    bool m_bf_cull;
+    bool m_wireframe;
 
-    glviewer_t(data_manager_t * p);
+    glviewer_t(QWidget *par);
+
+    void setup(data_manager_t *dm);
 
     ~glviewer_t();
 
@@ -51,6 +54,13 @@ namespace grid
 
   class configurable_item_model;
 
+}
+
+#include <ui_grid_viewer_mainwindow.h>
+
+namespace grid
+{
+
   class viewer_mainwindow:
       public QDialog,
       public Ui::grid_viewer_mainwindow_Dialog
@@ -60,7 +70,6 @@ namespace grid
 
   public:
 
-    glviewer_t              *m_viewer;
     uint                     m_active_otp_idx;
 
     QSortFilterProxyModel   *m_cp_model_proxy;
