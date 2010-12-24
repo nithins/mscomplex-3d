@@ -1,4 +1,5 @@
 #include <queue>
+#include <list>
 
 #include <boost/lambda/lambda.hpp>
 #include <boost/lambda/bind.hpp>
@@ -69,110 +70,6 @@ namespace grid
       dataset->pairCells(c,p);
 
   }
-
-  inline void adjust_boundry_pairing (dataset_t *dataset,cellid_t c)
-  {
-
-    if(dataset->isCellPaired(c) == false)
-      return;
-
-    cellid_t op = dataset->getCellPairId(c);
-
-    if(!dataset->isPairOrientationCorrect(c,op))
-      return;
-
-    cellid_t np;
-
-    cellid_t cf[20];
-
-    uint cf_count = dataset->getCellCofacets ( c,cf );
-
-    bool np_usable = false;
-
-    bool is_c_bndry = dataset->isTrueBoundryCell(c);
-
-    for ( uint i =0 ; i < cf_count;i++ )
-    {
-      bool is_cf_bndry = dataset->isTrueBoundryCell(cf[i]);
-
-      if(dataset->getCellMaxFacetId(cf[i]) == c )
-      {
-        if( is_c_bndry == is_cf_bndry)
-        {
-          if(np_usable == false || dataset->compareCells ( cf[i],np ))
-          {
-            np_usable = true;
-            np = cf[i];
-          }
-        }
-      }
-    }
-
-    ensure_valid_pair(dataset,c,op);
-
-    if(np_usable && np != op)
-    {
-      if(dataset->isCellPaired(np))
-      {
-        cellid_t np_op = dataset->getCellPairId(np);
-
-        if( dataset->areCellsIncident(op,np_op) )
-        {
-          dataset->unpairCells(c,op);
-          dataset->unpairCells(np,np_op);
-          dataset->pairCells(op,np_op);
-          dataset->pairCells(c,np);
-        }
-      }
-    }
-  }
-
-  inline void correct_boundry_pairing (dataset_t *dataset,cellid_t c)
-  {
-
-    if(dataset->isCellPaired(c) == false)
-      return;
-
-    cellid_t op = dataset->getCellPairId(c);
-
-    if(!dataset->isPairOrientationCorrect(c,op))
-      return;
-
-    cellid_t np;
-
-    cellid_t cf[20];
-
-    uint cf_count = dataset->getCellCofacets ( c,cf );
-
-    bool np_usable = false;
-
-    bool is_c_bndry = dataset->isTrueBoundryCell(c);
-
-    for ( uint i =0 ; i < cf_count;i++ )
-    {
-      bool is_cf_bndry = dataset->isTrueBoundryCell(cf[i]);
-
-      if(dataset->getCellMaxFacetId(cf[i]) == c )
-      {
-        if( is_c_bndry == is_cf_bndry)
-        {
-          if(np_usable == false || dataset->compareCells ( cf[i],np ))
-          {
-            np_usable = true;
-            np = cf[i];
-          }
-        }
-      }
-    }
-
-    ensure_valid_pair(dataset,c,op);
-
-    if(!np_usable || np != op)
-    {
-      dataset->unpairCells(c,op);
-    }
-  }
-
 
   void track_gradient_tree_bfs
       (dataset_t *dataset,
@@ -397,44 +294,51 @@ namespace grid
     return get_adj_cell(c,(mxfct&1)?(mxfct+1):(mxfct-1));
   }
 
+  inline bool compareCells_dim
+      (const dataset_t * ds,
+       const cellid_t &c1,
+       const cellid_t &c2,
+       const int & dim)
+  {
+    if(dim == 0)
+      return ds->ptLt(c1,c2);
+
+    cellid_t f1 = ds->getCellMaxFacetId(c1);
+    cellid_t f2 = ds->getCellMaxFacetId(c2);
+
+    if(f1 != f2)
+      return compareCells_dim(ds,f1,f2,dim-1);
+
+    bool is_boundry_c1 = ds->isTrueBoundryCell(c1);
+    bool is_boundry_c2 = ds->isTrueBoundryCell(c2);
+
+    if(is_boundry_c1 != is_boundry_c2)
+      return is_boundry_c1;
+
+    f1 = ds->getCellSecondMaxFacetId(c1);
+    f2 = ds->getCellSecondMaxFacetId(c2);
+
+    return compareCells_dim(ds,f1,f2,dim-1);
+  }
+
   bool dataset_t::compareCells( cellid_t c1,cellid_t  c2 ) const
   {
-    uint c1_dim = getCellDim(c1);
-    uint c2_dim = getCellDim(c2);
+    int c1_dim = getCellDim(c1);
+    int c2_dim = getCellDim(c2);
+
+    cellid_t &p = (c1_dim > c2_dim)?(c1):(c2);
+
+    for(int i = 0 ; i < std::abs(c1_dim-c2_dim);++i)
+      p = getCellMaxFacetId(p);
 
     if(c1 == c2)
-      return false;
+      return (c1_dim < c2_dim);
 
-    if(c1_dim != c2_dim)
-    {
-      cellid_t &p = (c1_dim>c2_dim)?(c1):(c2);
-      uint d  = std::min(c1_dim,c2_dim);
-
-      do p = getCellMaxFacetId(p); while(getCellDim(p) !=d );
-
-      if(c1 == c2)
-        return (c1_dim <c2_dim);
-    }
-
-    if(getCellDim(c1) == 0)
-      return ptLt(c1,c2);
-
-    cellid_t f1 = getCellMaxFacetId(c1);
-    cellid_t f2 = getCellMaxFacetId(c2);
-
-
-    if(f1 == f2)
-    {
-      f1 = getCellSecondMaxFacetId(c1);
-      f2 = getCellSecondMaxFacetId(c2);
-    }
-
-    return compareCells(f1,f2);
+    return compareCells_dim(this,c1,c2,std::min(c1_dim,c2_dim));
   }
 
   uint dataset_t::getCellPoints (cellid_t c,cellid_t  *p) const
   {
-
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
     static_assert(((cell_coord_t)-1) < 0 && "coord_t needs to support -1 ");
@@ -496,6 +400,63 @@ namespace grid
 
     return cf_nv_pos;
 
+  }
+
+  uint dataset_t::getCellCofaces (cellid_t c,cellid_t *cf) const
+  {
+    uint cf_ct = std::pow(3,(gc_grid_dim - getCellDim (c))) ;
+
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    static_assert(((cell_coord_t)-1) < 0 && "coord_t needs to support -1 ");
+
+    uint pos = 0;
+
+    cellid_t i,l = (c+cellid_t::one)&(cellid_t::one);
+
+    for(i[2] = -(l[2]) ; i[2] <= (l[2]) ;i[2]+=1)
+    {
+      for(i[1] = -(l[1]) ; i[1] <= (l[1]) ;i[1]+=1)
+      {
+        for(i[0] = -(l[0]) ; i[0] <= (l[0]) ;i[0]+=1)
+        {
+          cf[pos++] = c+i;
+        }
+      }
+    }
+
+    uint cf_nv_pos = 0;
+
+    for (uint i = 0 ;i < cf_ct;++i)
+      if (m_ext_rect.contains (cf[i]))
+        cf[cf_nv_pos++] = cf[i];
+
+    return cf_nv_pos;
+  }
+
+  uint dataset_t::getCellEst (cellid_t c,cellid_t* est)  const
+  {
+    cellid_list_t cofaces(40);
+
+    cofaces.resize(getCellCofaces(c,cofaces.data()));
+
+    uint pos = 0;
+
+    for(uint i = 0 ; i< cofaces.size();++i)
+    {
+      cellid_t cf = cofaces[i];
+
+      uint c_dim = getCellDim(c);
+      uint cf_dim = getCellDim(cf);
+
+      for(uint j = c_dim; j < cf_dim ; ++j)
+        cf = getCellMaxFacetId(cf);
+
+      if(cf == c)
+        est[pos++] = cofaces[i];
+    }
+
+    return pos;
   }
 
   bool dataset_t::isPairOrientationCorrect (cellid_t c, cellid_t p) const
@@ -576,11 +537,7 @@ namespace grid
   {
     assignMaxFacets();
 
-    assignGradients();
-
-//    assignGradients_boundry_adjustment();
-
-//    assignGradients_boundry_correction();
+    pairCellsWithinEst();
 
     collateCriticalPoints();
 
@@ -641,77 +598,59 @@ namespace grid
     }
   }
 
-  void  dataset_t::assignGradients_boundry_adjustment()
+  void  dataset_t::pairCellsWithinEst()
   {
     using namespace boost::lambda;
 
-    for(uint dim = 1 ; dim <= gc_grid_dim; ++dim)
+    typedef std::list<cellid_t> cellid_llist_t;
+
+    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,this,_1,_2));
+
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; c[2] += 2)
     {
-      cellid_t   seq(cellid_t::zero);
-
-      std::for_each(seq.begin(),seq.begin()+dim,_1=1);
-
-      do
+      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; c[1] += 2)
       {
-        cellid_t c_b = m_rect.lower_corner() + cellid_t::one;
-        cellid_t c_e = m_rect.upper_corner() - cellid_t::one;
-        cellid_t c_i = m_rect.size();
-
-        std::transform(seq.begin(),seq.end(),c_b.begin(),c_b.begin(),_2 -_1);
-        std::transform(seq.begin(),seq.end(),c_e.begin(),c_e.begin(),_2 +_1);
-        std::transform(seq.begin(),seq.end(),c_i.begin(),c_i.begin(),_2*_1+(!_1));
-
-        cellid_t c;
-
-        for(c[2] = c_b[2] ; c[2] <= c_e[2]; c[2] += c_i[2])
+        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; c[0] += 2)
         {
-          for(c[1] = c_b[1] ; c[1] <= c_e[1]; c[1] += c_i[1])
+          cellid_t est_arr[40];
+
+          uint est_ct = getCellEst(c,est_arr);
+
+          std::sort(est_arr,est_arr+est_ct,cmp);
+
+          cellid_llist_t est(est_arr,est_arr+est_ct);
+
+          bool bCanPair = true;
+
+          while(bCanPair)
           {
-            for(c[0] = c_b[0] ; c[0] <= c_e[0]; c[0] += c_i[0])
+            bCanPair = false;
+
+            for(cellid_llist_t::iterator est_it = ++est.begin();est_it != est.end();++est_it)
             {
-              adjust_boundry_pairing(this,c);
+              cellid_t c = *(--est_it),p = *(++est_it);
+
+              if(getCellDim(c)+1      == getCellDim(p)  &&
+                 isTrueBoundryCell(c) == isTrueBoundryCell(p) &&
+                 areCellsIncident(c,p))
+              {
+                pairCells(c,p);
+
+                --est_it;
+
+                est.erase(est_it++);
+                est.erase(est_it++);
+
+                bCanPair = true;
+              }
             }
           }
         }
       }
-      while(std::next_permutation(seq.rbegin(),seq.rend()));
-    }
-  }
-
-  void  dataset_t::assignGradients_boundry_correction()
-  {
-    using namespace boost::lambda;
-
-    for(uint dim = 1 ; dim <= gc_grid_dim; ++dim)
-    {
-      cellid_t   seq(cellid_t::zero);
-
-      std::for_each(seq.begin(),seq.begin()+dim,_1=1);
-
-      do
-      {
-        cellid_t c_b = m_rect.lower_corner() + cellid_t::one;
-        cellid_t c_e = m_rect.upper_corner() - cellid_t::one;
-        cellid_t c_i = m_rect.size();
-
-        std::transform(seq.begin(),seq.end(),c_b.begin(),c_b.begin(),_2 -_1);
-        std::transform(seq.begin(),seq.end(),c_e.begin(),c_e.begin(),_2 +_1);
-        std::transform(seq.begin(),seq.end(),c_i.begin(),c_i.begin(),_2*_1+(!_1));
-
-        cellid_t c;
-
-        for(c[2] = c_b[2] ; c[2] <= c_e[2]; c[2] += c_i[2])
-        {
-          for(c[1] = c_b[1] ; c[1] <= c_e[1]; c[1] += c_i[1])
-          {
-            for(c[0] = c_b[0] ; c[0] <= c_e[0]; c[0] += c_i[0])
-            {
-              correct_boundry_pairing(this,c);
-            }
-          }
-        }
-      }
-      while(std::next_permutation(seq.rbegin(),seq.rend()));
     }
   }
 
@@ -765,6 +704,10 @@ namespace grid
 
     std::sort(c_list.begin(),c_list.end(),cmp);
 
+    cellid_t fcts[20];
+
+    uint fcts_eff_dim[20];
+
     for(int i = 0 ; i< c_list.size();++i)
     {
       c = c_list[i];
@@ -779,17 +722,17 @@ namespace grid
       if(getCellDim(c) < getCellDim(p))
         continue;
 
-      cellid_list_t fcts(20);
+      uint fct_ct = getCellFacets(c,fcts);
 
-      fcts.resize(getCellFacets(c,fcts.data()));
+      for(uint j = 0; j< fct_ct; ++j)
+      {
+        if(fcts[j] == p)
+          fcts_eff_dim[j] = 0;
+        else
+          fcts_eff_dim[j] = (*m_cell_eff_dim)(fcts[j]);
+      }
 
-      fcts.erase(std::find(fcts.begin(),fcts.end(),p));
-
-      std::vector<uint> fcts_eff_dim(fcts.size());
-
-      std::transform(fcts.begin(),fcts.end(),fcts_eff_dim.begin(),(*m_cell_eff_dim));
-
-      uint d = *std::max_element(fcts_eff_dim.begin(),fcts_eff_dim.end());
+      uint d = *std::max_element(fcts_eff_dim,fcts_eff_dim + fct_ct);
 
       (*m_cell_eff_dim)(c) = d;
       (*m_cell_eff_dim)(p) = d;

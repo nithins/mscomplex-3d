@@ -104,9 +104,7 @@ namespace grid
 
     void  assignGradients();
 
-    void  assignGradients_boundry_adjustment();
-
-    void  assignGradients_boundry_correction();
+    void  pairCellsWithinEst();
 
     void  assignMaxFacets();
 
@@ -146,6 +144,10 @@ namespace grid
     inline uint   getCellIncCells( cellid_t ,cellid_t * ) const;
 
     uint   getCellCofacets ( cellid_t ,cellid_t * ) const;
+
+    uint   getCellCofaces ( cellid_t ,cellid_t * ) const;
+
+    uint   getCellEst (cellid_t,cellid_t*) const;
 
     bool   isPairOrientationCorrect ( cellid_t c, cellid_t p ) const;
 
