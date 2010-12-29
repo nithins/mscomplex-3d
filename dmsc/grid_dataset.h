@@ -26,6 +26,8 @@
 
 #include <boost/multi_array.hpp>
 
+#include <boost/shared_ptr.hpp>
+
 #include <grid.h>
 
 namespace grid
@@ -62,17 +64,18 @@ namespace grid
     typedef u_int8_t                                        cell_flag_t;
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
     typedef boost::multi_array_ref<cell_fn_t,gc_grid_dim>   varray_ref_t;
+    typedef boost::shared_ptr<varray_ref_t>                 varray_ref_ptr_t;
 
   public:
 
     rect_t             m_rect;
     rect_t             m_ext_rect;
 
-    varray_ref_t      *m_vert_fns_ref;
+    varray_ref_ptr_t   m_vert_fns_ref;
 
-    cellflag_array_t  *m_cell_flags;
-    cellflag_array_t  *m_cell_pairs;
-    cellflag_array_t  *m_cell_mxfct;
+    cellflag_array_t   m_cell_flags;
+    cellflag_array_t   m_cell_pairs;
+    cellflag_array_t   m_cell_mxfct;
     cellid_list_t      m_critical_cells;
 
   public:
@@ -80,8 +83,6 @@ namespace grid
     // initialization of the dataset
 
     dataset_t ( const rect_t &r,const rect_t &e );
-
-    dataset_t ();
 
     ~dataset_t ();
 

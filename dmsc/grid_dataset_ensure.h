@@ -17,7 +17,7 @@ namespace grid
   {
 #ifdef USE_ENSURE_PREDICATES
 
-    if((*ds->m_cell_mxfct)(c) == dataset_t::CELLADJDIR_UNKNOWN)
+    if(ds->m_cell_mxfct(c) == dataset_t::CELLADJDIR_UNKNOWN)
     {
       std::stringstream ss;
 
