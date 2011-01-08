@@ -166,7 +166,9 @@ namespace grid
       m_ext_rect (e),
       m_cell_flags(cellid_t::zero,boost::fortran_storage_order()),
       m_cell_pairs(cellid_t::zero,boost::fortran_storage_order()),
-      m_cell_mxfct(cellid_t::zero,boost::fortran_storage_order())
+      m_cell_mxfct(cellid_t::zero,boost::fortran_storage_order()),
+      m_cell_efdim_a(cellid_t::zero,boost::fortran_storage_order()),
+      m_cell_efdim_d(cellid_t::zero,boost::fortran_storage_order())
   {
     // TODO: assert that the given rect is of even size..
     //       since each vertex is in the even positions
@@ -185,21 +187,16 @@ namespace grid
 
     rect_size_t   s = m_ext_rect.size() + cellid_t::one;
 
-    m_cell_flags.resize(boost::extents[s[0]][s[1]][s[2]]);
-
-    m_cell_eff_dim = new cellflag_array_t(boost::extents[1+s[0]][1+s[1]][1+s[2]],
-                                         boost::fortran_storage_order());
-
-    m_cell_pairs.resize(boost::extents[s[0]][s[1]][s[2]]);
-
-    m_cell_mxfct.resize(boost::extents[s[0]][s[1]][s[2]]);
+    m_cell_flags.resize(s);
+    m_cell_pairs.resize(s);
+    m_cell_mxfct.resize(s);
+    m_cell_efdim_a.resize(s);
+    m_cell_efdim_d.resize(s);
 
     uint num_cells = s[0]*s[1]*s[2];
 
     std::fill_n(m_cell_flags.data(),num_cells,CELLFLAG_UNKNOWN);
-
     std::fill_n(m_cell_pairs.data(),num_cells,CELLADJDIR_UNKNOWN);
-
     std::fill_n(m_cell_mxfct.data(),num_cells,CELLADJDIR_UNKNOWN);
 
     rect_point_t bl = m_ext_rect.lower_corner();
@@ -207,7 +204,8 @@ namespace grid
     m_cell_flags.reindex (bl);
     m_cell_pairs.reindex (bl);
     m_cell_mxfct.reindex (bl);
-    (*m_cell_eff_dim).reindex (bl);
+    m_cell_efdim_a.reindex (bl);
+    m_cell_efdim_d.reindex (bl);
   }
 
   void  dataset_t::clear()
@@ -217,9 +215,8 @@ namespace grid
     m_cell_flags.resize(cellid_t::zero);
     m_cell_pairs.resize(cellid_t::zero);
     m_cell_mxfct.resize(cellid_t::zero);
-
-    if(m_cell_eff_dim != NULL)
-      delete m_cell_eff_dim;
+    m_cell_efdim_a.resize(cellid_t::zero);
+    m_cell_efdim_d.resize(cellid_t::zero);
   }
 
   void dataset_t::init_fnref(cell_fn_t * pData)
@@ -695,7 +692,9 @@ namespace grid
       {
         for(c[0] = m_ext_rect[0][0] ; c[0] <= m_ext_rect[0][1]; ++c[0])
         {
-          (*m_cell_eff_dim)(c) = getCellDim(c);
+          m_cell_efdim_a(c) = getCellDim(c);
+
+          m_cell_efdim_d(c) = gc_grid_dim - getCellDim(c);
 
           c_list.push_back(c);
         }
@@ -713,9 +712,7 @@ namespace grid
       c = c_list[i];
 
       if(isCellCritical(c))
-      {
         continue;
-      }
 
       p = getCellPairId(c);
 
@@ -729,13 +726,45 @@ namespace grid
         if(fcts[j] == p)
           fcts_eff_dim[j] = 0;
         else
-          fcts_eff_dim[j] = (*m_cell_eff_dim)(fcts[j]);
+          fcts_eff_dim[j] = m_cell_efdim_a(fcts[j]);
       }
 
       uint d = *std::max_element(fcts_eff_dim,fcts_eff_dim + fct_ct);
 
-      (*m_cell_eff_dim)(c) = d;
-      (*m_cell_eff_dim)(p) = d;
+      m_cell_efdim_a(c) = d;
+      m_cell_efdim_a(p) = d;
+    }
+
+    cellid_t cofcts[20];
+
+    uint cofcts_eff_dim[20];
+
+    for(int i = c_list.size() ; i >0 ;--i)
+    {
+      c = c_list[i-1];
+
+      if(isCellCritical(c))
+        continue;
+
+      p = getCellPairId(c);
+
+      if(getCellDim(c) > getCellDim(p))
+        continue;
+
+      uint cofct_ct = getCellCofacets(c,cofcts);
+
+      for(uint j = 0; j< cofct_ct; ++j)
+      {
+        if(cofcts[j] == p)
+          cofcts_eff_dim[j] = 0;
+        else
+          cofcts_eff_dim[j] = m_cell_efdim_d(cofcts[j]);
+      }
+
+      uint d = *std::max_element(cofcts_eff_dim,cofcts_eff_dim + cofct_ct);
+
+      m_cell_efdim_d(c) = d;
+      m_cell_efdim_d(p) = d;
     }
   }
 
@@ -828,7 +857,7 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          std::cout<<(int)(*m_cell_eff_dim)(c)<<" ";
+          std::cout<<(int)m_cell_efdim_a(c)<<(int)m_cell_efdim_d(c)<<" ";
         }
         std::cout<<std::endl;
       }

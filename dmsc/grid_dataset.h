@@ -76,7 +76,8 @@ namespace grid
     cellflag_array_t   m_cell_flags;
     cellflag_array_t   m_cell_pairs;
     cellflag_array_t   m_cell_mxfct;
-    cellflag_array_t  *m_cell_eff_dim;
+    cellflag_array_t   m_cell_efdim_a;
+    cellflag_array_t   m_cell_efdim_d;
     cellid_list_t      m_critical_cells;
 
   public:

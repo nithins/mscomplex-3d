@@ -64,8 +64,8 @@ glutils::color_t g_roiaabb_color = glutils::color_t(0.85,0.75,0.65);
 
 const char * shader_consts[grid::GRADDIR_COUNT]
     = {"const float even_sz = 0.1;"\
-       "const float odd_sz  = 1.0;",
-       "const float even_sz = 1.0;"\
+       "const float odd_sz  = 0.8;",
+       "const float even_sz = 0.8;"\
        "const float odd_sz  = 0.1;"};
 
 namespace grid
@@ -245,7 +245,7 @@ namespace grid
 
   configurable_t::data_index_t grid_viewer_t::dim()
   {
-    return data_index_t(13,m_grid_piece_rens.size());
+    return data_index_t(16,m_grid_piece_rens.size());
   }
   bool grid_viewer_t::exchange_field(const data_index_t &i,boost::any &v)
   {
@@ -264,9 +264,11 @@ namespace grid
     case 8: return s_exchange_data_rw(dprd->m_bShowGrad,v);
     case 9: return s_exchange_data_rw(dprd->m_bShowCancCps,v);
     case 10: return s_exchange_data_rw(dprd->m_bShowCancMsGraph,v);
-    case 11: return s_exchange_data_rw(dprd->m_bShowStructure[1],v);
-    case 12: return s_exchange_data_rw(dprd->m_bShowStructure[2],v);
-
+    case 11: return s_exchange_data_rw(dprd->m_bShowStructure_a[1],v);
+    case 12: return s_exchange_data_rw(dprd->m_bShowStructure_a[2],v);
+    case 13: return s_exchange_data_rw(dprd->m_bShowStructure_d[1],v);
+    case 14: return s_exchange_data_rw(dprd->m_bShowStructure_d[2],v);
+    case 15: return s_exchange_data_rw(dprd->m_bShowStructureIntersection,v);
     }
 
     throw std::logic_error("unknown index");
@@ -288,8 +290,11 @@ namespace grid
     case 8: v =  std::string("gradient");return EFT_DATA_RW;
     case 9: v =  std::string("cancelled cps");return EFT_DATA_RW;
     case 10: v =  std::string("cancelled cp msgraph");return EFT_DATA_RW;
-    case 11: v =  std::string("structure 1");return EFT_DATA_RW;
-    case 12: v =  std::string("structure 2");return EFT_DATA_RW;
+    case 11: v =  std::string("asc struct 1");return EFT_DATA_RW;
+    case 12: v =  std::string("asc struct 2");return EFT_DATA_RW;
+    case 13: v =  std::string("des struct 1");return EFT_DATA_RW;
+    case 14: v =  std::string("des struct 2");return EFT_DATA_RW;
+    case 15: v =  std::string("struct ixn");return EFT_DATA_RW;
 
     }
 
@@ -304,13 +309,12 @@ namespace grid
       m_bShowCancCps(false),
       m_bShowCancMsGraph(false),
       m_bNeedUpdateDiscRens(false),
+      m_bShowStructureIntersection(false),
       dp(_dp)
   {
-    using namespace boost::lambda;
-
-    std::for_each(m_bShowCps,m_bShowCps+gc_grid_dim+1,_1 = false);
-    std::for_each(m_bShowStructure,m_bShowStructure+gc_grid_dim+1,_1 = false);
-
+    std::fill_n(m_bShowCps,gc_grid_dim+1,false);
+    std::fill_n(m_bShowStructure_a,gc_grid_dim+1,false);
+    std::fill_n(m_bShowStructure_d,gc_grid_dim+1,false);
   }
 
   void octtree_piece_rendata::create_cp_loc_bo()
@@ -416,7 +420,10 @@ namespace grid
     if(!dp->dataset->get_ext_rect().intersection(roi,r))
       return;
 
-    std::vector<glutils::vertex_t>  cell_locations[gc_grid_dim+1];
+    std::vector<glutils::vertex_t>  cell_locations_a[gc_grid_dim+1];
+    std::vector<glutils::vertex_t>  cell_locations_d[gc_grid_dim+1];
+    std::vector<glutils::vertex_t>  cell_locations_intersection;
+
 
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
@@ -428,18 +435,29 @@ namespace grid
       {
         for(c[0] = r[0][0] ; c[0] <= r[0][1]; ++c[0])
         {
-          cell_locations[(*dp->dataset->m_cell_eff_dim)(c)].push_back
-              (glutils::vertex_t(c[0],c[1],c[2]));
+          cell_locations_a[dp->dataset->m_cell_efdim_a(c)].push_back(c);
+
+          cell_locations_d[dp->dataset->m_cell_efdim_d(c)].push_back(c);
+
+          if(dp->dataset->m_cell_efdim_d(c) == 1 &&
+             dp->dataset->m_cell_efdim_a(c) == 1 )
+            cell_locations_intersection.push_back(c);
+
         }
       }
     }
 
-    for(uint i = 0 ; i < gc_grid_dim+1; ++i)
+    for(uint i = 1 ; i < gc_grid_dim; ++i)
     {
-      ren_structure[i].reset(glutils::create_buffered_points_ren
-                        (glutils::make_buf_obj(cell_locations[i])));
+      ren_structure_a[i].reset(glutils::create_buffered_points_ren
+                               (glutils::make_buf_obj(cell_locations_a[i])));
+
+      ren_structure_d[i].reset(glutils::create_buffered_points_ren
+                               (glutils::make_buf_obj(cell_locations_d[i])));
     }
 
+    ren_structure_intersection.reset(glutils::create_buffered_points_ren
+                                     (glutils::make_buf_obj(cell_locations_intersection)));
   }
 
   void octtree_piece_rendata::create_grad_rens(const rect_t & roi)
@@ -567,14 +585,43 @@ namespace grid
     {
       s_cell_shaders[grid::GRADDIR_ASCENDING]->use();
 
-      if(ren_grad[i] && m_bShowStructure[i])
+      if(ren_structure_a[i] && m_bShowStructure_a[i])
       {
         glColor3dv ( g_disc_colors[grid::GRADDIR_ASCENDING][i].data() );
 
-        ren_structure[i]->render();
+        ren_structure_a[i]->render();
+      }
+      s_cell_shaders[grid::GRADDIR_ASCENDING]->disable();
+
+      s_cell_shaders[grid::GRADDIR_DESCENDING]->use();
+
+      if(ren_structure_d[i] && m_bShowStructure_d[i])
+      {
+        glColor3dv ( g_disc_colors[grid::GRADDIR_DESCENDING][i].data() );
+
+        ren_structure_d[i]->render();
       }
 
+      s_cell_shaders[grid::GRADDIR_DESCENDING]->disable();
+    }
+
+    if(m_bShowStructureIntersection && ren_structure_intersection)
+    {
+      s_cell_shaders[grid::GRADDIR_ASCENDING]->use();
+
+      glColor3dv ( g_disc_colors[grid::GRADDIR_ASCENDING][1].data() );
+
+      ren_structure_intersection->render();
+
       s_cell_shaders[grid::GRADDIR_ASCENDING]->disable();
+
+      s_cell_shaders[grid::GRADDIR_DESCENDING]->use();
+
+      glColor3dv ( g_disc_colors[grid::GRADDIR_DESCENDING][1].data() );
+
+      ren_structure_intersection->render();
+
+      s_cell_shaders[grid::GRADDIR_DESCENDING]->disable();
     }
 
     glPointSize ( 4.0 );
@@ -646,9 +693,28 @@ namespace grid
     glPopMatrix();
   }
 
+  struct random_color_assigner
+  {
+    boost::shared_ptr<disc_rendata_t> m_drd;
+
+    int m_no;
+
+    static const uint MAX_RAND = 256;
+
+    random_color_assigner(typeof(m_drd) drd,int no):
+        m_drd(drd),m_no(no){}
+
+    void operator()()
+    {
+      for(uint c = 0 ; c < 3 ; ++c)
+        m_drd->color[m_no][c] = ((double) (rand()%MAX_RAND))/((double)MAX_RAND);
+
+    }
+  };
+
   configurable_t::data_index_t octtree_piece_rendata::dim()
   {
-    return data_index_t(6,disc_rds.size());
+    return data_index_t(8,disc_rds.size());
   }
 
   bool octtree_piece_rendata::exchange_field(const data_index_t &i,boost::any &v)
@@ -678,6 +744,10 @@ namespace grid
     case 4:
     case 5:
       return s_exchange_data_rw(drd->color[i[0]%2],v);
+    case 6:
+    case 7:
+      return s_exchange_action(random_color_assigner(drd,i[0]%2),v);
+
     };
 
     throw std::logic_error("invalid index");
@@ -694,6 +764,9 @@ namespace grid
     case 3: v = std::string("asc mfold"); return EFT_DATA_RW;
     case 4: v = std::string("des mfold color"); return EFT_DATA_RW;
     case 5: v = std::string("asc mfold color"); return EFT_DATA_RW;
+    case 6: v = std::string("rand des mfold color"); return EFT_DATA_RW;
+    case 7: v = std::string("rand asc mfold color"); return EFT_DATA_RW;
+
     }
     throw std::logic_error("invalid index");
   }

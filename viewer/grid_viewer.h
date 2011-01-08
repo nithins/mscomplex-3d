@@ -53,7 +53,9 @@ namespace grid
     bool m_bShowGrad;
     bool m_bShowCancCps;
     bool m_bShowCancMsGraph;
-    bool m_bShowStructure[gc_grid_dim+1];
+    bool m_bShowStructure_a[gc_grid_dim+1];
+    bool m_bShowStructure_d[gc_grid_dim+1];
+    bool m_bShowStructureIntersection;
 
     // set externally .. cleared by render
     bool m_bNeedUpdateDiscRens;
@@ -65,7 +67,9 @@ namespace grid
     renderable_sp_t ren_canc_cp_labels[gc_grid_dim+1];
     renderable_sp_t ren_canc_cp[gc_grid_dim+1];
     renderable_sp_t ren_canc_cp_conns[gc_grid_dim];
-    renderable_sp_t ren_structure[gc_grid_dim+1];
+    renderable_sp_t ren_structure_a[gc_grid_dim+1];
+    renderable_sp_t ren_structure_d[gc_grid_dim+1];
+    renderable_sp_t ren_structure_intersection;
 
     glutils::bufobj_ptr_t   cp_loc_bo;
 
