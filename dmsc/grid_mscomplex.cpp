@@ -595,20 +595,13 @@ namespace grid
       if(cp[dir]->isCancelled)
         return false;
 
-    for(uint dir = 0 ; dir < 2; ++dir)
-      if(!msc->m_rect.isOnBoundry(cp[dir]->cellid) &&
-         msc->m_rect.isOnBoundry(cp[dir^1]->cellid))
-      {
-        log_line("rejecting edge:(bndry/nonbndry)",edge_to_string(msc,e));
-        return false;
-      }
+    if(msc->m_rect.isOnBoundry(cp[0]->cellid) !=
+       msc->m_rect.isOnBoundry(cp[1]->cellid))
+      return false;
 
     for(uint dir = 0 ; dir < 2; ++dir)
       if(cp[dir]->conn[dir].count(e[dir^1]) != 1)
-      {
-        log_line("rejecting edge:(incorrect strangulation pair)",edge_to_string(msc,e));
         return false;
-      }
 
     return true;
   }
@@ -663,8 +656,6 @@ namespace grid
           uint_pair_t pr(i,*it);
 
           canc_pair_priq.push(pr);
-
-          std::cout<<"inserting edge to priq"<<edge_to_string(this,pr)<<"\n";
         }
     }
 
@@ -690,15 +681,19 @@ namespace grid
 
       num_canc++;
 
-      std::cout<<"canc no = "<<num_canc<<" edge = "<<edge_to_string(this,pr)<<"\n";
+      std::cout
+          <<   "no = "<<num_canc<<" "
+          << "pers = "<<persistence<<" "
+          <<"index = ("<<(int)m_cps[pr[0]]->index<<","<<(int)m_cps[pr[1]]->index<<") "
+          << "edge = "<<edge_to_string(this,pr)<<" "
+          <<std::endl;
+
 
       std::vector<uint_pair_t> new_edges;
 
       cancelPairs ( this,pr,&new_edges);
 
       mark_cancel_pair(this,pr);
-
-      std::cout<<"new_edge.size() = "<<new_edges.size()<<"\n";
 
       canc_pairs_list.push_back(pr);
 
@@ -716,10 +711,6 @@ namespace grid
     for(uint_pair_list_t::const_reverse_iterator it = canc_pairs_list.rbegin();
     it != canc_pairs_list.rend() ; ++it)
     {
-      log_line("num_uncanc = ",num_uncanc--);
-
-      log_line("uncancelling ",edge_to_string(this,*it));
-
       uncancel_pair(this,*it);
     }
   }

@@ -1,6 +1,8 @@
 #include <queue>
 #include <list>
 
+#include <fstream>
+
 #include <boost/lambda/lambda.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/typeof/typeof.hpp>
@@ -623,13 +625,16 @@ namespace grid
 
           bool bCanPair = true;
 
-          while(bCanPair)
+          int num_rounds = gc_grid_dim;
+
+          while(bCanPair && num_rounds-- != 0)
           {
             bCanPair = false;
 
-            for(cellid_llist_t::iterator est_it = ++est.begin();est_it != est.end();++est_it)
+            for(cellid_llist_t::iterator est_it = est.begin();
+                est_it != est.end() && ++est_it != est.end();)
             {
-              cellid_t c = *(--est_it),p = *(++est_it);
+              cellid_t p = *est_it,c = *--est_it;
 
               if(getCellDim(c)+1      == getCellDim(p)  &&
                  isTrueBoundryCell(c) == isTrueBoundryCell(p) &&
@@ -637,13 +642,13 @@ namespace grid
               {
                 pairCells(c,p);
 
-                --est_it;
-
                 est.erase(est_it++);
                 est.erase(est_it++);
 
                 bCanPair = true;
               }
+              else
+                ++est_it;
             }
           }
         }
@@ -862,6 +867,37 @@ namespace grid
         std::cout<<std::endl;
       }
       std::cout<<std::endl;
+    }
+  }
+
+  void dataset_t::extract_vdata_subarray(rect_t r,const std::string &filename)
+  {
+    if(r.lower_corner()%2 != cellid_t::zero ||
+       r.upper_corner()%2 != cellid_t::zero )
+    {
+      throw std::runtime_error("r must specify an aabb with vertex end pts");
+    }
+
+    std::ofstream ofs(filename.c_str(),std::ios::out|std::ios::binary);
+
+    if(ofs.is_open() == false)
+      throw std::runtime_error("unable to open file");
+
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = r[2][0] ; c[2] <= r[2][1]; c[2] +=2)
+    {
+      for(c[1] = r[1][0] ; c[1] <= r[1][1]; c[1] +=2)
+      {
+        for(c[0] = r[0][0] ; c[0] <= r[0][1]; c[0] +=2)
+        {
+          cell_fn_t fn = get_cell_fn(c);
+
+          ofs.write((char*)(void*)&fn,sizeof(cell_fn_t));
+        }
+      }
     }
   }
 }

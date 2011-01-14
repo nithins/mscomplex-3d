@@ -210,6 +210,8 @@ namespace grid
     void log_pairs();
 
     void log_eff_dim();
+
+    void extract_vdata_subarray(rect_t r,const std::string &filename);
   };
 
   inline uint dataset_t::getCellDim ( cellid_t c ) const
