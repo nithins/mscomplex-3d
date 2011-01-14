@@ -435,6 +435,9 @@ namespace grid
       {
         for(c[0] = r[0][0] ; c[0] <= r[0][1]; ++c[0])
         {
+          if(dp->msgraph->m_id_cp_map.count(c) != 0 )
+            continue;
+
           cell_locations_a[dp->dataset->m_cell_efdim_a(c)].push_back(c);
 
           cell_locations_d[dp->dataset->m_cell_efdim_d(c)].push_back(c);
@@ -714,7 +717,7 @@ namespace grid
 
   configurable_t::data_index_t octtree_piece_rendata::dim()
   {
-    return data_index_t(8,disc_rds.size());
+    return data_index_t(9,disc_rds.size());
   }
 
   bool octtree_piece_rendata::exchange_field(const data_index_t &i,boost::any &v)
@@ -728,7 +731,9 @@ namespace grid
     case 1:
       return s_exchange_data_ro((int)drd->index,v);
     case 2:
+      return s_exchange_data_ro((bool)!dp->dataset->isTrueBoundryCell(drd->cellid),v);
     case 3:
+    case 4:
       {
         bool need_update = false;
 
@@ -741,11 +746,11 @@ namespace grid
 
         return need_update;
       }
-    case 4:
     case 5:
-      return s_exchange_data_rw(drd->color[i[0]%2],v);
     case 6:
+      return s_exchange_data_rw(drd->color[i[0]%2],v);
     case 7:
+    case 8:
       return s_exchange_action(random_color_assigner(drd,i[0]%2),v);
 
     };
@@ -760,12 +765,13 @@ namespace grid
     {
     case 0: v = std::string("cellid"); return EFT_DATA_RO;
     case 1: v = std::string("index"); return EFT_DATA_RO;
-    case 2: v = std::string("des mfold"); return EFT_DATA_RW;
+    case 2: v = std::string("is Interior"); return EFT_DATA_RO;
     case 3: v = std::string("asc mfold"); return EFT_DATA_RW;
-    case 4: v = std::string("des mfold color"); return EFT_DATA_RW;
+    case 4: v = std::string("des mfold"); return EFT_DATA_RW;
     case 5: v = std::string("asc mfold color"); return EFT_DATA_RW;
-    case 6: v = std::string("rand des mfold color"); return EFT_DATA_RW;
+    case 6: v = std::string("des mfold color"); return EFT_DATA_RW;
     case 7: v = std::string("rand asc mfold color"); return EFT_DATA_RW;
+    case 8: v = std::string("rand des mfold color"); return EFT_DATA_RW;
 
     }
     throw std::logic_error("invalid index");

@@ -36,8 +36,6 @@ namespace grid
 
     glPolygonMode ( GL_BACK, GL_LINE );
 
-    setBackgroundColor(Qt::white);
-
     restoreStateFromFile();
 
     m_ren->init();
@@ -157,8 +155,7 @@ namespace grid
   {
     glviewer->m_ren->set_roi_dim_range_nrm(l,u,dim);
 
-    if (m_clear_roi_aabb_timer->isActive() ||
-        glviewer->m_ren->m_bShowRoiBB == false)
+    if (!show_roi_checkBox->isChecked())
     {
       glviewer->m_ren->m_bShowRoiBB = true;
 
@@ -209,11 +206,21 @@ namespace grid
     glviewer->updateGL();
   }
 
-  void viewer_mainwindow::clear_roi_aabb()
+  void viewer_mainwindow::on_show_roi_checkBox_clicked(bool state)
   {
-    glviewer->m_ren->m_bShowRoiBB = false;
+    glviewer->m_ren->m_bShowRoiBB = state;
 
     glviewer->updateGL();
+  }
+
+  void viewer_mainwindow::clear_roi_aabb()
+  {
+    if(!show_roi_checkBox->isChecked())
+    {
+      glviewer->m_ren->m_bShowRoiBB = false;
+
+      glviewer->updateGL();
+    }
   }
 
   viewer_mainwindow::viewer_mainwindow
