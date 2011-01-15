@@ -1,5 +1,5 @@
 #Define the project we are working on
-project(mscomplex-3d)
+project(mscomplex3d)
 
 # Look for various software we need
 cmake_minimum_required(VERSION 2.6)
@@ -9,6 +9,12 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 find_package(Boost COMPONENTS program_options thread serialization regex REQUIRED)
 
 add_subdirectory(utls)
+
+option(PYMOD "build python modlue" ON)
+
+if(PYMOD)
+  add_subdirectory(dmsc_pymod)
+endif(PYMOD)
 
 set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
 
