@@ -292,11 +292,11 @@ namespace grid
 
     uint num_cells = s[0]*s[1]*s[2];
 
-    std::fill_n(m_cell_flags.data(),m_cell_flags.data()+num_cells,CELLFLAG_UNKNOWN);
+    std::fill_n(m_cell_flags.data(),num_cells,CELLFLAG_UNKNOWN);
 
-    std::fill_n(m_cell_pairs.data(),m_cell_pairs.data()+num_cells,CELLADJDIR_UNKNOWN);
+    std::fill_n(m_cell_pairs.data(),num_cells,CELLADJDIR_UNKNOWN);
 
-    std::fill_n(m_cell_mxfct.data(),m_cell_mxfct.data()+num_cells,CELLADJDIR_UNKNOWN);
+    std::fill_n(m_cell_mxfct.data(),num_cells,CELLADJDIR_UNKNOWN);
 
     rect_point_t bl = m_ext_rect.lower_corner();
 
