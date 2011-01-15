@@ -1,42 +1,48 @@
 #include <exception>
 #include <string>
 
-#include <grid_viewer_mainwindow.h>
-#include <grid_datamanager.h>
+#include <config.h>
 
+#ifndef NO_GUI
+#include <grid_viewer_mainwindow.h>
+#endif
+
+#include <grid_datamanager.h>
 #include <cpputils.h>
-#include <iostream>
 
 #include <boost/program_options.hpp>
 
 #include <stdexcept>
+#include <iostream>
 
 using namespace std;
 
 namespace bpo = boost::program_options ;
 
-grid::data_manager_t * s_gdm = NULL;
-
 int main(int ac , char **av)
 {
   string filename;
 
-  grid::cellid_t size;
+  grid::cellid_t dim;
 
   bool   use_ocl = false;
 
   double   simp_tresh= 0.0;
 
+#ifndef NO_GUI
   bool   gui = false;
+#endif
 
   bpo::options_description desc("Allowed options");
   desc.add_options()
       ("help,h", "produce help message")
-      ("file,f",bpo::value<std::string >(), "grid file name")
-      ("size,d", bpo::value<grid::cellid_t >(), "size of grid entered as [x,y,z]")
+      ("file,f",bpo::value<string >(), "grid file name")
+      ("dim,d", bpo::value<grid::cellid_t >(), "dim of grid entered as (x,y,z)")
       ("cl","use OpenCL ")
       ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
+#ifndef NO_GUI
       ("gui,g","show gui")
+#endif
       ;
 
   bpo::variables_map vm;
@@ -45,19 +51,19 @@ int main(int ac , char **av)
 
   if (vm.count("help"))
   {
-    std::cout << desc << "\n";
+    cout << desc << "\n";
     return 1;
   }
 
-  if (vm.count("size"))
-    size = vm["size"].as<grid::cellid_t >();
+  if (vm.count("dim"))
+    dim = vm["dim"].as<grid::cellid_t >();
   else
-    throw std::invalid_argument("no dim specified");
+    throw invalid_argument("no dim specified");
 
   if (vm.count("file"))
-    filename = vm["file"].as<std::string>();
+    filename = vm["file"].as<string>();
   else
-    throw std::invalid_argument("no filename specified");
+    throw invalid_argument("no filename specified");
 
   if (vm.count("cl"))
     use_ocl = true;
@@ -65,18 +71,22 @@ int main(int ac , char **av)
   if (vm.count("simp-tresh"))
     simp_tresh = vm["simp-tresh"].as<double>();
 
+#ifndef NO_GUI
   if (vm.count("gui"))
     gui = true;
+#endif
 
-  s_gdm = new grid::data_manager_t(filename,size,use_ocl,simp_tresh);
+  grid::data_manager_t * gdm = new grid::data_manager_t
+      (filename,dim,use_ocl,simp_tresh);
 
-  s_gdm->work();
+  gdm->work();
 
+#ifndef NO_GUI
   if(gui)
   {
     QApplication application(ac,av);
 
-    grid::viewer_mainwindow gvmw(s_gdm);
+    grid::viewer_mainwindow gvmw(gdm);
 
     gvmw.setWindowTitle("ms complex vis");
 
@@ -86,6 +96,9 @@ int main(int ac , char **av)
   }
   else
   {
-    delete s_gdm;
+    delete gdm;
   }
+#else
+  delete gdm;
+#endif
 }
