@@ -10,7 +10,7 @@ find_package(Boost COMPONENTS program_options thread serialization regex REQUIRE
 
 add_subdirectory(utls)
 
-option(PYMOD "build python modlue" ON)
+option(PYMOD "build python modlue" OFF)
 
 if(PYMOD)
   add_subdirectory(dmsc_pymod)

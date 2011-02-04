@@ -79,9 +79,6 @@ namespace grid
     void collectManifold( octtree_piece  * );
 
     void readDataToMem();
-
-    void logAllConnections(const std::string &prefix);
-
   };
 }
 

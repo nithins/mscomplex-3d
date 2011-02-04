@@ -104,9 +104,11 @@ namespace grid
 
     ~mscomplex_t();
 
-    void write_discs(const std::string &fn_prefix);
+    void write_manifolds(std::ostream &os);
+    void write_graph(std::ostream & os);
 
-    void print_connections(std::ostream & os);
+    void write_manifolds(const std::string &fn);
+    void write_graph(const std::string & fn);
   };
 
   typedef mscomplex_t::critpt_list_t           critpt_list_t;

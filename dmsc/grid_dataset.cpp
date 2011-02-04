@@ -1,3 +1,4 @@
+#include <stack>
 #include <queue>
 #include <list>
 
@@ -17,11 +18,6 @@ namespace bl = boost::lambda;
 
 namespace grid
 {
-  cellid_t get_cp_cellid(mscomplex_t *msgraph,uint idx)
-  {
-    return msgraph->m_cps[idx]->cellid;
-  }
-
   static uint ( dataset_t::*getcets[2] ) ( cellid_t,cellid_t * ) const =
   {
     &dataset_t::getCellFacets,
@@ -127,15 +123,15 @@ namespace grid
   {
     typedef cellid_t id_type;
 
-    std::queue<id_type> cell_queue;
+    std::stack<id_type> cell_stack;
 
-    cell_queue.push ( start_cellId );
+    cell_stack.push ( start_cellId );
 
-    while ( !cell_queue.empty() )
+    while ( !cell_stack.empty() )
     {
-      id_type top_cell = cell_queue.front();
+      id_type top_cell = cell_stack.top();
 
-      cell_queue.pop();
+      cell_stack.pop();
 
       disc->push_back(top_cell);
 
@@ -155,7 +151,7 @@ namespace grid
                  dataset->getCellDim ( next_cell ) &&
                  next_cell != top_cell )
             {
-              cell_queue.push ( next_cell );
+              cell_stack.push ( next_cell );
             }
           }
         }
@@ -540,7 +536,7 @@ namespace grid
 
     collateCriticalPoints();
 
-    aggregateEffCellDim();
+//    aggregateEffCellDim();
   }
 
   void dataset_t::assignMaxFacets()

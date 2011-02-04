@@ -175,43 +175,6 @@ namespace grid
     }
   }
 
-  void print_cp_connections(std::ostream & os,const mscomplex_t &msc,
-                            const conn_set_t &conn)
-  {
-
-    os<<"{ ";
-    for(conn_iter_t it = conn.begin(); it != conn.end(); ++it)
-    {
-      if(msc.m_cps[*it]->is_paired)
-        os<<"*";
-      os<<msc.m_cps[*it]->cellid;
-      os<<", ";
-    }
-    os<<"}";
-  }
-
-
-  void mscomplex_t::print_connections(std::ostream & os)
-  {
-    const char *dir_txt[] = {"des","asc"};
-
-    for(uint i = 0 ; i < m_cps.size();++i)
-    {
-      if(m_cps[i]->is_paired)
-        continue;
-
-      os<<"cellid = "<<m_cps[i]->cellid<<"\n";
-
-      for(uint dir = 0 ; dir <2 ;++dir)
-      {
-        os<<dir_txt[dir]<<"=";
-        print_cp_connections(os,*this,m_cps[i]->conn[dir]);
-        os<<'\n';
-      }
-      os<<'\n';
-    }
-  }
-
   mscomplex_t::~mscomplex_t()
   {
     clear();
@@ -606,26 +569,6 @@ namespace grid
     return true;
   }
 
-  void log_all_to_file(mscomplex_t *msc,std::string filename,int filenno)
-  {
-    std::stringstream ss;
-    ss<<filename;
-
-    if(filenno >=0 )
-      ss<<"-"<<filenno;
-
-    ss<<".txt";
-
-    std::fstream of(ss.str().c_str(),std::ios::out);
-
-    if(!of.is_open())
-      throw std::runtime_error("unable to open file");
-
-    msc->print_connections(of);
-
-    of.close();
-  }
-
   void mscomplex_t::simplify(uint_pair_list_t & canc_pairs_list,
                              double simplification_treshold)
   {
@@ -663,8 +606,6 @@ namespace grid
 
     uint num_canc = 0;
 
-    log_all_to_file(this,"ms_conns",num_canc);
-
     while (canc_pair_priq.size() !=0)
     {
       uint_pair_t pr = canc_pair_priq.top();
@@ -700,8 +641,6 @@ namespace grid
       for(uint i = 0 ; i < new_edges.size(); i++)
         canc_pair_priq.push(new_edges[i]);
     }
-
-    log_all_to_file(this,"final_msc",-1);
   }
 
   void mscomplex_t::un_simplify(const uint_pair_list_t &canc_pairs_list)
@@ -772,46 +711,101 @@ namespace grid
     }
   }
 
-  void write_disc(const critpt_disc_t *disc,
-                  const std::string &prefix,
-                  const cellid_t &c )
+  void mscomplex_t::write_manifolds(std::ostream &os)
   {
-
-    std::stringstream ss;
-    ss<<prefix;
-    ((std::ostream&)ss)<<c;
-
-    std::ofstream os;
-
-    os.open(ss.str().c_str(),std::ios::out|std::ios::ate|std::ios::app|std::ios::binary);
-
-
-    if(os.is_open() == false)
-      throw std::runtime_error("asc/des disc file not writeable");
-    os.write((const char*)(const void*)disc->data(),disc->size()*sizeof(cellid_t));
-
-    os.close();
-  }
-
-  void mscomplex_t::write_discs(const std::string &fn_prefix)
-  {
-    critpt_t * cp ;
+    const char *mfold_txt[] = {"des","asc"};
 
     for(uint i = 0 ; i < m_cps.size();++i)
     {
-      cp = m_cps[i];
+      critpt_t * cp = m_cps[i];
 
       if(cp->is_paired == true)
         continue;
 
-      if(cp->disc[0].size() != 0 )
-        write_disc(&cp->disc[0],fn_prefix+"des_",cp->cellid);
+      for(uint dir = 0 ; dir <2 ;++dir)
+      {
+        std::set<cellid_t> cset;
 
-      if(cp->disc[1].size() != 0 )
-        write_disc(&cp->disc[1],fn_prefix+"asc_",cp->cellid);
+        for(uint j = 0 ; j < cp->contrib[dir].size();++j)
+        {
+          critpt_t *cp_contrib = m_cps[cp->contrib[dir][j]];
 
+          for(uint k = 0; k < cp_contrib->disc[dir].size(); ++k)
+          {
+            cellid_t c = cp_contrib->disc[dir][k];
+
+            if(cset.count(c) == 0)
+              cset.insert(c);
+          }
+        }
+
+        os<<mfold_txt[dir]<<" "<<cp->cellid<<" "<<cset.size()<<"\n";
+
+        std::copy(cset.begin(),cset.end(),
+                  std::ostream_iterator<cellid_t>(os,"\n"));
+
+        os<<std::endl;
+      }
     }
   }
+
+  void mscomplex_t::write_manifolds(const std::string &fn)
+  {
+    std::fstream os(fn.c_str(),std::ios::out);
+
+    if(os.is_open() == false)
+      throw std::runtime_error(std::string("failed to open file :")+fn);
+
+    write_manifolds((std::ostream&)os);
+
+    os.close();
+  }
+
+  cellid_t get_cp_cellid(mscomplex_t *msc,uint idx)
+  {
+    return msc->m_cps[idx]->cellid;
+  }
+
+  void mscomplex_t::write_graph(std::ostream & os)
+  {
+    const char *conn_txt[] = {"des","asc"};
+
+    for(uint i = 0 ; i < m_cps.size();++i)
+    {
+      critpt_t * cp = m_cps[i];
+
+      if(cp->is_paired)
+        continue;
+
+      if(cp->is_paired == true)
+        continue;
+
+      for(uint dir = 0 ; dir <2 ;++dir)
+      {
+        os<<conn_txt[dir]<<" "<<cp->cellid<<" "<<cp->conn[dir].size()<<"\n";
+
+        std::transform(cp->conn[dir].begin(),cp->conn[dir].end(),
+                       std::ostream_iterator<cellid_t>(os,"\n"),
+                       boost::bind1st(get_cp_cellid,this));
+
+        os<<std::endl;
+      }
+      os<<std::endl;
+    }
+  }
+
+  void mscomplex_t::write_graph(const std::string &fn)
+  {
+    std::fstream os(fn.c_str(),std::ios::out);
+
+    if(os.is_open() == false)
+      throw std::runtime_error(std::string("failed to open file :")+fn);
+
+    write_graph(os);
+
+    os.close();
+  }
+
 }
 
 

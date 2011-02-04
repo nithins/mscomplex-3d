@@ -168,32 +168,9 @@ namespace grid
     _LOG ( "Finished Processing       " );
     _LOG ( "==========================" );
 
-  }
+    m_pieces[0]->msgraph->write_manifolds("msc_manifolds.txt");
 
-  void data_manager_t::logAllConnections(const std::string &prefix)
-  {
-
-    for(uint i = 0 ; i <m_pieces.size();++i)
-    {
-      octtree_piece *dp = m_pieces[i];
-
-      std::string filename(prefix+dp->label()+string(".txt"));
-
-      ofstream outfile;
-      outfile.open(filename.c_str(),  std::ios::out|std::ios::trunc);
-
-      if(outfile.is_open() == false )
-      {
-        _LOG("failed to open log file");
-        break;
-      }
-
-      std::stringstream ss;
-
-      dp->msgraph->print_connections( (ostream&)ss);
-
-      outfile<<ss.str();
-    }
+    m_pieces[0]->msgraph->write_graph("msc_graph.txt");
 
   }
 
