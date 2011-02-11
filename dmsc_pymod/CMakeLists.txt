@@ -2,7 +2,7 @@ project(pymscomplex3d)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${mscomplex3d_SOURCE_DIR}/cmake)
 
-find_package(Boost COMPONENTS program_options thread serialization regex python REQUIRED)
+find_package(Boost COMPONENTS python REQUIRED)
 
 find_package(PythonLibs REQUIRED)
 

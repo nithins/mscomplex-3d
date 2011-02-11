@@ -779,8 +779,6 @@ namespace grid
 
     for(uint i = 0 ; i < m_critical_cells.size();++i)
     {
-      std::cout<<i<<" of "<<m_critical_cells.size()<<" c ="<<m_critical_cells[i]<<"\n";
-
       track_gradient_tree_bfs
           (this,msgraph,m_critical_cells[i],GRADDIR_DESCENDING);
     }

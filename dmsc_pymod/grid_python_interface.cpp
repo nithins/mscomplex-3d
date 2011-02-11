@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include <boost/python.hpp>
 #include <boost/python/object.hpp>
 #include <boost/python/stl_iterator.hpp>
@@ -6,38 +8,37 @@
 #include <grid.h>
 #include <grid_datamanager.h>
 
-using namespace boost::python;
-using namespace grid;
+namespace bp = boost::python;
 
-void cellid_assign(cellid_t& c, object o)
+namespace grid
 {
-  stl_input_iterator<cell_coord_t> b(o), e;
+  cellid_t tup_to_cellid(bp::object pobj)
+  {
+    bp::tuple dim_tup = bp::extract<bp::tuple>(pobj);
 
-  cellid_t::iterator o_b = c.begin(),o_e = c.end();
+    cellid_t c;
 
-  while ( b != e && o_b != o_e)
-    *o_b++ = *b++;
+    for(int i = 0 ; i < c.size() ; ++i)
+      c[i] = bp::extract<cell_coord_t>(dim_tup[i]);
+
+    return c;
+  }
+
+  boost::shared_ptr<data_manager_t> make_data_manager
+      (std::string f,bp::object c,bool use_ocl,double t)
+  {
+    return boost::shared_ptr<data_manager_t>
+        (new data_manager_t(f,tup_to_cellid(c),use_ocl,t));
+  }
 }
+
+using namespace grid;
 
 BOOST_PYTHON_MODULE(pymscomplex3d)
 {
-  class_<cellid_t>("cellid_t", init<>())
-      .def(init<cell_coord_t,cell_coord_t,cell_coord_t>())
-      .def("__iter__", iterator<cellid_t >())
-      .def("assign", &cellid_assign)
-      .def(self + other<cellid_t>())
-      .def(self - other<cellid_t>())
-      .def(self * other<cellid_t>())
-      .def(self / other<cellid_t>())
-      .def(self < other<cellid_t>())
-      .def(self + other<cell_coord_t>())
-      .def(self - other<cell_coord_t>())
-      .def(self * other<cell_coord_t>())
-      .def(self / other<cell_coord_t>())
-      .def("__str__",&boost::lexical_cast<std::string,cellid_t>)
-      ;
 
-  class_<data_manager_t>("data_manager_t",init<std::string,cellid_t,bool,double>())
-      .def("work", &data_manager_t::work)
-      ;
+  bp::class_<data_manager_t, boost::shared_ptr<data_manager_t> >
+      ("data_manager_t",bp::no_init)
+      .def("__init__", bp::make_constructor(make_data_manager))
+      .def("work", &data_manager_t::work);
 }
