@@ -183,7 +183,7 @@ namespace grid
   {
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
-    rect_size_t   s = m_ext_rect.size() + cellid_t::one;
+    rect_size_t   s = m_ext_rect.span() + cellid_t::one;
 
     m_cell_flags.resize(s);
     m_cell_pairs.resize(s);
@@ -219,7 +219,7 @@ namespace grid
 
   void dataset_t::init_fnref(cell_fn_t * pData)
   {
-    rect_size_t   s = m_ext_rect.size();
+    rect_size_t   s = m_ext_rect.span();
 
     rect_point_t bl = m_ext_rect.lower_corner();
 
