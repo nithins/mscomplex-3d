@@ -47,6 +47,15 @@ namespace grid
 #endif
   }
 
+  inline void ensure_in_box(const dataset_t *ds , cellid_t c)
+  {
+#ifdef USE_ENSURE_PREDICATES
+    if(ds->m_ext_rect.contains(c) == false)
+      throw std::logic_error("falied to ensure containment");
+#endif
+  }
+
+
   inline void ensure_cell_incidence(cellid_t c1,cellid_t c2)
   {
 #ifdef USE_ENSURE_PREDICATES

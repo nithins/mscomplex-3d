@@ -23,12 +23,13 @@ namespace grid
 
   }
 
-  void mscomplex_t::add_critpt(cellid_t c,uchar i,cell_fn_t f)
+  void mscomplex_t::add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t vert_cell)
   {
-    critpt_t * cp = new critpt_t;
-    cp->cellid    = c;
-    cp->index     = i;
-    cp->fn        = f;
+    critpt_t * cp  = new critpt_t;
+    cp->cellid     = c;
+    cp->index      = i;
+    cp->fn         = f;
+    cp->vert_cell  = vert_cell;
     m_id_cp_map.insert(std::make_pair(c,m_cps.size()));
     m_cps.push_back(cp);
   }
@@ -43,7 +44,6 @@ namespace grid
 
   bool is_saddle_extremum_pair(mscomplex_t * msc,uint_pair_t e)
   {
-
     order_pr_by_cp_index(msc,e);
 
     ensure_index_one_separation(msc,e);
@@ -503,49 +503,60 @@ namespace grid
 
     persistence_comparator_t(mscomplex_t *m):m_msc(m){}
 
-    bool operator()(const uint_pair_t & p1, const uint_pair_t &p2)
+    bool operator()(const uint_pair_t & p0, const uint_pair_t &p1)
     {
-      cell_fn_t f1 = m_msc->m_cps[p1[0]]->fn;
-      cell_fn_t f2 = m_msc->m_cps[p1[1]]->fn;
-      cell_fn_t f3 = m_msc->m_cps[p2[0]]->fn;
-      cell_fn_t f4 = m_msc->m_cps[p2[1]]->fn;
-
-      cell_fn_t d1 = std::abs(f2-f1);
-      cell_fn_t d2 = std::abs(f4-f3);
-
-      if(d1 != d2)
-        return d1>d2;
-
-      if(is_saddle_extremum_pair(m_msc,p1) && !is_saddle_extremum_pair(m_msc,p2))
-        return false;
-
-      if(is_saddle_extremum_pair(m_msc,p2) && !is_saddle_extremum_pair(m_msc,p1))
-        return true;
-
-      cellid_t c1 = m_msc->m_cps[p1[0]]->cellid;
-      cellid_t c2 = m_msc->m_cps[p1[1]]->cellid;
-
-      cellid_t c3 = m_msc->m_cps[p1[0]]->cellid;
-      cellid_t c4 = m_msc->m_cps[p1[1]]->cellid;
-
-      d1 = dot_product((c1-c2),(c1-c2));
-      d2 = dot_product((c3-c4),(c3-c4));
-
-      if(d1 != d2)
-        return d1>d2;
-
-      if(c1 > c2)
-        std::swap(c1,c2);
-
-      if(c3 > c4)
-        std::swap(c3,c4);
-
-      if(c1 != c3)
-        return c1 > c3;
-
-      return c2 > c4;
+      return cmp_lt(p1,p0);
     }
 
+    bool cmp_lt(uint_pair_t p0, uint_pair_t p1)
+    {
+      order_pr_by_cp_index(m_msc,p0);
+      order_pr_by_cp_index(m_msc,p1);
+
+      cellid_t v00 = m_msc->m_cps[p0[0]]->vert_cell;
+      cellid_t v01 = m_msc->m_cps[p0[1]]->vert_cell;
+      cellid_t v10 = m_msc->m_cps[p1[0]]->vert_cell;
+      cellid_t v11 = m_msc->m_cps[p1[1]]->vert_cell;
+
+      cellid_t c00 = m_msc->m_cps[p0[0]]->cellid;
+      cellid_t c01 = m_msc->m_cps[p0[1]]->cellid;
+      cellid_t c10 = m_msc->m_cps[p1[0]]->cellid;
+      cellid_t c11 = m_msc->m_cps[p1[1]]->cellid;
+
+      if( (v00 == v01 ) != (v10 == v11))
+        return (v00 == v01 );
+
+      if( (v00 == v01 ) &&(v10 == v11))
+      {
+        if(v00 == v10)
+        {
+          if(c00 != c10)
+            return c00 < c10;
+          else
+            return c01 < c11;
+        }
+        else
+        {
+          return (v00 < v10);
+        }
+      }
+
+      cell_fn_t f00 = m_msc->m_cps[p0[0]]->fn;
+      cell_fn_t f01 = m_msc->m_cps[p0[1]]->fn;
+      cell_fn_t f10 = m_msc->m_cps[p1[0]]->fn;
+      cell_fn_t f11 = m_msc->m_cps[p1[1]]->fn;
+
+      cell_fn_t d1 = std::abs(f01-f00);
+      cell_fn_t d2 = std::abs(f11-f10);
+
+      if(d1 != d2)
+        return d1 < d2;
+
+      if(c00 != c10)
+        return c00 < c10;
+
+      return c01 < c11;
+    }
   };
 
   bool is_valid_canc_edge(mscomplex_t *msc,uint_pair_t e )
@@ -569,8 +580,13 @@ namespace grid
     return true;
   }
 
+  bool is_epsilon_persistent(mscomplex_t *msc,uint_pair_t e )
+  {
+    return (msc->m_cps[e[0]]->vert_cell == msc->m_cps[e[1]]->vert_cell);
+  }
+
   void mscomplex_t::simplify(uint_pair_list_t & canc_pairs_list,
-                             double simplification_treshold)
+                               double simplification_treshold)
   {
     typedef std::priority_queue
         <uint_pair_t,uint_pair_list_t,persistence_comparator_t>
@@ -580,7 +596,7 @@ namespace grid
 
     canc_pair_priq_t  canc_pair_priq(comp);
 
-    // add every edge in the descending manifold of the critical point
+
 
     cell_fn_t max_val = std::numeric_limits<cell_fn_t>::min();
     cell_fn_t min_val = std::numeric_limits<cell_fn_t>::max();
@@ -594,17 +610,17 @@ namespace grid
       min_val = std::min(min_val,m_cps[i]->fn);
 
       for(const_conn_iter_t it = cp->conn[0].begin();it != cp->conn[0].end() ;++it)
+      {
         if(is_valid_canc_edge(this,uint_pair_t(i,*it)))
-        {
-          uint_pair_t pr(i,*it);
-
-          canc_pair_priq.push(pr);
-        }
+          canc_pair_priq.push(uint_pair_t(i,*it));
+      }
     }
 
-    cell_fn_t max_persistence = max_val - min_val;
+    double max_persistence = max_val - min_val;
 
-    uint num_canc = 0;
+    uint num_cancellations = 0;
+
+    uint num_cancellations_eps = 0;
 
     while (canc_pair_priq.size() !=0)
     {
@@ -612,46 +628,51 @@ namespace grid
 
       canc_pair_priq.pop();
 
+      double persistence = std::abs(m_cps[pr[0]]->fn-m_cps[pr[1]]->fn)/max_persistence;
+
       if(is_valid_canc_edge(this,pr) == false)
         continue;
 
-      cell_fn_t persistence = std::abs(m_cps[pr[0]]->fn-m_cps[pr[1]]->fn);
-
-      if((double)persistence/(double)max_persistence > simplification_treshold)
-        break;
-
-      num_canc++;
+      if(is_epsilon_persistent(this,pr) == false)
+      {
+        if(persistence >= simplification_treshold)
+          break;
+      }
+      else
+      {
+        num_cancellations_eps++;
+      }
 
       std::cout
-          <<   "no = "<<num_canc<<" "
-          << "pers = "<<persistence<<" "
-          <<"index = ("<<(int)m_cps[pr[0]]->index<<","<<(int)m_cps[pr[1]]->index<<") "
-          << "edge = "<<edge_to_string(this,pr)<<" "
-          <<std::endl;
+             <<   "no = "<<num_cancellations<<" "
+             << "pers = "<<persistence<<" "
+             <<"index = ("<<(int)m_cps[pr[0]]->index<<","<<(int)m_cps[pr[1]]->index<<") "
+             << "edge = "<<edge_to_string(this,pr)<<" "
+             <<std::endl;
 
-
-      std::vector<uint_pair_t> new_edges;
+      uint_pair_list_t new_edges;
 
       cancelPairs ( this,pr,&new_edges);
+      num_cancellations++;
 
       mark_cancel_pair(this,pr);
 
       canc_pairs_list.push_back(pr);
 
       for(uint i = 0 ; i < new_edges.size(); i++)
+      {
         canc_pair_priq.push(new_edges[i]);
+      }
     }
+    std::cout<<"num_cancellations::"<<(num_cancellations)<<std::endl;
+    std::cout<<"num_cancellations_eps::"<<(num_cancellations_eps)<<std::endl;
   }
 
   void mscomplex_t::un_simplify(const uint_pair_list_t &canc_pairs_list)
   {
-    uint num_uncanc = canc_pairs_list.size();
-
     for(uint_pair_list_t::const_reverse_iterator it = canc_pairs_list.rbegin();
     it != canc_pairs_list.rend() ; ++it)
-    {
       uncancel_pair(this,*it);
-    }
   }
 
   void mscomplex_t::simplify_un_simplify(double simplification_treshold)
@@ -667,46 +688,45 @@ namespace grid
   {
     for(uint i = 0 ; i < m_cps.size(); ++i)
     {
-      if(m_cps[i]->is_paired)
-      {
-        uint_pair_t e(i,m_cps[i]->pair_idx);
-
-        critpt_t * cp[] = {m_cps[e[0]],m_cps[e[1]]};
-
-        if(cp[0]->index > cp[1]->index)
-        {
-          ensure_ordered_index_one_separation(this,e);
-
-          ensure_pairing(this,e);
-
-          for(uint dir = 0 ; dir < 2 ;++dir)
-          {
-            bool need_disc = false;
-
-            conn_iter_t it ;
-
-            for(it = cp[dir]->conn[dir].begin(); it != cp[dir]->conn[dir].end(); ++it)
-            {
-              ensure_cp_is_not_paired(this,*it);
-
-              m_cps[*it]->contrib[dir^1].push_back(e[dir^1]);
-
-              need_disc = true;
-            }
-
-            if(need_disc)
-              cp[dir^1]->disc[dir^1].push_back(cp[dir^1]->cellid);
-
-          }
-        }
-      }
-      else
+      if(!m_cps[i]->is_paired)
       {
         for(uint dir = 0 ; dir < 2 ;++dir)
         {
           m_cps[i]->disc[dir].push_back(m_cps[i]->cellid);
           m_cps[i]->contrib[dir].push_back(i);
         }
+        continue;
+      }
+
+      uint_pair_t e(i,m_cps[i]->pair_idx);
+
+      order_pr_by_cp_index(this,e);
+
+      if(e[0] != i) continue;
+
+      critpt_t * cp[] = {m_cps[e[0]],m_cps[e[1]]};
+
+      ensure_ordered_index_one_separation(this,e);
+
+      ensure_pairing(this,e);
+
+      for(uint dir = 0 ; dir < 2 ;++dir)
+      {
+        bool need_disc = false;
+
+        for(conn_iter_t it  = cp[dir]->conn[dir].begin();
+                        it != cp[dir]->conn[dir].end(); ++it)
+        {
+          ensure_cp_is_not_paired(this,*it);
+
+          m_cps[*it]->contrib[dir^1].push_back(e[dir^1]);
+
+          need_disc = true;
+        }
+
+        if(need_disc)
+          cp[dir^1]->disc[dir^1].push_back(cp[dir^1]->cellid);
+
       }
     }
   }

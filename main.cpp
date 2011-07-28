@@ -3,7 +3,7 @@
 
 #include <config.h>
 
-#ifndef NO_GUI
+#ifdef BUILD_EXEC_GUI
 #include <grid_viewer_mainwindow.h>
 #endif
 
@@ -29,7 +29,7 @@ int main(int ac , char **av)
 
   double   simp_tresh= 0.0;
 
-#ifndef NO_GUI
+#ifdef BUILD_EXEC_GUI
   bool   gui = false;
 #endif
 
@@ -40,7 +40,7 @@ int main(int ac , char **av)
       ("dim,d", bpo::value<grid::cellid_t >(), "dim of grid entered as (x,y,z)")
       ("cl","use OpenCL ")
       ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
-#ifndef NO_GUI
+#ifdef BUILD_EXEC_GUI
       ("gui,g","show gui")
 #endif
       ;
@@ -71,7 +71,7 @@ int main(int ac , char **av)
   if (vm.count("simp-tresh"))
     simp_tresh = vm["simp-tresh"].as<double>();
 
-#ifndef NO_GUI
+#ifdef BUILD_EXEC_GUI
   if (vm.count("gui"))
     gui = true;
 #endif
@@ -81,7 +81,7 @@ int main(int ac , char **av)
 
   gdm->work();
 
-#ifndef NO_GUI
+#ifdef BUILD_EXEC_GUI
   if(gui)
   {
     QApplication application(ac,av);

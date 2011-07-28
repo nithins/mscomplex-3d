@@ -25,10 +25,10 @@ namespace grid
   }
 
   boost::shared_ptr<data_manager_t> make_data_manager
-      (std::string f,bp::object c,bool use_ocl,double t)
+      (std::string f,bp::object dim,int ml,double t)
   {
     return boost::shared_ptr<data_manager_t>
-        (new data_manager_t(f,tup_to_cellid(c),use_ocl,t));
+        (new data_manager_t(f,tup_to_cellid(dim),ml,t));
   }
 }
 

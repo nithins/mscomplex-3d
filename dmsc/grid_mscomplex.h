@@ -44,6 +44,7 @@ namespace grid
     uint         pair_idx;
     cell_fn_t    fn;
     uchar        index;
+    cellid_t     vert_cell;
 
     bool isCancelled;
     bool is_paired;
@@ -80,7 +81,7 @@ namespace grid
 
     void connect_cps(uint_pair_t p);
 
-    void add_critpt(cellid_t c,uchar i,cell_fn_t f);
+    void add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t vert_cell);
 
     void simplify(uint_pair_list_t &,double simplification_treshold);
 

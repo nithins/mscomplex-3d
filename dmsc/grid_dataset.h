@@ -62,6 +62,7 @@ namespace grid
 
 
     typedef u_int8_t                                        cell_flag_t;
+    typedef boost::multi_array<cellid_t,gc_grid_dim>        cellid_array_t;
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
     typedef boost::multi_array_ref<cell_fn_t,gc_grid_dim>   varray_ref_t;
     typedef boost::shared_ptr<varray_ref_t>                 varray_ref_ptr_t;
@@ -108,6 +109,8 @@ namespace grid
     void  pairCellsWithinEst();
 
     void  assignMaxFacets();
+
+    void  markFakeBoundryCritical();
 
     void  collateCriticalPoints();
 
@@ -208,6 +211,8 @@ namespace grid
     void log_flags();
 
     void log_pairs();
+
+    void log_max_facets();
 
     void log_eff_dim();
 

@@ -31,9 +31,9 @@ glutils::color_t g_grid_cp_colors[] =
 
 glutils::color_t g_grid_grad_colors[] =
 {
-  glutils::color_t(0.0,0.5,0.5 ),
-  glutils::color_t(0.5,0.0,0.5 ),
-  glutils::color_t(0.5,0.5,0.0 ),
+  glutils::color_t(0.0,0.0,1.0 ),
+  glutils::color_t(0.0,1.0,0.0 ),
+  glutils::color_t(1.0,0.0,0.0 ),
 };
 
 glutils::color_t g_disc_colors[grid::GRADDIR_COUNT][grid::gc_grid_dim+1] =
@@ -573,14 +573,18 @@ namespace grid
 
     if(m_bShowGrad)
     {
-      for(uint i = 0 ; i < gc_grid_dim; ++i)
+      int i = 2;
+      //for(uint i = 0 ; i < gc_grid_dim; ++i)
       {
+        glLineWidth(4.0);
+
         if(ren_grad[i])
         {
           glColor3dv ( g_grid_grad_colors[i].data() );
 
           ren_grad[i]->render();
         }
+        glLineWidth(1.0);
       }
     }
 

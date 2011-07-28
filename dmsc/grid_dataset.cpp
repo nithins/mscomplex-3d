@@ -16,6 +16,8 @@
 
 namespace bl = boost::lambda;
 
+using namespace std;
+
 namespace grid
 {
   static uint ( dataset_t::*getcets[2] ) ( cellid_t,cellid_t * ) const =
@@ -70,43 +72,54 @@ namespace grid
   }
 
   void track_gradient_tree_bfs
-      (dataset_t *dataset,
+      (dataset_t *ds,
        mscomplex_t *msgraph,
        cellid_t start_cellId,
-       eGradientDirection gradient_dir
-       )
+       eGradientDirection gradient_dir,
+       dataset_t::cellflag_array_t &visitmark)
   {
-    std::queue<cellid_t> cell_queue;
+    using namespace boost::lambda;
 
-    cell_queue.push ( start_cellId );
+    std::stack<cellid_t> cell_stack;
 
-    while ( !cell_queue.empty() )
+    cell_stack.push ( start_cellId );
+
+    uint dim = ds->getCellDim(start_cellId);
+
+    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,ds,_1,_2));
+
+    while ( !cell_stack.empty() )
     {
-      cellid_t top_cell = cell_queue.front();
+      cellid_t top_cell = cell_stack.top();
 
-      cell_queue.pop();
+      visitmark(top_cell) = 1;
+
+      cell_stack.pop();
 
       cellid_t      cets[20];
 
-      uint cet_ct = ( dataset->*getcets[gradient_dir] ) ( top_cell,cets );
+      uint cet_ct = ( ds->*getcets[gradient_dir] ) ( top_cell,cets );
 
       for ( uint i = 0 ; i < cet_ct ; i++ )
       {
-        if ( dataset->isCellCritical ( cets[i] ) )
+        if ( ds->isCellCritical ( cets[i] ) )
         {
-          msgraph->connect_cps(start_cellId,cets[i]);
+          if(!ds->isCellPaired(cets[i]) || dim == ds->getCellDim(ds->getCellPairId(cets[i])))
+            msgraph->connect_cps(start_cellId,cets[i]);
         }
         else
         {
-          if ( !dataset->isCellExterior ( cets[i] ) )
+          //if ( !ds->isCellExterior ( cets[i] ) )
           {
-            cellid_t next_cell = dataset->getCellPairId ( cets[i] );
+            cellid_t next_cell = ds->getCellPairId ( cets[i] );
 
-            if ( dataset->getCellDim ( top_cell ) ==
-                 dataset->getCellDim ( next_cell ) &&
-                 next_cell != top_cell )
+            bool is_dim = (dim  == ds->getCellDim ( next_cell ));
+            bool is_vnext = cmp(next_cell,top_cell);
+
+            if (is_dim  &&  is_vnext )
             {
-              cell_queue.push ( next_cell );
+              cell_stack.push ( next_cell );
+
             }
           }
         }
@@ -115,13 +128,17 @@ namespace grid
   }
 
   void compute_disc_bfs
-      (dataset_t *dataset,
+      (dataset_t *ds,
        critpt_disc_t *disc,
        cellid_t start_cellId,
        eGradientDirection gradient_dir
        )
   {
     typedef cellid_t id_type;
+
+    using namespace boost::lambda;
+
+    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,ds,_1,_2));
 
     std::stack<id_type> cell_stack;
 
@@ -137,19 +154,20 @@ namespace grid
 
       id_type cets[20];
 
-      uint cet_ct = ( dataset->*getcets[gradient_dir] ) ( top_cell,cets );
+      uint cet_ct = ( ds->*getcets[gradient_dir] ) ( top_cell,cets );
 
       for ( uint i = 0 ; i < cet_ct ; i++ )
       {
-        if ( !dataset->isCellCritical ( cets[i] ) )
+        if ( !ds->isCellCritical ( cets[i] ) )
         {
-          if ( !dataset->isCellExterior ( cets[i] ) )
+          //if ( !ds->isCellExterior ( cets[i] ) )
           {
-            id_type next_cell = dataset->getCellPairId ( cets[i] );
+            id_type next_cell = ds->getCellPairId ( cets[i] );
 
-            if ( dataset->getCellDim ( top_cell ) ==
-                 dataset->getCellDim ( next_cell ) &&
-                 next_cell != top_cell )
+	    bool is_on_v_path = ((gradient_dir == GRADDIR_DESCENDING)?(cmp(next_cell,top_cell)):(cmp(top_cell,next_cell)));
+
+            if ( (ds->getCellDim ( top_cell ) == ds->getCellDim ( next_cell )) && is_on_v_path)
+
             {
               cell_stack.push ( next_cell );
             }
@@ -259,10 +277,10 @@ namespace grid
 
   bool   dataset_t::areCellsIncident(cellid_t c1,cellid_t c2) const
   {
-    uint dim_diff;
+    uint dim_diff = 0;
 
     for(uint i = 0 ;i < gc_grid_dim;++i)
-      dim_diff += (c1[i] >c2[i])?(c1[i] - c2[i]):(c2[i]  - c1[i]);
+      dim_diff += abs((int)c1[i]-(int)c2[i]);
 
     return (dim_diff == 1);
   }
@@ -295,6 +313,12 @@ namespace grid
        const cellid_t &c2,
        const int & dim)
   {
+    bool is_boundry_c1 = ds->isTrueBoundryCell(c1);
+    bool is_boundry_c2 = ds->isTrueBoundryCell(c2);
+
+    if(is_boundry_c1 != is_boundry_c2)
+      return is_boundry_c1;
+
     if(dim == 0)
       return ds->ptLt(c1,c2);
 
@@ -303,12 +327,6 @@ namespace grid
 
     if(f1 != f2)
       return compareCells_dim(ds,f1,f2,dim-1);
-
-    bool is_boundry_c1 = ds->isTrueBoundryCell(c1);
-    bool is_boundry_c2 = ds->isTrueBoundryCell(c2);
-
-    if(is_boundry_c1 != is_boundry_c2)
-      return is_boundry_c1;
 
     f1 = ds->getCellSecondMaxFacetId(c1);
     f2 = ds->getCellSecondMaxFacetId(c2);
@@ -441,6 +459,8 @@ namespace grid
     {
       cellid_t cf = cofaces[i];
 
+      ensure_in_box(this,cf);
+
       uint c_dim = getCellDim(c);
       uint cf_dim = getCellDim(cf);
 
@@ -534,9 +554,9 @@ namespace grid
 
     pairCellsWithinEst();
 
-    collateCriticalPoints();
+//    markFakeBoundryCritical();
 
-//    aggregateEffCellDim();
+//    collateCriticalPoints();
   }
 
   void dataset_t::assignMaxFacets()
@@ -557,16 +577,15 @@ namespace grid
       {
         static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
-        for(c[2] = m_rect[2][0] + seq[2] ; c[2] <= m_rect[2][1]; c[2] += 2)
+        for(c[2] = m_ext_rect[2][0] + seq[2] ; c[2] <= m_ext_rect[2][1]; c[2] += 2)
         {
-          for(c[1] = m_rect[1][0] + seq[1]; c[1] <= m_rect[1][1]; c[1] += 2)
+          for(c[1] = m_ext_rect[1][0] + seq[1]; c[1] <= m_ext_rect[1][1]; c[1] += 2)
           {
-            for(c[0] = m_rect[0][0] + seq[0]; c[0] <= m_rect[0][1]; c[0] += 2)
+            for(c[0] = m_ext_rect[0][0] + seq[0]; c[0] <= m_ext_rect[0][1]; c[0] += 2)
             {
               int f_ct = getCellFacets(c,f);
 
               setCellMaxFacet(c,*std::max_element(f,f+f_ct,cmp));
-
             }
           }
         }
@@ -599,13 +618,21 @@ namespace grid
 
     typedef std::list<cellid_t> cellid_llist_t;
 
-    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,this,_1,_2));
-
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
-    cellid_t c;
+//    cellid_array_t est_vert;
 
-    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; c[2] += 2)
+//    cellid_t s = m_ext_rect.span() + cellid_t::one;
+//    int num_cells = s[0]*s[1]*s[2];
+//    cellid_t bl = m_ext_rect.lower_corner();
+
+//    est_vert.resize(s);
+//    std::fill_n(est_vert.data(),num_cells,cellid_t(-1,-1,-1));
+//    est_vert.reindex(bl);
+
+    BOOST_AUTO(cmp,bind(&dataset_t::compareCells,this,_1,_2));
+
+    for(cellid_t c = m_rect.lower_corner() ; c[2] <= m_rect[2][1]; c[2] += 2)
     {
       for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; c[1] += 2)
       {
@@ -617,66 +644,173 @@ namespace grid
 
           std::sort(est_arr,est_arr+est_ct,cmp);
 
-          cellid_llist_t est(est_arr,est_arr+est_ct);
+//          for(int i = 0; i < est_ct; ++i)
+//          {
+//            if(est_vert(est_arr[i]) != cellid_t(-1,-1,-1))
+//            {
+//              cout<<c<<endl;
+//              cout<<est_arr[i];
+//              cout<<est_vert(est_arr[i]);
 
-          bool bCanPair = true;
+//              throw runtime_error("gotcha");
+//            }
 
-          int num_rounds = gc_grid_dim;
+//            est_vert(est_arr[i]) = c;
+//          }
 
-          while(bCanPair && num_rounds-- != 0)
+          cellid_llist_t est_list(est_arr,est_arr+est_ct);
+
+          for(int num_iters = 1; num_iters >=0; --num_iters)
           {
-            bCanPair = false;
-
-            for(cellid_llist_t::iterator est_it = est.begin();
-                est_it != est.end() && ++est_it != est.end();)
+            for(cellid_llist_t::iterator j = est_list.begin(); j != est_list.end();)
             {
-              cellid_t p = *est_it,c = *--est_it;
+              cellid_llist_t::iterator c_it = j,p_it = j;
 
-              if(getCellDim(c)+1      == getCellDim(p)  &&
-                 isTrueBoundryCell(c) == isTrueBoundryCell(p) &&
-                 areCellsIncident(c,p))
+              ++j;
+
+              ++p_it;
+
+              if(p_it != est_list.end())
               {
-                pairCells(c,p);
+                bool is_adj        = areCellsIncident(*c_it,*p_it);
+                bool is_same_bndry = (isTrueBoundryCell(*c_it) == isTrueBoundryCell(*p_it));
 
-                est.erase(est_it++);
-                est.erase(est_it++);
-
-                bCanPair = true;
+                if(is_adj && is_same_bndry)
+                {
+                  pairCells(*c_it,*p_it);
+                  est_list.erase(c_it);
+                  est_list.erase(p_it);
+                  break;
+                }
               }
-              else
-                ++est_it;
             }
+          }
+
+//          for(cellid_llist_t::iterator j = est_list.begin(); j != est_list.end();)
+//          {
+//            cellid_llist_t::iterator c_it = j,p_it = j;
+
+//            ++j;
+
+//            while( p_it != est_list.begin())
+//            {
+//              p_it--;
+
+//              bool is_adj        = areCellsIncident(*c_it,*p_it);
+//              bool is_same_bndry = (isTrueBoundryCell(*c_it) == isTrueBoundryCell(*p_it));
+
+//              if(is_adj && is_same_bndry)
+//              {
+//                pairCells(*c_it,*p_it);
+//                est_list.erase(c_it);
+//                est_list.erase(p_it);
+//                break;
+//              }
+//            }
+
+//          }
+
+          for(cellid_llist_t::iterator j = est_list.begin() ; j != est_list.end() ; ++j)
+          {
+            markCellCritical(*j);
+
+            m_critical_cells.push_back(*j);
           }
         }
       }
     }
+
+//    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; c[2] += 1)
+//    {
+//      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; c[1] += 1)
+//      {
+//        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; c[0] += 1)
+//        {
+//          if(est_vert(c) == cellid_t(-1,-1,-1))
+//            throw runtime_error("gotcha");
+
+//          if(!isCellPaired(c) && !isCellCritical(c))
+//            throw runtime_error("gotcha");
+//        }
+//      }
+//    }
+  }
+
+  void dataset_t::markFakeBoundryCritical()
+  {
+//    using namespace boost::lambda;
+
+//    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+//    cellid_t c;
+
+//    for(uint dim = 1 ; dim <= gc_grid_dim; ++dim)
+//    {
+//      cellid_t   seq(cellid_t::zero);
+
+//      std::for_each(seq.begin(),seq.begin()+dim,_1=1);
+
+//      do
+//      {
+//        cellid_t c_b = m_rect.lower_corner() + cellid_t::one;
+//        cellid_t c_e = m_rect.upper_corner() - cellid_t::one;
+//        cellid_t c_i = m_rect.span();
+
+//        std::transform(seq.begin(),seq.end(),c_b.begin(),c_b.begin(),_2 -_1);
+//        std::transform(seq.begin(),seq.end(),c_e.begin(),c_e.begin(),_2 +_1);
+//        std::transform(seq.begin(),seq.end(),c_i.begin(),c_i.begin(),_2*_1+(!_1));
+
+//        for(c[2] = c_b[2] ; c[2] <= c_e[2]; c[2] += c_i[2])
+//        {
+//          for(c[1] = c_b[1] ; c[1] <= c_e[1]; c[1] += c_i[1])
+//          {
+//            for(c[0] = c_b[0] ; c[0] <= c_e[0]; c[0] += c_i[0])
+//            {
+//              if (isCellCritical (c)) continue;
+
+//              cellid_t cf[20];
+
+//              u_int cf_ct =  getCellCofacets (c,cf);
+
+//              for (u_int j = 0 ; j <cf_ct;++j)
+//              {
+//                if (isCellExterior (cf[j]))
+//                {
+//                  markCellCritical (c);
+
+//                  markCellCritical (getCellPairId (c));
+//                  break;
+//                }
+//              }
+//            }
+//          }
+//        }
+//      }
+//      while(std::next_permutation(seq.rbegin(),seq.rend()));
+//    }
   }
 
   void  dataset_t::collateCriticalPoints()
   {
-    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
+//    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
 
-    cellid_t c;
+//    cellid_t c;
 
-    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
-    {
-      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
-      {
-        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
-        {
-          if (!isCellMarked (c) )
-          {
-            markCellCritical(c);
+//    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+//      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+//        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+//          if (!isCellMarked (c) )
+//            markCellCritical(c);
 
-            m_critical_cells.push_back(c);
-          }
-        }
-      }
-    }
+//    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+//      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+//        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+//          if (isCellCritical(c) )
+//            m_critical_cells.push_back(c);
   }
 
   void  dataset_t::aggregateEffCellDim()
-  {
+  {/*
     using namespace boost::lambda;
 
     BOOST_AUTO(cmp,bind(&dataset_t::compareCells,this,_1,_2));
@@ -767,21 +901,70 @@ namespace grid
       m_cell_efdim_d(c) = d;
       m_cell_efdim_d(p) = d;
     }
-  }
+  */}
 
   void  dataset_t::writeout_connectivity(mscomplex_t *msgraph)
   {
     for(uint i = 0 ; i < m_critical_cells.size();++i)
     {
       cellid_t c = m_critical_cells[i];
-      msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c));
+
+      cellid_t v = c;
+
+      for( int j = 0 ; j < getCellDim(c);++j)
+        v=getCellMaxFacetId(v);
+
+      msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c),v);
     }
+
+    cout<<"writeout_connectivity:: num_cps="<<m_critical_cells.size()<<endl;
+
+
+
+    cellflag_array_t visitmark;
+
+    cellid_t s = m_ext_rect.span() + cellid_t::one;
+    int num_cells = s[0]*s[1]*s[2];
+    cellid_t bl = m_ext_rect.lower_corner();
+
+    visitmark.resize(s);
+    std::fill_n(visitmark.data(),num_cells,0);
+    visitmark.reindex(bl);
 
     for(uint i = 0 ; i < m_critical_cells.size();++i)
     {
-      track_gradient_tree_bfs
-          (this,msgraph,m_critical_cells[i],GRADDIR_DESCENDING);
+      if(i%1000 == 0)
+        cout<<"done i="<<i<<endl;
+
+      cellid_t c = m_critical_cells[i];
+
+      if(!isCellPaired(c) || (getCellDim(getCellPairId(c)) < getCellDim(c)))
+        track_gradient_tree_bfs(this,msgraph,c,GRADDIR_DESCENDING,visitmark);
     }
+
+    cellid_t c;
+    for(c[2] = m_rect[2][0]+1 ; c[2] <= m_rect[2][1]; c[2] += 2)
+    {
+      for(c[1] = m_rect[1][0]+1 ; c[1] <= m_rect[1][1]; c[1] += 2)
+      {
+        for(c[0] = m_rect[0][0]+1 ; c[0] <= m_rect[0][1]; c[0] += 2)
+        {
+          if(visitmark(c) == 0)
+          {
+            while(isCellCritical(c) == false)
+            {
+              cellid_t p = getCellPairId(c);
+              cout<<c<<":"<<p<<endl;
+
+              c += 2*(p-c);
+            }
+
+            throw runtime_error("gotcha");
+          }
+        }
+      }
+    }
+
 
   }
 
@@ -789,9 +972,14 @@ namespace grid
   {
     msgraph->add_disc_tracking_seed_cps();
 
+    cout<<"postMergeFillDiscs:: num_cps="<<m_critical_cells.size()<<endl;
+
     for(uint i = 0 ; i < msgraph->m_cps.size() ; ++i)
     {
       critpt_t * cp = msgraph->m_cps[i];
+
+      if(i%1000 == 0)
+        cout<<"done i="<<i<<endl;
 
       for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       {
@@ -824,6 +1012,29 @@ namespace grid
     }
   }
 
+  char get_dir_txt(cellid_t c,cellid_t p)
+  {
+    if(p[0] > c[0])
+      return '<';
+
+    if(p[0] < c[0])
+      return '>';
+
+    if(p[1] > c[1])
+      return '^';
+
+    if(p[1] < c[1])
+      return 'v';
+
+    if(p[2] > c[2])
+      return 'o';
+
+    if(p[2] < c[2])
+      return '.';
+
+    return 'X';
+  }
+
   void dataset_t::log_pairs()
   {
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
@@ -836,7 +1047,35 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          std::cout<<getCellPairId(c)<<" ";
+          if(isCellPaired(c))
+          {
+            std::cout<<get_dir_txt(c,getCellPairId(c))<<" ";
+          }
+          else
+            std::cout<<"C ";
+        }
+        std::cout<<std::endl;
+      }
+      std::cout<<std::endl;
+    }
+  }
+
+  void dataset_t::log_max_facets()
+  {
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+    {
+      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+      {
+        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+        {
+          if(getCellDim(c) != 0 )
+            std::cout<< getCellMaxFacetId(c);
+          else
+            std::cout<< "(.,.,.)";
         }
         std::cout<<std::endl;
       }
