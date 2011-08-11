@@ -565,8 +565,51 @@ namespace grid
     pairCellsWithinEst();
   }
 
-  void dataset_t::markBoundryCritical(const rect_t &b)
+  void dataset_t::markBoundryCritical(const rect_t &bnd)
   {
+    try
+    {
+      ASSERT(m_rect.contains(bnd.lower_corner()));
+      ASSERT(m_rect.contains(bnd.upper_corner()));
+
+      for(cellid_t c = bnd.lower_corner() ; c[2] <= bnd[2][1]; c[2] += 1)
+      {
+        for(c[1] = bnd[1][0] ; c[1] <= bnd[1][1]; c[1] += 1)
+        {
+          for(c[0] = bnd[0][0] ; c[0] <= bnd[0][1]; c[0] += 1)
+          {
+            if(!isCellPaired(c))
+              continue;
+
+            cellid_t p = getCellPairId(c);
+
+            if(!isPairOrientationCorrect(c,p))
+              continue;
+
+            if(bnd.contains(p))
+              continue;
+
+            markCellCritical(c);
+            m_critical_cells.push_back(c);
+
+            if(!m_rect.contains(p))
+              continue;
+
+            markCellCritical(p);
+            m_critical_cells.push_back(p);
+          }
+        }
+      }
+    }
+    catch(assertion_error e)
+    {
+      e<<"\n";
+      e<<FILEFUNCLINE<<endl;
+      e<<VARSTR(bnd)<<endl;
+      e<<VARSTR(m_rect)<<endl;
+
+      throw;
+    }
   }
 
   template <typename cell_visited_ftor_t,typename cp_visited_ftor_t>
@@ -636,7 +679,12 @@ namespace grid
 
   void connect_cps(dataset_t * ds,mscomplex_t *msg,cellid_t c1,cellid_t c2)
   {
-    msg->connect_cps(c1,c2);
+    // if a d-cp hits a d+-1 cp and the d+-1 cp is paired
+    // then the connection is useful iff the dimension of the pair is d
+
+    if((!ds->isCellPaired(c2)) || (ds->getCellDim(ds->getCellPairId(c2)) == ds->getCellDim(c1)) )
+      if(((!ds->isCellPaired(c1)) || (ds->getCellDim(ds->getCellPairId(c1)) == ds->getCellDim(c2)) ))
+        msg->connect_cps(c1,c2);
   }
 
   void add_to_disc(critpt_disc_t *disc,cellid_t c1)
@@ -802,10 +850,15 @@ namespace grid
       {
         for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
         {
-          if(isCellPaired(c))
+          if(isCellCritical(c))
+          {
+            if(isCellPaired(c))
+              os<<get_dir_txt(c,getCellPairId(c))<<"c";
+            else
+              os<<"C ";
+          }
+          else if(isCellPaired(c))
             os<<get_dir_txt(c,getCellPairId(c))<<" ";
-          else if(isCellCritical(c))
-            os<<"C ";
           else
             os<<"? ";
         }

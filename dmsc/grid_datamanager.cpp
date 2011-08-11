@@ -101,8 +101,6 @@ namespace grid
       z_rng = split_range(z_rng,i,m_num_pieces);
       z_rng = expand_range(z_rng,i,m_num_pieces);
 
-      cout<<z_rng<<endl;
-
       int beg = z_rng[0] * m_size[1] *m_size[0];
       int end = z_rng[1] * m_size[1] *m_size[0];
 
@@ -157,15 +155,30 @@ namespace grid
       ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
 
       dp->m_dataset->init(pData);
-
       dp->m_dataset->assignGradient();
+
+      if( i != 0 )
+      {
+        rect_t bnd = e;
+        bnd[2] = rect_range_t(e[2][0]+2,e[2][0]+2);
+        dp->m_dataset->markBoundryCritical(bnd);
+      }
+
+      if( i+1 != m_num_pieces )
+      {
+        rect_t bnd = e;
+        bnd[2] = rect_range_t(e[2][1]-2,e[2][1]-2);
+        dp->m_dataset->markBoundryCritical(bnd);
+      }
+
+      ofstream ofs((filename+".pairs").c_str(),ios::out);
+      dp->m_dataset->log_pairs(ofs);
+      ofs.close();
+
       dp->m_dataset->computeMsGraph(dp->m_msgraph.get());
-
-//      ofstream ofs((filename+".pairs").c_str(),ios::out);
-//      dp->m_dataset->log_pairs(ofs);
-//      ofs.close();
-
       dp->m_dataset->clear();
+
+      dp->m_msgraph->write_graph(string("msc_graph.txt.")+to_string(i));
     }
 
     delete []pData;
@@ -190,12 +203,11 @@ namespace grid
 
   void data_manager_t::work()
   {
-    compute_mscomplex_basic(m_filename,m_size,m_simp_tresh);
-//    split_dataset();
+    split_dataset();
 
-//    createPieces();
+    createPieces();
 
-//    compute_subdomain_msgraphs();
+    compute_subdomain_msgraphs();
 
     //write_results();
 
