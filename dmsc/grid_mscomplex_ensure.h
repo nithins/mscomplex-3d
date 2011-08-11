@@ -46,7 +46,7 @@ namespace grid
 
   inline std::string idx_to_string(mscomplex_t *msc,uint i)
   {
-    return msc->m_cps[i]->cellid.to_string();
+    return to_string(msc->m_cps[i]->cellid);
   }
 
   template <typename T>

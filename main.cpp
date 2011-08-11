@@ -21,63 +21,49 @@ namespace bpo = boost::program_options ;
 
 int main(int ac , char **av)
 {
-  string filename;
-
-  grid::cellid_t dim;
-
-  bool   use_ocl = false;
-
-  double   simp_tresh= 0.0;
+  string         filename;
+  grid::cellid_t size;
+  bool           use_ocl;
+  double         simp_tresh;
+  int            levels;
 
 #ifdef BUILD_EXEC_GUI
-  bool   gui = false;
+  bool           gui;
 #endif
 
   bpo::options_description desc("Allowed options");
   desc.add_options()
       ("help,h", "produce help message")
-      ("file,f",bpo::value<string >(), "grid file name")
-      ("dim,d", bpo::value<grid::cellid_t >(), "dim of grid entered as (x,y,z)")
-      ("cl","use OpenCL ")
-      ("simp-tresh,t",bpo::value<double>(),"simplification treshold")
+      ("file,f",bpo::value<string >(&filename)->required(), "grid file name")
+      ("dim,d", bpo::value<grid::cellid_t>(&size)->required(), "dim of grid entered as (x,y,z)")
+      ("levels,l",bpo::value<int>(&levels)->default_value(0),"number of subdivision levels")
+      ("simp-tresh,t",bpo::value<double>(&simp_tresh)->default_value(0.0),"simplification treshold")
 #ifdef BUILD_EXEC_GUI
-      ("gui,g","show gui")
+      ("gui,g",bpo::value<bool>(&gui)->default_value(false),"show gui")
 #endif
       ;
 
   bpo::variables_map vm;
   bpo::store(bpo::parse_command_line(ac, av, desc), vm);
-  bpo::notify(vm);
 
   if (vm.count("help"))
   {
-    cout << desc << "\n";
+    cout << desc << endl;
+    return 0;
+  }
+  try
+  {
+    bpo::notify(vm);
+  }
+  catch(bpo::required_option e)
+  {
+    cout<<e.what()<<endl;
+    cout<<desc<<endl;
     return 1;
   }
 
-  if (vm.count("dim"))
-    dim = vm["dim"].as<grid::cellid_t >();
-  else
-    throw invalid_argument("no dim specified");
-
-  if (vm.count("file"))
-    filename = vm["file"].as<string>();
-  else
-    throw invalid_argument("no filename specified");
-
-  if (vm.count("cl"))
-    use_ocl = true;
-
-  if (vm.count("simp-tresh"))
-    simp_tresh = vm["simp-tresh"].as<double>();
-
-#ifdef BUILD_EXEC_GUI
-  if (vm.count("gui"))
-    gui = true;
-#endif
-
   grid::data_manager_t * gdm = new grid::data_manager_t
-      (filename,dim,use_ocl,simp_tresh);
+      (filename,size,levels,simp_tresh);
 
   gdm->work();
 

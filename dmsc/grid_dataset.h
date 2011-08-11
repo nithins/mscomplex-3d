@@ -71,6 +71,7 @@ namespace grid
 
     rect_t             m_rect;
     rect_t             m_ext_rect;
+    rect_t             m_domain_rect;
 
     varray_ref_ptr_t   m_vert_fns_ref;
 
@@ -85,7 +86,7 @@ namespace grid
 
     // initialization of the dataset
 
-    dataset_t ( const rect_t &r,const rect_t &e );
+    dataset_t ( const rect_t &r,const rect_t &e,const rect_t &d );
 
     ~dataset_t ();
 
@@ -210,7 +211,7 @@ namespace grid
 
     void log_flags();
 
-    void log_pairs();
+    void log_pairs(std::ostream &os = std::cout);
 
     void log_max_facets();
 

@@ -643,12 +643,12 @@ namespace grid
         num_cancellations_eps++;
       }
 
-      std::cout
-             <<   "no = "<<num_cancellations<<" "
-             << "pers = "<<persistence<<" "
-             <<"index = ("<<(int)m_cps[pr[0]]->index<<","<<(int)m_cps[pr[1]]->index<<") "
-             << "edge = "<<edge_to_string(this,pr)<<" "
-             <<std::endl;
+//      std::cout
+//             <<   "no = "<<num_cancellations<<" "
+//             << "pers = "<<persistence<<" "
+//             <<"index = ("<<(int)m_cps[pr[0]]->index<<","<<(int)m_cps[pr[1]]->index<<") "
+//             << "edge = "<<edge_to_string(this,pr)<<" "
+//             <<std::endl;
 
       uint_pair_list_t new_edges;
 
@@ -773,8 +773,7 @@ namespace grid
   {
     std::fstream os(fn.c_str(),std::ios::out);
 
-    if(os.is_open() == false)
-      throw std::runtime_error(std::string("failed to open file :")+fn);
+    ensure(os.is_open(),"failed to open file");
 
     write_manifolds((std::ostream&)os);
 
@@ -793,9 +792,6 @@ namespace grid
     for(uint i = 0 ; i < m_cps.size();++i)
     {
       critpt_t * cp = m_cps[i];
-
-      if(cp->is_paired)
-        continue;
 
       if(cp->is_paired == true)
         continue;
@@ -818,8 +814,7 @@ namespace grid
   {
     std::fstream os(fn.c_str(),std::ios::out);
 
-    if(os.is_open() == false)
-      throw std::runtime_error(std::string("failed to open file :")+fn);
+    ensure(os.is_open(),"failed to open file");
 
     write_graph(os);
 

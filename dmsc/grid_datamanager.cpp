@@ -20,9 +20,13 @@
 
 #include <iostream>
 #include <fstream>
-#include <timer.h>
+
+#include <boost/format.hpp>
+#include <boost/lambda/lambda.hpp>
 
 #include <logutil.h>
+#include <timer.h>
+#include <cpputils.h>
 
 #include <grid_dataset.h>
 #include <grid_mscomplex.h>
@@ -32,161 +36,250 @@ using namespace std;
 
 namespace grid
 {
-
-  void data_manager_t::createDataPieces ()
+  rect_range_t split_range(rect_range_t r_in, int i,int n)
   {
-    rect_t r(cellid_t::zero,(m_size-cellid_t::one)*2);
-    rect_t e(cellid_t::zero,(m_size-cellid_t::one)*2);
+    ASSERT(is_in_range(i,0,n));
 
-    octtree_piece *dp = new octtree_piece(m_pieces.size());
-    dp->dataset = new dataset_t(r,e);
-    dp->msgraph = new mscomplex_t(r,e);
-    m_pieces.push_back(dp);
+    int l = r_in[0] + divide_ri(r_in.span()*i,n);
+    int u = r_in[0] + divide_ri(r_in.span()*(i+1),n);
+
+    if( i+1 != n ) u = min<int>(u+1,r_in[1]);
+
+    return rect_range_t(l,u);
+  }
+
+  rect_range_t expand_range(rect_range_t r_in, int i,int n)
+  {
+    ASSERT(is_in_range(i,0,n));
+
+    if(i != 0 )  r_in[0] = r_in[0]-1;
+    if(i+1 != n) r_in[1] = r_in[1]+1;
+
+    return r_in;
+  }
+
+  void data_manager_t::createPieces ()
+  {
+    rect_t d(cellid_t::zero,(m_size-cellid_t::one)*2);
+
+    for(int lev = 0 ;lev<m_max_levels+1;++lev)
+    {
+      int num_lev_pieces = two_power(lev);
+
+      for(int i = 0 ;i<num_lev_pieces; ++i)
+      {
+        rect_t pr(cellid_t::zero,m_size);
+        pr[2] = split_range(pr[2],i,num_lev_pieces);
+
+        rect_t pe(pr);
+        pe[2] = expand_range(pe[2],i,num_lev_pieces);
+
+        rect_t r = rect_t(pr.lower_corner()*2,(pr.upper_corner()-cellid_t::one)*2);
+        rect_t e = rect_t(pe.lower_corner()*2,(pe.upper_corner()-cellid_t::one)*2);
+
+        piece_ptr_t p(new octtree_piece_t(r,e,d,m_max_levels-lev));
+        m_pieces.push_back(p);
+      }
+    }
 
     return;
   }
 
-  void data_manager_t::destoryDataPieces()
+  void data_manager_t::split_dataset()
   {
-    for(uint i = 0 ; i<m_pieces.size();++i)
+    std::ifstream ifs(m_filename.c_str(),std::ios::in|std::ios::binary);
+
+    ensure(ifs.is_open(),"unable to open file");
+
+    int pData_size = (divide_ri(m_size[2],m_num_pieces)+3)*m_size[0]*m_size[1];
+
+    cell_fn_t * pData = new cell_fn_t[pData_size];
+
+    for(int i = 0 ; i <m_num_pieces;++i)
     {
-      octtree_piece *dp = m_pieces[i];
+      rect_range_t z_rng(0,m_size[2]);
+      z_rng = split_range(z_rng,i,m_num_pieces);
+      z_rng = expand_range(z_rng,i,m_num_pieces);
 
-      if (dp->msgraph != NULL)
-        delete dp->msgraph;
+      cout<<z_rng<<endl;
 
-      if(dp->dataset != NULL)
-      {
-        dp->dataset->clear_fnref();
-        dp->dataset->clear();
+      int beg = z_rng[0] * m_size[1] *m_size[0];
+      int end = z_rng[1] * m_size[1] *m_size[0];
 
-        delete dp->dataset;
-      }
+      ensure((end-beg) <= pData_size,"miscalculated max pData size");
+
+      ifs.seekg(beg*sizeof(cell_fn_t),std::ios::beg);
+      ensure(ifs.fail()==false,"failed to seek");
+
+      ifs.read((char*)(void*)pData,sizeof(cell_fn_t)*(end-beg));
+      ensure(ifs.fail()==false,"failed to read some data");
+
+      std::string filename = m_filename+"."+to_string(i);
+
+      std::ofstream ofs(filename.c_str(),std::ios::out|std::ios::binary);
+
+      ofs.write((char*)(void*)pData,sizeof(cell_fn_t)*(end-beg));
+
+      ofs.close();
     }
 
+    delete []pData;
+
+    ifs.close();
+  }
+
+  void data_manager_t::destoryPieces()
+  {
     m_pieces.clear();
   }
 
-  void data_manager_t::computeMsGraph( octtree_piece *dp )
+  void data_manager_t::compute_subdomain_msgraphs ()
   {
-    //  if(m_use_ocl != true)
+    using namespace boost::lambda;
+
+    int pData_size = (divide_ri(m_size[2],m_num_pieces)+3)*m_size[0]*m_size[1];
+
+    cell_fn_t * pData = new cell_fn_t[pData_size];
+
+    for(int i = 0 ; i <m_num_pieces;++i)
     {
-      dp->dataset->work();
+      piece_ptr_t dp = m_pieces[m_num_pieces-1+i];
+      rect_t e = dp->m_dataset->get_ext_rect();
+      int num_pts = rect_t(e.lower_corner()/2,e.upper_corner()/2+cellid_t::one).volume();
 
-      dp->dataset->writeout_connectivity(dp->msgraph);
+      string filename = m_filename+"."+to_string(i);
+      ifstream ifs(filename.c_str(),ios::in|ios::binary);
+      ensure(ifs.is_open(),"unable to open file");
+
+      ifs.read((char*)(void*)pData,sizeof(cell_fn_t)*num_pts);
+      ensure(ifs.fail()==false,"failed to read some data");
+      ifs.seekg(0,ios::end);
+      ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
+
+      dp->m_dataset->init();
+      dp->m_dataset->init_fnref(pData);
+
+      dp->m_dataset->work();
+      dp->m_dataset->writeout_connectivity(dp->m_msgraph.get());
+
+//      ofstream ofs((filename+".pairs").c_str(),ios::out);
+//      dp->m_dataset->log_pairs(ofs);
+//      ofs.close();
+
+      dp->m_dataset->clear_fnref();
+      dp->m_dataset->clear();
     }
-    //  else
-    //  {
-    //    dp->dataset->work_ocl();
-    //
-    //    dp->dataset->writeout_connectivity_ocl(dp->msgraph);
-    //  }
+
+    delete []pData;
   }
 
-  void data_manager_t::collectManifold( octtree_piece  * dp)
+  void data_manager_t::write_results()
   {
-    dp->dataset->postMergeFillDiscs(dp->msgraph);
+    using namespace boost;
 
-//    dp->msgraph->write_discs("dp_disc_");
+    for(int i = 0 ; i <m_num_pieces;++i)
+    {
+      piece_ptr_t dp = m_pieces[m_num_pieces-1+i];
+
+      dp->m_msgraph->write_graph(str(format("msc_graph_%02d.txt")%i));
+    }
   }
 
-  void data_manager_t::readDataToMem()
+  void data_manager_t::collectManifold( piece_ptr_t dp)
   {
-    m_pData = new cell_fn_t[m_size[0]*m_size[1]*m_size[2]];
-
-    ifstream ifs(m_filename.c_str(),std::ios::in|std::ios::binary);
-
-    if(ifs.is_open() == false)
-      throw std::runtime_error("unable to open file");
-
-    ifs.read((char*)(void*)m_pData,sizeof(cell_fn_t)*m_size[0]*m_size[1]*m_size[2]);
+    dp->m_dataset->postMergeFillDiscs(dp->m_msgraph.get());
   }
 
   data_manager_t::data_manager_t
       ( std::string filename,
         cellid_t     size,
-        bool         use_ocl,
+        int          max_levels,
         double       simp_tresh):
       m_filename(filename),
       m_size(size),
-      m_use_ocl(use_ocl),
+      m_max_levels(max_levels),
       m_simp_tresh(simp_tresh),
-      m_pData(NULL)
+      m_num_pieces(two_power(max_levels))
   {
-    //  if(m_use_ocl)
-    //    GridDataset::init_opencl();
-
-    createDataPieces();
   }
 
   data_manager_t::~data_manager_t ()
   {
-
-    destoryDataPieces();
-
-    //  if(m_use_ocl)
-    //    GridDataset::stop_opencl();
-
-    if(m_pData != NULL)
-      delete m_pData;
-
-    m_pData = NULL;
   }
 
   void data_manager_t::work()
   {
 
+    split_dataset();
+
+    createPieces();
+
+    compute_subdomain_msgraphs();
+
+//    write_results();
+
+//    destoryPieces();
+
+  }
+
+  void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh)
+  {
+    cout<<"===================================="<<endl;
+    cout<<"         Starting Processing        "<<endl;
+    cout<<"------------------------------------"<<endl;
+
     Timer t;
-
-    _LOG ( "==========================" );
-    _LOG ( "Starting Processing       " );
-    _LOG ( "--------------------------" );
-
     t.start();
 
-    readDataToMem();
+    rect_t d(cellid_t::zero,(size-cellid_t::one)*2);
+    boost::shared_ptr<dataset_t>   dataset(new dataset_t(d,d,d));
+    boost::shared_ptr<mscomplex_t> msgraph(new mscomplex_t(d,d));
 
-    _LOG("timer_time = "<<t.getElapsedTimeInMilliSec());
+    int num_pts = size[0]*size[1]*size[2];
+    std::vector<cell_fn_t> pt_data(num_pts);
 
-    m_pieces[0]->dataset->init();
-    m_pieces[0]->dataset->init_fnref(m_pData);
+    ifstream ifs(filename.c_str(),ios::in|ios::binary);
+    ensure(ifs.is_open(),"unable to open file");
 
-    computeMsGraph(m_pieces[0]);
+    ifs.read((char*)(void*)pt_data.data(),sizeof(cell_fn_t)*num_pts);
+    ensure(ifs.fail()==false,"failed to read some data");
 
-    _LOG("timer_time = "<<t.getElapsedTimeInMilliSec());
+    ifs.seekg(0,ios::end);
+    ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
+    cout<<"data read ---------------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    if(m_simp_tresh > 0.0)
-      m_pieces[0]->msgraph->simplify_un_simplify(m_simp_tresh);
+    dataset->init();
+    dataset->init_fnref(pt_data.data());
+    dataset->work();
+    cout<<"gradient done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    _LOG("timer_time = "<<t.getElapsedTimeInMilliSec());
+    dataset->writeout_connectivity(msgraph.get());
+    cout<<"msgraph done ------------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    collectManifold( m_pieces[0]);
+    msgraph->simplify_un_simplify(simp_tresh);
+    cout<<"simplification done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    _LOG("timer_time = "<<t.getElapsedTimeInMilliSec());
+    dataset->postMergeFillDiscs(msgraph.get());
+    cout<<"collect manifolds done --- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    _LOG ( "--------------------------" );
-    _LOG ( "Finished Processing       " );
-    _LOG ( "==========================" );
+    msgraph->write_manifolds("msc_manifolds.txt");
+    msgraph->write_graph("msc_graph.txt");
+    cout<<"results write done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    m_pieces[0]->msgraph->write_manifolds("msc_manifolds.txt");
-
-    m_pieces[0]->msgraph->write_graph("msc_graph.txt");
-
+    cout<<"------------------------------------"<<endl;
+    cout<<"        Finished Processing         "<<endl;
+    cout<<"===================================="<<endl;
   }
 
-  octtree_piece::octtree_piece (uint pno):
-      dataset(NULL),
-      msgraph(NULL),
-      level(0),
-      m_pieceno(pno)
+  octtree_piece_t::octtree_piece_t (rect_t r,rect_t e,rect_t d,int l):
+      m_level(l),
+//      m_rct(r),
+//      m_ext(e),
+      m_msgraph(new mscomplex_t(r,e))
   {
+    if( l == 0 )
+      m_dataset.reset(new dataset_t(r,e,d));
   }
 
-  std::string octtree_piece::label()
-  {
-    std::stringstream ss;
-    ss<<m_pieceno;
 
-    return ss.str();
-  }
 }

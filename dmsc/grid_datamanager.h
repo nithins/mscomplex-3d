@@ -25,44 +25,46 @@
 #include <vector>
 
 #include <grid.h>
+#include <boost/shared_ptr.hpp>
 
 namespace grid
 {
   class dataset_t;
   class mscomplex_t;
 
-  struct octtree_piece
+  struct octtree_piece_t
   {
-    dataset_t   *dataset;
-    mscomplex_t *msgraph;
+    boost::shared_ptr<dataset_t>   m_dataset;
+    boost::shared_ptr<mscomplex_t> m_msgraph;
 
-    uint level;
+//    rect_t                         m_rct,m_ext;
+    int                            m_level;
 
-    uint m_pieceno;
+    octtree_piece_t(rect_t r,rect_t e,rect_t d,int l);
 
-    octtree_piece (uint l);
-
-    std::string label();
   };
 
   class data_manager_t
   {
-    typedef std::vector<octtree_piece *> pieces_list_t;
+
+  public:
+    typedef boost::shared_ptr<octtree_piece_t> piece_ptr_t;
+    typedef std::vector<piece_ptr_t>           piece_ptr_list_t;
 
   public:
 
-    pieces_list_t                m_pieces;
+    piece_ptr_list_t             m_pieces;
 
     cellid_t                     m_size;
     std::string                  m_filename;
     double                       m_simp_tresh;
-    bool                         m_use_ocl;
-    cell_fn_t                   *m_pData;
+    int                          m_max_levels;
+    int                          m_num_pieces;
 
     data_manager_t
         ( std::string  filename,
           cellid_t     size,
-          bool         use_ocl,
+          int          max_levels,
           double       simp_tresh
           );
 
@@ -70,16 +72,21 @@ namespace grid
 
     virtual ~data_manager_t ();
 
-    void createDataPieces();
+    void createPieces();
 
-    void destoryDataPieces();
+    void split_dataset();
 
-    void computeMsGraph ( octtree_piece  * );
+    void destoryPieces();
 
-    void collectManifold( octtree_piece  * );
+    void compute_subdomain_msgraphs ();
 
-    void readDataToMem();
+    void write_results();
+
+    void collectManifold( piece_ptr_t );
   };
+
+  void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh);
+
 }
 
 #endif
