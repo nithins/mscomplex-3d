@@ -25,8 +25,8 @@
 #include <vector>
 
 #include <boost/multi_array.hpp>
-
 #include <boost/shared_ptr.hpp>
+#include <boost/function.hpp>
 
 #include <grid.h>
 
@@ -78,49 +78,46 @@ namespace grid
     cellflag_array_t   m_cell_flags;
     cellflag_array_t   m_cell_pairs;
     cellflag_array_t   m_cell_mxfct;
-    cellflag_array_t   m_cell_efdim_a;
-    cellflag_array_t   m_cell_efdim_d;
     cellid_list_t      m_critical_cells;
+
+    boost::function<bool (cellid_t,cellid_t)> cmp_ftor;
+    boost::function<bool (cellid_t,cellid_t)> cmp_ftors[2];
+
 
   public:
 
     // initialization of the dataset
-
     dataset_t ( const rect_t &r,const rect_t &e,const rect_t &d );
-
     ~dataset_t ();
 
-    void  init();
-
+    void  init(cell_fn_t * pData);
     void  clear();
 
-    void  init_fnref(cell_fn_t * pData);
-
-    void  clear_fnref();
-
-    // actual algorithm work
+  // the actual work routines
   public:
+    void  assignGradient();
 
-    void  work();
+    void  markBoundryCritical(const rect_t &b);
 
-    void  writeout_connectivity(mscomplex_t *msgraph);
+    void  computeMsGraph(mscomplex_t *msgraph);
 
-    void  assignGradients();
+    void  collectManifolds(mscomplex_t *msgraph);
+
+  // subroutines to main functions
+  private:
+    void  assignMaxFacets();
 
     void  pairCellsWithinEst();
 
-    void  assignMaxFacets();
-
-    void  markFakeBoundryCritical();
-
-    void  collateCriticalPoints();
-
-    void  postMergeFillDiscs(mscomplex_t *msgraph);
-
-    void  aggregateEffCellDim();
+    template <typename cell_visited_ftor_t,typename cp_visited_ftor_t>
+    void do_gradient_bfs
+        (cellid_t start_cellId,
+         eGradientDirection gradient_dir,
+         cell_visited_ftor_t cell_visited_ftor,
+         cp_visited_ftor_t   cp_visited_ftor);
 
 
-    // dataset interface
+  // dataset interface
   public:
 
     cellid_t   getCellPairId ( cellid_t ) const;
@@ -214,8 +211,6 @@ namespace grid
     void log_pairs(std::ostream &os = std::cout);
 
     void log_max_facets();
-
-    void log_eff_dim();
 
     void extract_vdata_subarray(rect_t r,const std::string &filename);
   };

@@ -79,10 +79,6 @@ namespace grid
     void destoryPieces();
 
     void compute_subdomain_msgraphs ();
-
-    void write_results();
-
-    void collectManifold( piece_ptr_t );
   };
 
   void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh);

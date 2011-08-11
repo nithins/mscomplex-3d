@@ -156,38 +156,19 @@ namespace grid
       ifs.seekg(0,ios::end);
       ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
 
-      dp->m_dataset->init();
-      dp->m_dataset->init_fnref(pData);
+      dp->m_dataset->init(pData);
 
-      dp->m_dataset->work();
-      dp->m_dataset->writeout_connectivity(dp->m_msgraph.get());
+      dp->m_dataset->assignGradient();
+      dp->m_dataset->computeMsGraph(dp->m_msgraph.get());
 
 //      ofstream ofs((filename+".pairs").c_str(),ios::out);
 //      dp->m_dataset->log_pairs(ofs);
 //      ofs.close();
 
-      dp->m_dataset->clear_fnref();
       dp->m_dataset->clear();
     }
 
     delete []pData;
-  }
-
-  void data_manager_t::write_results()
-  {
-    using namespace boost;
-
-    for(int i = 0 ; i <m_num_pieces;++i)
-    {
-      piece_ptr_t dp = m_pieces[m_num_pieces-1+i];
-
-      dp->m_msgraph->write_graph(str(format("msc_graph_%02d.txt")%i));
-    }
-  }
-
-  void data_manager_t::collectManifold( piece_ptr_t dp)
-  {
-    dp->m_dataset->postMergeFillDiscs(dp->m_msgraph.get());
   }
 
   data_manager_t::data_manager_t
@@ -209,16 +190,16 @@ namespace grid
 
   void data_manager_t::work()
   {
+    compute_mscomplex_basic(m_filename,m_size,m_simp_tresh);
+//    split_dataset();
 
-    split_dataset();
+//    createPieces();
 
-    createPieces();
+//    compute_subdomain_msgraphs();
 
-    compute_subdomain_msgraphs();
+    //write_results();
 
-//    write_results();
-
-//    destoryPieces();
+    //destoryPieces();
 
   }
 
@@ -248,18 +229,17 @@ namespace grid
     ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
     cout<<"data read ---------------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    dataset->init();
-    dataset->init_fnref(pt_data.data());
-    dataset->work();
+    dataset->init(pt_data.data());
+    dataset->assignGradient();
     cout<<"gradient done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    dataset->writeout_connectivity(msgraph.get());
+    dataset->computeMsGraph(msgraph.get());
     cout<<"msgraph done ------------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->simplify_un_simplify(simp_tresh);
     cout<<"simplification done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    dataset->postMergeFillDiscs(msgraph.get());
+    dataset->collectManifolds(msgraph.get());
     cout<<"collect manifolds done --- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->write_manifolds("msc_manifolds.txt");
