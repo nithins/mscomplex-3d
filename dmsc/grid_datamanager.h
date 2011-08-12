@@ -32,10 +32,13 @@ namespace grid
   class dataset_t;
   class mscomplex_t;
 
+  typedef boost::shared_ptr<dataset_t>   dataset_ptr_t;
+  typedef boost::shared_ptr<mscomplex_t> mscomplex_ptr_t;
+
   struct octtree_piece_t
   {
-    boost::shared_ptr<dataset_t>   m_dataset;
-    boost::shared_ptr<mscomplex_t> m_msgraph;
+    dataset_ptr_t   m_dataset;
+    mscomplex_ptr_t m_msgraph;
 
 //    rect_t                         m_rct,m_ext;
     int                            m_level;
@@ -68,17 +71,21 @@ namespace grid
           double       simp_tresh
           );
 
-    void work();
-
     virtual ~data_manager_t ();
+
+    void work();
 
     void createPieces();
 
     void split_dataset();
 
-    void destoryPieces();
-
     void compute_subdomain_msgraphs ();
+
+    void merge_subdomain_msgraphs ();
+
+    void save_results ();
+
+    void destoryPieces();
   };
 
   void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh);

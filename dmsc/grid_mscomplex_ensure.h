@@ -33,7 +33,7 @@ namespace grid
   inline void ensure_not_cancelled(mscomplex_t *msc,uint c)
   {
 #ifdef USE_ENSURE_PREDICATES
-    if(msc->m_cps[c]->isCancelled == true)
+    if(msc->m_cps[c]->is_cancelled == true)
         throw std::logic_error("cancellation state violated");
 #endif
 
@@ -173,7 +173,7 @@ namespace grid
   inline void ensure_cp_is_cancelled(mscomplex_t *msc,uint i)
   {
 #ifdef USE_ENSURE_PREDICATES
-    if(!msc->m_cps[i]->isCancelled)
+    if(!msc->m_cps[i]->is_cancelled)
       throw std::logic_error("failed to ensure cp is not canceled");
 #endif
   }
@@ -181,7 +181,7 @@ namespace grid
   inline void ensure_cp_is_not_cancelled(mscomplex_t *msc,uint i)
   {
 #ifdef USE_ENSURE_PREDICATES
-    if(msc->m_cps[i]->isCancelled)
+    if(msc->m_cps[i]->is_cancelled)
       throw std::logic_error("failed to ensure cp is canceled");
 #endif
   }

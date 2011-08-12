@@ -126,11 +126,6 @@ namespace grid
     ifs.close();
   }
 
-  void data_manager_t::destoryPieces()
-  {
-    m_pieces.clear();
-  }
-
   void data_manager_t::compute_subdomain_msgraphs ()
   {
     using namespace boost::lambda;
@@ -171,17 +166,64 @@ namespace grid
         dp->m_dataset->markBoundryCritical(bnd);
       }
 
-      ofstream ofs((filename+".pairs").c_str(),ios::out);
-      dp->m_dataset->log_pairs(ofs);
-      ofs.close();
+//      ofstream ofs((filename+".pairs").c_str(),ios::out);
+//      dp->m_dataset->log_pairs(ofs);
+//      ofs.close();
 
       dp->m_dataset->computeMsGraph(dp->m_msgraph.get());
       dp->m_dataset->clear();
-
-      dp->m_msgraph->write_graph(string("msc_graph.txt.")+to_string(i));
     }
 
     delete []pData;
+  }
+
+  void data_manager_t::merge_subdomain_msgraphs ()
+  {
+    for(int lev = m_max_levels-1 ;lev >= 0 ;--lev)
+    {
+      int n = two_power(lev);
+
+      for(int i = 0 ;i < n; ++i)
+      {
+        mscomplex_ptr_t msc  = m_pieces[n+i-1]->m_msgraph;
+        mscomplex_ptr_t msc1 = m_pieces[(n+i)*2 -1]->m_msgraph;
+        mscomplex_ptr_t msc2 = m_pieces[(n+i)*2]->m_msgraph;
+
+        rect_t bnd = msc1->m_rect.intersection(msc2->m_rect);
+
+        msc->merge_up(*msc1,*msc2,bnd);
+      }
+    }
+  }
+
+  void data_manager_t::save_results()
+  {
+    for(int i = 0 ;i < 2*m_num_pieces-1; ++i)
+    {
+      mscomplex_ptr_t msc  = m_pieces[i]->m_msgraph;
+
+      msc->write_graph(string("msc_graph.txt.")+to_string(i));
+    }
+  }
+
+  void data_manager_t::destoryPieces()
+  {
+    m_pieces.clear();
+  }
+
+  void data_manager_t::work()
+  {
+    split_dataset();
+
+    createPieces();
+
+    compute_subdomain_msgraphs();
+
+    merge_subdomain_msgraphs();
+
+    save_results();
+
+    destoryPieces();
   }
 
   data_manager_t::data_manager_t
@@ -201,19 +243,6 @@ namespace grid
   {
   }
 
-  void data_manager_t::work()
-  {
-    split_dataset();
-
-    createPieces();
-
-    compute_subdomain_msgraphs();
-
-    //write_results();
-
-    //destoryPieces();
-
-  }
 
   void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh)
   {

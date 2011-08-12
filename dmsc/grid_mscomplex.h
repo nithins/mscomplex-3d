@@ -28,39 +28,35 @@
 
 namespace grid
 {
+  struct critpt_t;
 
-  typedef std::vector<uint>         critpt_idx_list_t;
-  typedef std::vector<cell_fn_t>    cp_fn_list_t;
+  typedef std::vector<uint>          critpt_idx_list_t;
+  typedef std::vector<cell_fn_t>     cp_fn_list_t;
   typedef n_vector_t<uint,2>         uint_pair_t;
-  typedef std::vector<uint_pair_t>  uint_pair_list_t;
+  typedef std::vector<uint_pair_t>   uint_pair_list_t;
+  typedef std::multiset<uint>        conn_set_t;
+  typedef std::vector<cellid_t>      disc_t;
+  typedef std::vector<uint>          disc_contrib_t;
+  typedef std::map<cellid_t,uint>    id_cp_map_t;
+  typedef std::vector<critpt_t *>    critpt_list_t;
 
   struct critpt_t
   {
-    typedef std::multiset<uint>     conn_set_t;
-    typedef std::vector<cellid_t>   disc_t;
-    typedef std::vector<uint>       disc_contrib_t;
+    cellid_t       cellid;
+    cellid_t       vert_cell;
+    uchar          index;
+    cell_fn_t      fn;
 
-    cellid_t     cellid;
-    uint         pair_idx;
-    cell_fn_t    fn;
-    uchar        index;
-    cellid_t     vert_cell;
-
-    bool isCancelled;
-    bool is_paired;
-
-    critpt_t()
-    {
-      isCancelled           = false;
-      is_paired             = false;
-      pair_idx              = -1;
-    }
-
-    // list of idx's of cancelled cps that contribute their disc to this cp
+    bool           is_cancelled;
+    bool           is_paired;
+    int            pair_idx;
 
     disc_contrib_t contrib[GRADDIR_COUNT];
     disc_t         disc[GRADDIR_COUNT] ;
     conn_set_t     conn[GRADDIR_COUNT];
+
+    critpt_t(cellid_t c,uchar i,cell_fn_t f, cellid_t v);
+    critpt_t(const critpt_t &);
   };
 
 
@@ -68,20 +64,27 @@ namespace grid
   {
   public:
 
-    typedef std::map<cellid_t,uint>  id_cp_map_t;
-    typedef std::vector<critpt_t *>  critpt_list_t;
-
     critpt_list_t m_cps;
     id_cp_map_t   m_id_cp_map;
 
     rect_t        m_rect;
     rect_t        m_ext_rect;
 
-    void connect_cps(cellid_t c1,cellid_t c2);
+  public:
 
-    void connect_cps(uint_pair_t p);
+    mscomplex_t(rect_t r,rect_t e);
+    ~mscomplex_t();
 
     void add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t vert_cell);
+    void add_critpt(const critpt_t &);
+
+    void connect_cps(cellid_t c1,cellid_t c2);
+    void connect_cps(uint_pair_t p);
+
+    void pair_cps(cellid_t c1,cellid_t c2);
+    void pair_cps(uint_pair_t p);
+
+  public:
 
     void simplify(uint_pair_list_t &,double simplification_treshold);
 
@@ -93,30 +96,19 @@ namespace grid
 
     void clear();
 
-    static mscomplex_t * merge_up(const mscomplex_t& msc1,
-                                  const mscomplex_t& msc2);
+    void  merge_up(const mscomplex_t& ,const mscomplex_t& ,const rect_t&);
 
-    void merge_down(mscomplex_t& msc1,
-                    mscomplex_t& msc2);
-
-    mscomplex_t(rect_t r,rect_t e):m_rect(r),m_ext_rect(e){}
-
-    mscomplex_t(){}
-
-    ~mscomplex_t();
+    void merge_down(mscomplex_t& msc1,mscomplex_t& msc2);
 
     void write_manifolds(std::ostream &os);
-    void write_graph(std::ostream & os);
+    void write_graph(std::ostream & os) const;
 
     void write_manifolds(const std::string &fn);
-    void write_graph(const std::string & fn);
+    void write_graph(const std::string & fn) const;
   };
 
-  typedef mscomplex_t::critpt_list_t           critpt_list_t;
-  typedef critpt_t::conn_set_t                 conn_set_t;
-  typedef critpt_t::disc_t                     critpt_disc_t;
-  typedef critpt_t::conn_set_t::iterator       conn_iter_t;
-  typedef critpt_t::conn_set_t::const_iterator const_conn_iter_t;
+  typedef conn_set_t::iterator       conn_iter_t;
+  typedef conn_set_t::const_iterator const_conn_iter_t;
 
   inline void order_pr_by_cp_index(mscomplex_t *msc,uint_pair_t &e)
   {

@@ -687,7 +687,7 @@ namespace grid
         msg->connect_cps(c1,c2);
   }
 
-  void add_to_disc(critpt_disc_t *disc,cellid_t c1)
+  void add_to_disc(disc_t *disc,cellid_t c1)
   {
     disc->push_back(c1);
   }
@@ -708,6 +708,24 @@ namespace grid
         v=getCellMaxFacetId(v);
 
       msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c),v);
+    }
+
+    for(uint i = 0 ; i < m_critical_cells.size();++i)
+    {
+      cellid_t c = m_critical_cells[i];
+
+      if(!isCellPaired(c))
+        continue;
+
+      cellid_t p = getCellPairId(c);
+
+      if(!isPairOrientationCorrect(c,p))
+        continue;
+
+      if(!m_rect.contains(p))
+        continue;
+
+      msgraph->pair_cps(c,p);
     }
 
     try
