@@ -44,7 +44,7 @@ namespace grid
   {
     cellid_t       cellid;
     cellid_t       vert_cell;
-    uchar          index;
+    char           index;
     cell_fn_t      fn;
 
     bool           is_cancelled;
@@ -75,11 +75,14 @@ namespace grid
     mscomplex_t(rect_t r,rect_t e);
     ~mscomplex_t();
 
-    void add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t vert_cell);
-    void add_critpt(const critpt_t &);
+    int  add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t vert_cell);
+    int  add_critpt(const critpt_t &);
 
     void connect_cps(cellid_t c1,cellid_t c2);
     void connect_cps(uint_pair_t p);
+
+    void dir_connect_cps(cellid_t c1,cellid_t c2);
+    void dir_connect_cps(uint_pair_t p);
 
     void pair_cps(cellid_t c1,cellid_t c2);
     void pair_cps(uint_pair_t p);
@@ -96,9 +99,8 @@ namespace grid
 
     void clear();
 
-    void  merge_up(const mscomplex_t& ,const mscomplex_t& ,const rect_t&);
-
-    void merge_down(mscomplex_t& msc1,mscomplex_t& msc2);
+    void merge_up  (const mscomplex_t& ,const mscomplex_t& ,const rect_t&);
+    void merge_down(mscomplex_t& ,mscomplex_t& ,const rect_t&);
 
     void write_manifolds(std::ostream &os);
     void write_graph(std::ostream & os) const;

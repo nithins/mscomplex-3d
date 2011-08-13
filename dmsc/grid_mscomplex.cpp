@@ -8,6 +8,8 @@
 #include <fstream>
 #include <limits>
 
+using namespace std;
+
 namespace grid
 {
   critpt_t::critpt_t(cellid_t c,uchar i,cell_fn_t f, cellid_t v):
@@ -41,22 +43,26 @@ namespace grid
     clear();
   }
 
-  void mscomplex_t::add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t v)
+  int mscomplex_t::add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t v)
   {
     ASSERT(m_id_cp_map.count(c) == 0);
 
     critpt_t * cp  = new critpt_t(c,i,f,v);
     m_id_cp_map.insert(std::make_pair(c,m_cps.size()));
     m_cps.push_back(cp);
+
+    return (m_cps.size()-1);
   }
 
-  void mscomplex_t::add_critpt(const critpt_t &c)
+  int mscomplex_t::add_critpt(const critpt_t &c)
   {
     ASSERT(m_id_cp_map.count(c.cellid) == 0);
 
     critpt_t * cp  = new critpt_t(c);
     m_id_cp_map.insert(std::make_pair(cp->cellid,m_cps.size()));
     m_cps.push_back(cp);
+
+    return (m_cps.size()-1);
   }
 
   void mscomplex_t::connect_cps(cellid_t c0,cellid_t c1)
@@ -79,6 +85,35 @@ namespace grid
 
     for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
+
+  }
+
+  void mscomplex_t::dir_connect_cps(cellid_t c1,cellid_t c2)
+  {
+    ASSERT(m_id_cp_map.count(c1) == 1);
+    ASSERT(m_id_cp_map.count(c2) == 1);
+
+    dir_connect_cps(uint_pair_t(m_id_cp_map[c1],m_id_cp_map[c2]));
+  }
+
+  void mscomplex_t::dir_connect_cps(uint_pair_t pr)
+  {
+    critpt_t * c = m_cps[pr[0]];
+    critpt_t * p = m_cps[pr[1]];
+
+    ASSERT(c->is_paired != p->is_paired);
+    ASSERT(abs(c->index-p->index) == 1);
+
+    if(p->is_paired)
+    {
+      std::swap(c,p);
+      std::swap(pr[0],pr[1]);
+    }
+
+    if(c->index > p->index)
+      c->conn[0].insert(pr[1]);
+    else
+      c->conn[1].insert(pr[1]);
 
   }
 
@@ -283,168 +318,112 @@ namespace grid
       }
     }
   }
-//
-//  void mscomplex_t::merge_down(mscomplex_t& msc1,mscomplex_t& msc2)
-//  {
-//    // form the intersection rect
-//    rect_t ixn;
-//
-//    if (!msc2.m_rect.intersection (msc1.m_rect,ixn))
-//      throw std::logic_error ("rects should intersect for merge");
-//
-//    if ( msc2.m_rect.eff_dim() != gc_grid_dim-1)
-//      throw std::logic_error ("rects must merge along a d-1 manifold");
-//
-//    static_assert(gc_grid_dim == 3&&"defined for 3-manifolds only");
-//
-//    cellid_t c;
-//
-//    for(c[2] = ixn[2][1] ; c[2] >= ixn[2][0]; --c[2])
-//    {
-//      for(c[1] = ixn[1][1] ; c[1] >= ixn[1][0]; --c[1])
-//      {
-//        for(c[0] = ixn[0][1] ; c[0] >= ixn[0][0]; --c[0])
-//        {
-//
-//          if(this->m_id_cp_map.count(c) != 1)
-//            throw std::logic_error("missing common bndry cp");
-//
-//          u_int src_idx = this->m_id_cp_map[c];
-//
-//          critpt_t *src_cp = this->m_cps[src_idx];
-//
-//          if(!src_cp->isCancelled )
-//            continue;
-//
-//          u_int pair_idx = src_cp->pair_idx;
-//
-//          cellid_t p = this->m_cps[pair_idx]->cellid;
-//
-//          if(!this->m_rect.isInInterior(c)&& !this->m_ext_rect.isOnBoundry(c))
-//            continue;
-//
-//          if(!this->m_rect.isInInterior(p)&& !this->m_ext_rect.isOnBoundry(p))
-//            continue;
-//
-//          uncancel_pairs(this,uint_pair_t(src_idx,pair_idx));
-//        }
-//      }
-//    }
-//
-//    // identify and copy the results to msc1 and msc2
-//
-//    mscomplex_t* msc_arr[] = {&msc1,&msc2};
-//
-//    for (uint i = 0 ; i <2;++i)
-//    {
-//      mscomplex_t * msc = msc_arr[i];
-//
-//      // adjust connections for uncancelled cps in msc
-//      for(uint j = 0 ; j < m_cps.size();++j)
-//      {
-//        critpt_t * src_cp = m_cps[j];
-//
-//        if(src_cp->isCancelled)
-//          throw std::logic_error("all cps ought to be uncancelled by now");
-//
-//        if(!src_cp->is_paired)
-//          continue;
-//
-//        critpt_t * src_pair_cp = m_cps[src_cp->pair_idx];
-//
-//        bool src_in_msc      = (msc->m_id_cp_map.count(src_cp->cellid) != 0);
-//        bool src_pair_in_msc = (msc->m_id_cp_map.count(src_pair_cp->cellid) != 0);
-//
-//        if(!src_in_msc && !src_pair_in_msc)
-//          continue;
-//
-//        if(!src_in_msc)
-//        {
-//          shallow_replicate_cp(*msc,*src_cp);
-//        }
-//
-//        if(!src_pair_in_msc)
-//        {
-//          shallow_replicate_cp(*msc,*src_pair_cp);
-//        }
-//
-//        uint dest_cp_idx = msc->m_id_cp_map[src_cp->cellid];
-//
-//        critpt_t *dest_cp = msc->m_cps[dest_cp_idx];
-//
-//        if(!src_in_msc || !src_pair_in_msc || !dest_cp->is_paired)
-//        {
-//          uint dest_pair_cp_idx  = msc->m_id_cp_map[src_pair_cp->cellid];
-//          critpt_t *dest_pair_cp = msc->m_cps[dest_pair_cp_idx];
-//
-//          dest_cp->is_paired      = true;
-//          dest_pair_cp->is_paired = true;
-//
-//          dest_cp->pair_idx      = dest_pair_cp_idx;
-//          dest_pair_cp->pair_idx = dest_cp_idx;
-//        }
-//
-//        conn_t *src_acdc[] = {&src_cp->asc,&src_cp->des};
-//        conn_t *dest_acdc[] = {&dest_cp->asc,&dest_cp->des};
-//
-//        for(uint k = 0 ; k < 2;++k)
-//        {
-//          dest_acdc[k]->clear();
-//
-//          for(conn_iter_t it = src_acdc[k]->begin(); it!=src_acdc[k]->end();++it)
-//          {
-//            critpt_t *src_conn_cp = m_cps[*it];
-//
-//            if(src_conn_cp->is_paired == true)
-//              throw std::logic_error("only non cancellable cps must be remaining");
-//
-//            if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
-//            {
-//              shallow_replicate_cp(*msc,*src_conn_cp);
-//            }
-//
-//            dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
-//          }// end it
-//        }// end k
-//      }// end j
-//
-//      // adjust connections for non uncancelled cps in msc
-//      for(uint j = 0 ; j < m_cps.size();++j)
-//      {
-//        critpt_t * src_cp = m_cps[j];
-//
-//        if(src_cp->is_paired)
-//          continue;
-//
-//        if(msc->m_id_cp_map.count(src_cp->cellid) != 1)
-//          continue;
-//
-//        critpt_t *dest_cp = msc->m_cps[msc->m_id_cp_map[src_cp->cellid]];
-//
-//        conn_t *src_acdc[] = {&src_cp->asc,&src_cp->des};
-//        conn_t *dest_acdc[] = {&dest_cp->asc,&dest_cp->des};
-//
-//        for(uint k = 0 ; k < 2;++k)
-//        {
-//          dest_acdc[k]->clear();
-//
-//          for(conn_iter_t it = src_acdc[k]->begin(); it!=src_acdc[k]->end();++it)
-//          {
-//            critpt_t *src_conn_cp = m_cps[*it];
-//
-//            if(src_conn_cp->is_paired == true)
-//              throw std::logic_error("only non cancellable cps must be remaining 1");
-//
-//
-//            if(msc->m_id_cp_map.count(src_conn_cp->cellid) == 0)
-//              continue;
-//
-//            dest_acdc[k]->insert(msc->m_id_cp_map[src_conn_cp->cellid]);
-//          }// end it
-//        }// end k
-//      }// end j
-//    }//end i
-//  }
+
+  void mscomplex_t::merge_down
+      (mscomplex_t& msc1,
+       mscomplex_t& msc2,
+       const rect_t& bnd)
+  {
+    mscomplex_t *msc_arr[] = {&msc1,&msc2};
+
+    for(cellid_t c = bnd.upper_corner() ; c[2] >= bnd[2][0]; --c[2])
+    {
+      for(c[1] = bnd[1][1] ; c[1] >= bnd[1][0]; --c[1])
+      {
+        for(c[0] = bnd[0][1] ; c[0] >= bnd[0][0]; --c[0])
+        {
+          if (m_id_cp_map.count(c) == 0)
+            continue;
+
+          int cp_idx = m_id_cp_map[c];
+
+          critpt_t *pr[] = {m_cps[cp_idx],NULL};
+
+          if(!pr[0]->is_paired)
+            continue;
+
+          pr[1] =  m_cps[pr[0]->pair_idx];
+
+          if(bnd.contains(pr[1]->cellid))
+            continue;
+
+          uncancel_pair(this,uint_pair_t(cp_idx,pr[0]->pair_idx));
+
+          mscomplex_t &msc_out = ((msc1.m_rect.contains(pr[1]->cellid))?(msc2):(msc1));
+          msc_out.add_critpt(*pr[1]);
+          msc_out.pair_cps(pr[0]->cellid,pr[1]->cellid);
+
+          for(int m = 0 ; m < 2; ++m)
+          {
+            mscomplex_t &msc = *msc_arr[m];
+            try
+            {
+              for(int d = 0 ; d < 2; ++d)
+              {
+                ASSERT(msc.m_id_cp_map.count(pr[d]->cellid) == 1);
+                msc.m_cps[msc.m_id_cp_map[pr[d]->cellid]]->conn[d^1].clear();
+
+                for(conn_iter_t it = pr[d]->conn[d^1].begin();it != pr[d]->conn[d^1].end();++it)
+                {
+                  critpt_t * ccp  = m_cps[*it];
+
+                  try
+                  {
+                    ASSERT(ccp->is_paired == false);
+
+                    if(msc.m_id_cp_map.count(ccp->cellid) == 0)
+                      msc.add_critpt(*ccp);
+
+                    msc.dir_connect_cps(pr[d]->cellid,ccp->cellid);
+                  }
+                  catch(assertion_error e)
+                  {
+                    e<<"\n";
+                    e<<FILEFUNCLINE<<endl;
+                    e<<"failed to connect "<<pr[d]->cellid<<ccp->cellid<<endl;
+                    throw;
+                  }
+                }
+              }
+            }
+            catch( assertion_error e)
+            {
+              e<<"\n";
+              e<<FILEFUNCLINE<<endl;
+              e<<VARSTR(msc.m_rect)<<endl;
+              throw;
+            }
+          }
+        }
+      }
+    }
+
+    for(int m = 0 ; m < 2; ++m)
+    {
+      mscomplex_t &msc = *msc_arr[m];
+
+      for(int i = 0 ; i < msc.m_cps.size(); ++i)
+      {
+        critpt_t * cp = msc.m_cps[i];
+
+        if(cp->is_paired)
+          continue;
+
+        for(int d = 0 ; d < 2; ++d)
+        {
+          for(conn_iter_t it = cp->conn[d].begin();it != cp->conn[d].end();)
+          {
+            conn_iter_t it_ =it; ++it;
+
+            critpt_t * ccp  = msc.m_cps[*it_];
+
+            if(ccp->is_paired)
+              cp->conn[d].erase(it_);
+          }
+        }
+      }
+    }
+  }
 
   void mscomplex_t::clear()
   {

@@ -81,7 +81,9 @@ namespace grid
 
     void compute_subdomain_msgraphs ();
 
-    void merge_subdomain_msgraphs ();
+    void merge_up_subdomain_msgraphs ();
+
+    void merge_down_subdomain_msgraphs ();
 
     void save_results ();
 

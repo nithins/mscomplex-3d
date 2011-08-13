@@ -177,7 +177,7 @@ namespace grid
     delete []pData;
   }
 
-  void data_manager_t::merge_subdomain_msgraphs ()
+  void data_manager_t::merge_up_subdomain_msgraphs ()
   {
     for(int lev = m_max_levels-1 ;lev >= 0 ;--lev)
     {
@@ -195,6 +195,26 @@ namespace grid
       }
     }
   }
+
+  void data_manager_t::merge_down_subdomain_msgraphs ()
+  {
+    for(int lev = m_max_levels-1 ;lev >= 0 ;--lev)
+    {
+      int n = two_power(lev);
+
+      for(int i = 0 ;i < n; ++i)
+      {
+        mscomplex_ptr_t msc  = m_pieces[n+i-1]->m_msgraph;
+        mscomplex_ptr_t msc1 = m_pieces[(n+i)*2 -1]->m_msgraph;
+        mscomplex_ptr_t msc2 = m_pieces[(n+i)*2]->m_msgraph;
+
+        rect_t bnd = msc1->m_rect.intersection(msc2->m_rect);
+
+        msc->merge_down(*msc1,*msc2,bnd);
+      }
+    }
+  }
+
 
   void data_manager_t::save_results()
   {
@@ -219,7 +239,9 @@ namespace grid
 
     compute_subdomain_msgraphs();
 
-    merge_subdomain_msgraphs();
+    merge_up_subdomain_msgraphs();
+
+    merge_down_subdomain_msgraphs();
 
     save_results();
 
