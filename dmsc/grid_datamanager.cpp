@@ -23,6 +23,7 @@
 
 #include <boost/format.hpp>
 #include <boost/lambda/lambda.hpp>
+#include <boost/multi_array.hpp>
 
 #include <logutil.h>
 #include <timer.h>
@@ -36,49 +37,48 @@ using namespace std;
 
 namespace grid
 {
-  rect_range_t split_range(rect_range_t r_in, int i,int n)
+  void split_rect(rect_t r, rect_t &r0,rect_t &r1 ,int dir)
   {
-    ASSERT(is_in_range(i,0,n));
+    r0 = r;
+    r1 = r;
 
-    int l = r_in[0] + divide_ri(r_in.span()*i,n);
-    int u = r_in[0] + divide_ri(r_in.span()*(i+1),n);
-
-    if( i+1 != n ) u = min<int>(u+1,r_in[1]);
-
-    return rect_range_t(l,u);
-  }
-
-  rect_range_t expand_range(rect_range_t r_in, int i,int n)
-  {
-    ASSERT(is_in_range(i,0,n));
-
-    if(i != 0 )  r_in[0] = r_in[0]-1;
-    if(i+1 != n) r_in[1] = r_in[1]+1;
-
-    return r_in;
+    r0[dir][1] = r[dir][0] + divide_ri(r[dir].span(),2)+1;
+    r1[dir][0] = r[dir][0] + divide_ri(r[dir].span(),2);
   }
 
   void data_manager_t::createPieces ()
   {
-    rect_t d(cellid_t::zero,(m_size-cellid_t::one)*2);
+    int level = 0;
 
-    for(int lev = 0 ;lev<m_max_levels+1;++lev)
+    rect_t d(cellid_t::zero,m_size);
+
+    piece_ptr_t p(new octtree_piece_t(d,d,m_level_ct-level));
+    m_pieces.push_back(p);
+
+    for ( int s_dir = gc_grid_dim-1 ; s_dir >= 0; s_dir--)
     {
-      int num_lev_pieces = two_power(lev);
-
-      for(int i = 0 ;i<num_lev_pieces; ++i)
+      for( int s_level = 0 ; s_level < m_levels[s_dir]; ++s_level)
       {
-        rect_t pr(cellid_t::zero,m_size);
-        pr[2] = split_range(pr[2],i,num_lev_pieces);
+        int s = two_power(level)-1;
+        int e = two_power(level+1)-1;
 
-        rect_t pe(pr);
-        pe[2] = expand_range(pe[2],i,num_lev_pieces);
+        ++level;
 
-        rect_t r = rect_t(pr.lower_corner()*2,(pr.upper_corner()-cellid_t::one)*2);
-        rect_t e = rect_t(pe.lower_corner()*2,(pe.upper_corner()-cellid_t::one)*2);
+        for(int i = s ; i < e ; ++i)
+        {
+          piece_ptr_t dp = m_pieces[i];
 
-        piece_ptr_t p(new octtree_piece_t(r,e,d,m_max_levels-lev));
-        m_pieces.push_back(p);
+          rect_t pr1,pr2;
+
+          split_rect(dp->m_prct,pr1,pr2,s_dir);
+
+          piece_ptr_t p1(new octtree_piece_t(pr1,d,m_level_ct-level));
+          m_pieces.push_back(p1);
+
+          piece_ptr_t p2(new octtree_piece_t(pr2,d,m_level_ct-level));
+          m_pieces.push_back(p2);
+
+        }
       }
     }
 
@@ -87,41 +87,92 @@ namespace grid
 
   void data_manager_t::split_dataset()
   {
-    std::ifstream ifs(m_filename.c_str(),std::ios::in|std::ios::binary);
+    typedef boost::multi_array_ref<cell_fn_t, 2>   zslice_ref_t;
+    typedef boost::multi_array<cell_fn_t, 2>       zslice_t;
+    typedef boost::multi_array_types::index_range  range_t;
+    typedef boost::shared_ptr<ofstream>            ofstream_ptr_t;
 
+
+
+    std::ifstream ifs(m_filename.c_str(),std::ios::in|std::ios::binary);
     ensure(ifs.is_open(),"unable to open file");
 
-    int pData_size = (divide_ri(m_size[2],m_num_pieces)+3)*m_size[0]*m_size[1];
+    int xy_size = m_size[0]*m_size[1];
+    int xy_ct   = two_power(m_levels[0])*two_power(m_levels[1]);
 
-    cell_fn_t * pData = new cell_fn_t[pData_size];
+    cell_fn_ptr_t pData(new cell_fn_t[xy_size]);
 
-    for(int i = 0 ; i <m_num_pieces;++i)
+    zslice_ref_t zslice(pData.get(),boost::extents[m_size[0]][m_size[1]],
+                    boost::fortran_storage_order());
+
+    int slc_i = two_power(m_levels[2])-1;
+    int slc_e = two_power(m_levels[2]+1)-1;
+
+    int bnd_z = -1;
+
+    if(slc_i +1 != slc_e)
+      bnd_z = m_pieces[slc_i+1]->m_prct[2][0];
+
+    vector< ofstream_ptr_t> xy_files;
+
+    int pc_beg = two_power(m_level_ct)-1;
+    int pc_end = pc_beg + xy_ct;
+
+    for( int pc_i = pc_beg ; pc_i < pc_end;++pc_i)
     {
-      rect_range_t z_rng(0,m_size[2]);
-      z_rng = split_range(z_rng,i,m_num_pieces);
-      z_rng = expand_range(z_rng,i,m_num_pieces);
-
-      int beg = z_rng[0] * m_size[1] *m_size[0];
-      int end = z_rng[1] * m_size[1] *m_size[0];
-
-      ensure((end-beg) <= pData_size,"miscalculated max pData size");
-
-      ifs.seekg(beg*sizeof(cell_fn_t),std::ios::beg);
-      ensure(ifs.fail()==false,"failed to seek");
-
-      ifs.read((char*)(void*)pData,sizeof(cell_fn_t)*(end-beg));
-      ensure(ifs.fail()==false,"failed to read some data");
-
-      std::string filename = m_filename+"."+to_string(i);
-
-      std::ofstream ofs(filename.c_str(),std::ios::out|std::ios::binary);
-
-      ofs.write((char*)(void*)pData,sizeof(cell_fn_t)*(end-beg));
-
-      ofs.close();
+      string filename = m_pieces[pc_i]->get_basename(m_basename)+".raw";
+      ofstream_ptr_t p(new ofstream(filename.c_str(),ios::binary));
+      ensure(p->is_open(),"unable to open piece file");
+      xy_files.push_back(p);
     }
 
-    delete []pData;
+    for( int z = 0; z < m_size[2]; ++z)
+    {
+      if (bnd_z >=0 && z == bnd_z - 1)
+      {
+        pc_end += xy_ct;
+
+        for( int pc_i = pc_beg+xy_ct ; pc_i < pc_end;++pc_i)
+        {
+          string filename = m_pieces[pc_i]->get_basename(m_basename)+".raw";
+          ofstream_ptr_t p(new ofstream(filename.c_str(),ios::binary));
+          ensure(p->is_open(),"unable to open piece file");
+          xy_files.push_back(p);
+        }
+      }
+
+      ifs.read((char*)(void*)pData.get(),xy_size*sizeof(cell_fn_t));
+
+      for(int pc_i = pc_beg; pc_i != pc_end; ++pc_i)
+      {
+        rect_range_t x_rng = m_pieces[pc_i]->m_ext_prct[0];
+        rect_range_t y_rng = m_pieces[pc_i]->m_ext_prct[1];
+
+        zslice_t pc_slice(zslice[boost::indices[range_t(x_rng[0],x_rng[1])]
+                                 [range_t(y_rng[0],y_rng[1])]],boost::fortran_storage_order());
+
+        int sz = x_rng.span()*y_rng.span()*sizeof(cell_fn_t);
+
+        xy_files[pc_i-pc_beg]->write((const char *)(const void*)pc_slice.data(),sz);
+      }
+
+      if(bnd_z >=0 && z  == bnd_z + 1)
+      {
+        pc_beg += xy_ct;
+
+        xy_files.erase(xy_files.begin(),xy_files.begin()+xy_ct);
+
+        if(slc_i +1 != slc_e)
+          ++slc_i;
+
+        if(slc_i +1 != slc_e)
+          bnd_z = m_pieces[slc_i+1]->m_prct[2][0];
+        else
+          bnd_z = -1;
+      }
+    }
+
+    xy_files.erase(xy_files.begin(),xy_files.begin()+xy_ct);
 
     ifs.close();
   }
@@ -130,56 +181,86 @@ namespace grid
   {
     using namespace boost::lambda;
 
-    int pData_size = (divide_ri(m_size[2],m_num_pieces)+3)*m_size[0]*m_size[1];
+    int pData_size = (divide_ri(m_size[2],two_power(m_levels[2]))+3)*
+                     (divide_ri(m_size[1],two_power(m_levels[1]))+3)*
+                     (divide_ri(m_size[0],two_power(m_levels[0]))+3);
 
-    cell_fn_t * pData = new cell_fn_t[pData_size];
+    cell_fn_ptr_t pData(new cell_fn_t[pData_size]);
 
-    for(int i = 0 ; i <m_num_pieces;++i)
+    int pc_beg = two_power(m_level_ct)-1;
+    int pc_end = pc_beg + two_power(m_level_ct);
+
+    for(int pc_i = pc_beg ; pc_i < pc_end;++pc_i)
     {
-      piece_ptr_t dp = m_pieces[m_num_pieces-1+i];
-      rect_t e = dp->m_dataset->get_ext_rect();
-      int num_pts = rect_t(e.lower_corner()/2,e.upper_corner()/2+cellid_t::one).volume();
+      piece_ptr_t dp = m_pieces[pc_i];
+      int num_pts    = dp->m_ext_prct.volume();
 
-      string filename = m_filename+"."+to_string(i);
+      string filename = dp->get_basename(m_basename)+".raw";
       ifstream ifs(filename.c_str(),ios::in|ios::binary);
       ensure(ifs.is_open(),"unable to open file");
 
-      ifs.read((char*)(void*)pData,sizeof(cell_fn_t)*num_pts);
+      ifs.read((char*)(void*)pData.get(),sizeof(cell_fn_t)*num_pts);
       ensure(ifs.fail()==false,"failed to read some data");
+
       ifs.seekg(0,ios::end);
       ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
 
-      dp->m_dataset->init(pData);
+      dp->m_dataset->init(pData.get());
       dp->m_dataset->assignGradient();
 
-      if( i != 0 )
+      rect_t r = dp->m_dataset->get_rect();
+      rect_t e = dp->m_dataset->get_ext_rect();
+
+      for( int xyz_dir = 0 ; xyz_dir < gc_grid_dim; ++xyz_dir)
       {
-        rect_t bnd = e;
-        bnd[2] = rect_range_t(e[2][0]+2,e[2][0]+2);
-        dp->m_dataset->markBoundryCritical(bnd);
+        for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
+        {
+          rect_t bnd = e;
+
+          if(r[xyz_dir][lr_dir] != e[xyz_dir][lr_dir])
+          {
+            bnd[xyz_dir][0] = r[xyz_dir][lr_dir];
+            bnd[xyz_dir][1] = r[xyz_dir][lr_dir];
+
+            dp->m_dataset->markBoundryCritical(bnd);
+          }
+        }
       }
 
-      if( i+1 != m_num_pieces )
-      {
-        rect_t bnd = e;
-        bnd[2] = rect_range_t(e[2][1]-2,e[2][1]-2);
-        dp->m_dataset->markBoundryCritical(bnd);
-      }
-
-//      ofstream ofs((filename+".pairs").c_str(),ios::out);
-//      dp->m_dataset->log_pairs(ofs);
-//      ofs.close();
+      dp->m_dataset->log_pairs(dp->get_basename(m_basename)+".pairs");
 
       dp->m_dataset->computeMsGraph(dp->m_msgraph.get());
       dp->m_dataset->clear();
     }
+  }
 
-    delete []pData;
+  int get_aaplane_normal_dir(const rect_t & plane)
+  {
+    try
+    {
+
+      ASSERT(plane.eff_dim() ==gc_grid_dim-1);
+
+      for( int d = 0 ; d < gc_grid_dim;++d)
+      {
+        if(plane[d][0] == plane[d][1])
+          return d;
+      }
+
+      ASSERT(false);
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR(plane));
+
+      throw;
+    }
   }
 
   void data_manager_t::merge_up_subdomain_msgraphs ()
   {
-    for(int lev = m_max_levels-1 ;lev >= 0 ;--lev)
+    for(int lev = m_level_ct-1 ;lev >= 0 ;--lev)
     {
       int n = two_power(lev);
 
@@ -189,7 +270,12 @@ namespace grid
         mscomplex_ptr_t msc1 = m_pieces[(n+i)*2 -1]->m_msgraph;
         mscomplex_ptr_t msc2 = m_pieces[(n+i)*2]->m_msgraph;
 
-        rect_t bnd = msc1->m_rect.intersection(msc2->m_rect);
+        rect_t bnd = msc1->m_ext_rect.intersection(msc2->m_ext_rect);
+        rect_t ixn = msc1->m_rect.intersection(msc2->m_rect);
+
+        int d = get_aaplane_normal_dir(ixn);
+
+        bnd[d] = ixn[d];
 
         msc->merge_up(*msc1,*msc2,bnd);
       }
@@ -198,7 +284,7 @@ namespace grid
 
   void data_manager_t::merge_down_subdomain_msgraphs ()
   {
-    for(int lev = m_max_levels-1 ;lev >= 0 ;--lev)
+    for(int lev = 0 ;lev < m_level_ct ;++lev)
     {
       int n = two_power(lev);
 
@@ -208,7 +294,12 @@ namespace grid
         mscomplex_ptr_t msc1 = m_pieces[(n+i)*2 -1]->m_msgraph;
         mscomplex_ptr_t msc2 = m_pieces[(n+i)*2]->m_msgraph;
 
-        rect_t bnd = msc1->m_rect.intersection(msc2->m_rect);
+        rect_t bnd = msc1->m_ext_rect.intersection(msc2->m_ext_rect);
+        rect_t ixn = msc1->m_rect.intersection(msc2->m_rect);
+
+        int d = get_aaplane_normal_dir(ixn);
+
+        bnd[d] = ixn[d];
 
         msc->merge_down(*msc1,*msc2,bnd);
       }
@@ -218,11 +309,11 @@ namespace grid
 
   void data_manager_t::save_results()
   {
-    for(int i = 0 ;i < 2*m_num_pieces-1; ++i)
+    for(int i = 0 ;i < m_pieces.size(); ++i)
     {
-      mscomplex_ptr_t msc  = m_pieces[i]->m_msgraph;
+      piece_ptr_t dp = m_pieces[i];
 
-      msc->write_graph(string("msc_graph.txt.")+to_string(i));
+      dp->m_msgraph->write_graph(dp->get_basename(m_basename)+".msgraph.txt");
     }
   }
 
@@ -233,32 +324,56 @@ namespace grid
 
   void data_manager_t::work()
   {
-    split_dataset();
+    Timer t;
+    t.start();
+
+    cout<<"===================================="<<endl;
+    cout<<"         Starting Processing        "<<endl;
+    cout<<"------------------------------------"<<endl;
 
     createPieces();
+    cout<<"create pieces done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+
+    split_dataset();
+    cout<<"split dataset done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     compute_subdomain_msgraphs();
+    cout<<"subdomain msgraph done --- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     merge_up_subdomain_msgraphs();
+    cout<<"merge up done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
     merge_down_subdomain_msgraphs();
+    cout<<"merge down done ---------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     save_results();
+    cout<<"save results done -------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     destoryPieces();
+    cout<<"destroy pieces done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
+
+    cout<<"------------------------------------"<<endl;
+    cout<<"        Finished Processing         "<<endl;
+    cout<<"===================================="<<endl;
   }
 
   data_manager_t::data_manager_t
       ( std::string filename,
         cellid_t     size,
-        int          max_levels,
+        cellid_t     levels,
         double       simp_tresh):
       m_filename(filename),
+      m_basename(basename(filename.c_str())),
       m_size(size),
-      m_max_levels(max_levels),
-      m_simp_tresh(simp_tresh),
-      m_num_pieces(two_power(max_levels))
+      m_levels(levels),
+      m_simp_tresh(simp_tresh)
   {
+    m_level_ct   = m_levels[0] + m_levels[1] + m_levels[2];
+
+    int ext_pos = m_basename.size() -4;
+
+    if(ext_pos >=0 && m_basename.substr(ext_pos,4) == ".raw")
+      m_basename = m_basename.substr(0,ext_pos);
   }
 
   data_manager_t::~data_manager_t ()
@@ -276,8 +391,8 @@ namespace grid
     t.start();
 
     rect_t d(cellid_t::zero,(size-cellid_t::one)*2);
-    boost::shared_ptr<dataset_t>   dataset(new dataset_t(d,d,d));
-    boost::shared_ptr<mscomplex_t> msgraph(new mscomplex_t(d,d));
+    dataset_ptr_t   dataset(new dataset_t(d,d,d));
+    mscomplex_ptr_t msgraph(new mscomplex_t(d,d));
 
     int num_pts = size[0]*size[1]*size[2];
     std::vector<cell_fn_t> pt_data(num_pts);
@@ -314,15 +429,28 @@ namespace grid
     cout<<"===================================="<<endl;
   }
 
-  octtree_piece_t::octtree_piece_t (rect_t r,rect_t e,rect_t d,int l):
+  octtree_piece_t::octtree_piece_t (rect_t p,rect_t pd,int l):
       m_level(l),
-//      m_rct(r),
-//      m_ext(e),
-      m_msgraph(new mscomplex_t(r,e))
+      m_prct(p),
+      m_ext_prct(pd.intersection(rect_t(p.lc()-1,p.uc()+1)))
   {
-    if( l == 0 )
+    rect_t r = rect_t( p.lc()*2,( p.uc()-1)*2);
+    rect_t d = rect_t(pd.lc()*2,(pd.uc()-1)*2);
+
+    rect_t e = d.intersection(rect_t((p.lc()-1)*2,p.uc()*2));
+
+    ASSERT(r.intersection(d) == r);
+
+    m_msgraph.reset(new mscomplex_t(r,e));
+
+    if(l == 0)
+    {
       m_dataset.reset(new dataset_t(r,e,d));
+    }
   }
 
-
+  std::string octtree_piece_t::get_basename(const std::string& basename)
+  {
+    return basename+"."+to_string(m_ext_prct);
+  }
 }

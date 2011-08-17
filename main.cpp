@@ -16,16 +16,17 @@
 #include <iostream>
 
 using namespace std;
+using namespace grid;
 
 namespace bpo = boost::program_options ;
 
 int main(int ac , char **av)
 {
   string         filename;
-  grid::cellid_t size;
+  cellid_t size;
   bool           use_ocl;
   double         simp_tresh;
-  int            levels;
+  cellid_t levels;
 
 #ifdef BUILD_EXEC_GUI
   bool           gui;
@@ -35,8 +36,9 @@ int main(int ac , char **av)
   desc.add_options()
       ("help,h", "produce help message")
       ("file,f",bpo::value<string >(&filename)->required(), "grid file name")
-      ("dim,d", bpo::value<grid::cellid_t>(&size)->required(), "dim of grid entered as (x,y,z)")
-      ("levels,l",bpo::value<int>(&levels)->default_value(0),"number of subdivision levels")
+      ("dim,d", bpo::value<cellid_t>(&size)->required(), "dim of grid entered as [x,y,z]")
+      ("levels,l",bpo::value<cellid_t>(&levels)->default_value(cellid_t(0,0,0)),
+       "number of subdivision levels in each dim .. entered as [x,y,z]")
       ("simp-tresh,t",bpo::value<double>(&simp_tresh)->default_value(0.0),"simplification treshold")
 #ifdef BUILD_EXEC_GUI
       ("gui,g",bpo::value<bool>(&gui)->default_value(false),"show gui")
@@ -62,7 +64,7 @@ int main(int ac , char **av)
     return 1;
   }
 
-  grid::data_manager_t * gdm = new grid::data_manager_t
+  data_manager_t * gdm = new data_manager_t
       (filename,size,levels,simp_tresh);
 
   gdm->work();
@@ -72,7 +74,7 @@ int main(int ac , char **av)
   {
     QApplication application(ac,av);
 
-    grid::viewer_mainwindow gvmw(gdm);
+    viewer_mainwindow gvmw(gdm);
 
     gvmw.setWindowTitle("ms complex vis");
 

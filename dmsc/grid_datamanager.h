@@ -40,10 +40,13 @@ namespace grid
     dataset_ptr_t   m_dataset;
     mscomplex_ptr_t m_msgraph;
 
-//    rect_t                         m_rct,m_ext;
+    rect_t                         m_prct;
+    rect_t                         m_ext_prct;
     int                            m_level;
 
-    octtree_piece_t(rect_t r,rect_t e,rect_t d,int l);
+    octtree_piece_t(rect_t p,rect_t d,int l);
+
+    std::string get_basename(const std::string& basename);
 
   };
 
@@ -61,13 +64,15 @@ namespace grid
     cellid_t                     m_size;
     std::string                  m_filename;
     double                       m_simp_tresh;
-    int                          m_max_levels;
-    int                          m_num_pieces;
+    cellid_t                     m_levels;
+
+    std::string                  m_basename;
+    int                          m_level_ct;
 
     data_manager_t
         ( std::string  filename,
           cellid_t     size,
-          int          max_levels,
+          cellid_t     levels,
           double       simp_tresh
           );
 

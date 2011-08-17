@@ -3,7 +3,6 @@
 #include <iostream>
 
 #include <grid_mscomplex.h>
-#include <grid_mscomplex_ensure.h>
 #include <grid_dataset.h>
 #include <fstream>
 #include <limits>
@@ -12,6 +11,20 @@ using namespace std;
 
 namespace grid
 {
+  inline std::string idx_to_string(mscomplex_t *msc,uint i)
+  {
+    return to_string(msc->m_cps[i]->cellid);
+  }
+
+  inline std::string edge_to_string(mscomplex_t *msc,uint_pair_t e)
+  {
+    std::stringstream ss;
+
+    ss<<idx_to_string(msc,e[0])<<"----"<<idx_to_string(msc,e[1]);
+
+    return ss.str();
+  }
+
   critpt_t::critpt_t(cellid_t c,uchar i,cell_fn_t f, cellid_t v):
       cellid(c),index(i),fn(f),vert_cell(v)
   {
@@ -67,17 +80,27 @@ namespace grid
 
   void mscomplex_t::connect_cps(cellid_t c0,cellid_t c1)
   {
-    ASSERT(m_id_cp_map.count(c0) == 1);
-    ASSERT(m_id_cp_map.count(c1) == 1);
+    try
+    {
+      ASSERT(m_id_cp_map.count(c0) == 1);
+      ASSERT(m_id_cp_map.count(c1) == 1);
 
-    connect_cps(uint_pair_t(m_id_cp_map[c0],m_id_cp_map[c1]));
+      connect_cps(uint_pair_t(m_id_cp_map[c0],m_id_cp_map[c1]));
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR2(c0,m_id_cp_map.count(c0)));
+      e.push(SVAR2(c1,m_id_cp_map.count(c1)));
+      throw;
+    }
   }
 
   void mscomplex_t::connect_cps(uint_pair_t e)
   {
     order_pr_by_cp_index(this,e);
 
-    ensure_ordered_index_one_separation(this,e);
+    ASSERT(m_cps[e[1]]->index+1 == m_cps[e[0]]->index);
 
     for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
       if(m_cps[e[dir]]->conn[dir].count(e[dir^1]) == 2)
@@ -101,20 +124,30 @@ namespace grid
     critpt_t * c = m_cps[pr[0]];
     critpt_t * p = m_cps[pr[1]];
 
-    ASSERT(c->is_paired != p->is_paired);
-    ASSERT(abs(c->index-p->index) == 1);
-
-    if(p->is_paired)
+    try
     {
-      std::swap(c,p);
-      std::swap(pr[0],pr[1]);
+      ASSERT(c->is_paired != p->is_paired);
+      ASSERT(abs(c->index-p->index) == 1);
+
+      if(p->is_paired)
+      {
+        std::swap(c,p);
+        std::swap(pr[0],pr[1]);
+      }
+
+      if(c->index > p->index)
+        c->conn[0].insert(pr[1]);
+      else
+        c->conn[1].insert(pr[1]);
     }
-
-    if(c->index > p->index)
-      c->conn[0].insert(pr[1]);
-    else
-      c->conn[1].insert(pr[1]);
-
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR2(c->cellid,p->cellid));
+      e.push(SVAR2(c->is_paired,p->is_paired));
+      e.push(SVAR2((int)c->index,(int)p->index));
+      throw;
+    }
   }
 
   void mscomplex_t::pair_cps(cellid_t c1,cellid_t c2)
@@ -140,9 +173,11 @@ namespace grid
 
     order_pr_by_cp_index(msc,e);
 
-    ensure_single_connectivity(msc,e);
-
     critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
+
+    ASSERT(cp[0]->index == cp[1]->index+1);
+    ASSERT(cp[0]->conn[0].count(e[1]) == 1);
+    ASSERT(cp[0]->conn[0].count(e[1]) == cp[1]->conn[1].count(e[0]));
 
     conn_iter_t it[GRADDIR_COUNT];
 
@@ -153,8 +188,8 @@ namespace grid
     for(it[0] = cp[0]->conn[0].begin();it[0] != cp[0]->conn[0].end();++it[0])
       for(it[1] = cp[1]->conn[1].begin();it[1] != cp[1]->conn[1].end();++it[1])
       {
-        ensure_not_cancelled(msc,*it[0]);
-        ensure_not_cancelled(msc,*it[1]);
+        ASSERT(msc->m_cps[*it[0]]->is_cancelled == false);
+        ASSERT(msc->m_cps[*it[1]]->is_cancelled == false);
 
         msc->connect_cps(uint_pair_t(*it[0],*it[1]));
       }
@@ -190,12 +225,12 @@ namespace grid
   {
     order_pr_by_cp_index(msc,e);
 
-    ensure_ordered_connectivity(msc,e);
-
-    ensure_cp_is_cancelled(msc,e[0]);
-    ensure_cp_is_cancelled(msc,e[1]);
-
     critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
+
+    ASSERT(cp[0]->is_cancelled == true && cp[1]->is_cancelled ==true);
+    ASSERT(cp[0]->index == cp[1]->index + 1);
+    ASSERT(cp[0]->conn[0].count(e[1]) != 0);
+    ASSERT(cp[0]->conn[0].count(e[1]) == cp[1]->conn[1].count(e[0]));
 
     conn_iter_t i_it,j_it;
 
@@ -205,33 +240,54 @@ namespace grid
 
       for(i_it = cp[dir]->conn[dir].begin();i_it != cp[dir]->conn[dir].end() ; ++i_it )
       {
-        if(*i_it == e[dir^1]) continue;
+        if(*i_it == e[dir^1])
+          continue;
 
-        critpt_t *conn_cp = msc->m_cps[*i_it];
+        critpt_t *ccp = msc->m_cps[*i_it];
 
-        if(!conn_cp->is_paired)
+        if(ccp->is_paired == false)
         {
           new_conn.insert(*i_it);
           continue;
         }
 
-        ensure_cp_is_not_cancelled(msc,*i_it);
+        ASSERT(ccp->is_cancelled == false);
 
-        ensure_cp_is_paired(msc,*i_it);
+        critpt_t *ccp_pr = msc->m_cps[ccp->pair_idx];
 
-        critpt_t *cp_pr = msc->m_cps[conn_cp->pair_idx];
-
-        for(j_it = cp_pr->conn[dir].begin(); j_it != cp_pr->conn[dir].end() ; ++j_it )
+        try
         {
-          ensure_cp_is_not_paired(msc,*j_it);
+          for(j_it = ccp_pr->conn[dir].begin(); j_it != ccp_pr->conn[dir].end() ; ++j_it )
+          {
+            ASSERT(msc->m_cps[*j_it]->is_paired == false);
+            ASSERT(abs<int>(msc->m_cps[*j_it]->index-cp[dir]->index) == 1);
 
-          ensure_index_one_separation(msc,uint_pair_t(*j_it,e[dir]));
+            if(new_conn.count(*j_it) == 0)
+              new_conn.insert(*j_it);
+          }
+        }
+        catch(assertion_error ex)
+        {
+          ex.push(_FFL);
 
-          if(new_conn.count(*j_it) == 0)
-            new_conn.insert(*j_it);
+          ex.push(SVAR(msc->m_cps[*j_it]->cellid));
+          ex.push(SVAR(msc->m_cps[*j_it]->is_paired));
+
+          if(msc->m_cps[*j_it]->is_paired)
+            ex.push(SVAR(msc->m_cps[msc->m_cps[*j_it]->pair_idx]->cellid));
+
+          ex.push("");
+          ex.push(SVAR(ccp->cellid));
+          ex.push(SVAR(ccp_pr->cellid));
+
+          ex.push("");
+          ex.push(SVAR(dir));
+          ex.push(SVAR(cp[dir]->cellid));
+          ex.push(SVAR(cp[dir^1]->cellid));
+
+          throw;
         }
       }
-
       msc->m_cps[e[dir]]->is_cancelled = false;
       cp[dir]->conn[dir].clear();
       cp[dir]->conn[dir].insert(new_conn.begin(),new_conn.end());
@@ -245,77 +301,108 @@ namespace grid
   {
     typedef conn_set_t::const_iterator cconn_it_t;
 
-    const mscomplex_t *msc[] = {&msc1,&msc2};
-
-    for (int i = 0 ; i < 2 ; ++i)
+    try
     {
-      for(int j = 0; j < msc[i]->m_cps.size();++j)
+      ASSERT(bnd.eff_dim() == gc_grid_dim-1);
+      ASSERT(m_ext_rect.intersection(bnd) == bnd);
+
+      const mscomplex_t *msc[] = {&msc1,&msc2};
+
+      for (int i = 0 ; i < 2 ; ++i)
       {
-        const critpt_t *cp = msc[i]->m_cps[j];
-
-        if(cp->is_cancelled)
-          continue;
-
-        if((i == 1) && (bnd.contains(cp->cellid)))
-          continue;
-
-        add_critpt(*cp);
-      }
-    }
-
-    for (int i = 0 ; i < 2 ; ++i)
-    {
-      for(int j = 0; j < msc[i]->m_cps.size();++j)
-      {
-        const critpt_t *cp = msc[i]->m_cps[j];
-
-        if(cp->is_cancelled)
-          continue;
-
-        bool is_cp_in_bnd = bnd.contains(cp->cellid);
-
-        for(cconn_it_t it = cp->conn[0].begin();it != cp->conn[0].end();++it)
+        for(int j = 0; j < msc[i]->m_cps.size();++j)
         {
-          const critpt_t *ccp = msc[i]->m_cps[*it];
+          const critpt_t *cp = msc[i]->m_cps[j];
 
-          if(ccp->is_cancelled)
-            continue;
+          try
+          {
+            if(cp->is_cancelled)
+              continue;
 
-          if((i == 1) && is_cp_in_bnd && bnd.contains(ccp->cellid))
-            continue;
+            ASSERT((bnd.contains(cp->cellid) == false) || (msc[i^1]->m_id_cp_map.count(cp->cellid) == 1));
+            ASSERT((bnd.contains(cp->cellid) == true)  || (msc[i^1]->m_id_cp_map.count(cp->cellid) == 0));
 
-          connect_cps(cp->cellid,ccp->cellid);
+            if((i == 1) && (bnd.contains(cp->cellid)))
+              continue;
+
+            add_critpt(*cp);
+          }
+          catch(assertion_error e)
+          {
+            e.push(_FFL);
+            e.push(SVAR(cp->cellid));
+            e.push(SVAR(j));
+            e.push(SVAR(i));
+            throw;
+          }
         }
-
-        if(!cp->is_paired)
-          continue;
-
-        pair_cps(cp->cellid,msc[i]->m_cps[cp->pair_idx]->cellid);
       }
-    }
 
-    for(cellid_t c = bnd.lower_corner() ; c[2] <= bnd[2][1]; ++c[2])
-    {
-      for(c[1] = bnd[1][0] ; c[1] <= bnd[1][1]; ++c[1])
+      for (int i = 0 ; i < 2 ; ++i)
       {
-        for(c[0] = bnd[0][0] ; c[0] <= bnd[0][1]; ++c[0])
+        for(int j = 0; j < msc[i]->m_cps.size();++j)
         {
-          if (m_id_cp_map.count(c) == 0)
+          const critpt_t *cp = msc[i]->m_cps[j];
+
+          if(cp->is_cancelled)
             continue;
 
-          int cp_idx = m_id_cp_map[c];
+          bool is_cp_in_bnd = bnd.contains(cp->cellid);
 
-          critpt_t *cp = m_cps[cp_idx];
+          for(cconn_it_t it = cp->conn[0].begin();it != cp->conn[0].end();++it)
+          {
+            const critpt_t *ccp = msc[i]->m_cps[*it];
+
+            if(ccp->is_cancelled)
+              continue;
+
+            if((i == 1) && is_cp_in_bnd && bnd.contains(ccp->cellid))
+              continue;
+
+            connect_cps(cp->cellid,ccp->cellid);
+          }
 
           if(!cp->is_paired)
             continue;
 
-          if(bnd.contains(m_cps[cp->pair_idx]->cellid))
-            continue;
-
-          cancelPairs(this,uint_pair_t(cp_idx,cp->pair_idx));
+          pair_cps(cp->cellid,msc[i]->m_cps[cp->pair_idx]->cellid);
         }
       }
+
+      rect_t ixn = m_rect.intersection(bnd);
+
+      for(cellid_t c = ixn.lower_corner() ; c[2] <= ixn[2][1]; ++c[2])
+      {
+        for(c[1] = ixn[1][0] ; c[1] <= ixn[1][1]; ++c[1])
+        {
+          for(c[0] = ixn[0][0] ; c[0] <= ixn[0][1]; ++c[0])
+          {
+            if (m_id_cp_map.count(c) == 0)
+              continue;
+
+            int cp_idx = m_id_cp_map[c];
+
+            critpt_t *cp = m_cps[cp_idx];
+
+            if(!cp->is_paired)
+              continue;
+
+            if(bnd.contains(m_cps[cp->pair_idx]->cellid))
+              continue;
+
+            cancelPairs(this,uint_pair_t(cp_idx,cp->pair_idx));
+          }
+        }
+      }
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR(bnd));
+      e.push(SVAR2(m_rect,m_ext_rect));
+      e.push(SVAR2(msc1.m_rect,msc1.m_ext_rect));
+      e.push(SVAR2(msc2.m_rect,msc2.m_ext_rect));
+      throw;
     }
   }
 
@@ -326,99 +413,136 @@ namespace grid
   {
     mscomplex_t *msc_arr[] = {&msc1,&msc2};
 
-    for(cellid_t c = bnd.upper_corner() ; c[2] >= bnd[2][0]; --c[2])
+    try
     {
-      for(c[1] = bnd[1][1] ; c[1] >= bnd[1][0]; --c[1])
+      ASSERT(bnd.eff_dim() == gc_grid_dim-1);
+      ASSERT(m_ext_rect.intersection(bnd) == bnd);
+
+      rect_t ixn = m_rect.intersection(bnd);
+
+      for(cellid_t c = ixn.upper_corner() ; c[2] >= ixn[2][0]; --c[2])
       {
-        for(c[0] = bnd[0][1] ; c[0] >= bnd[0][0]; --c[0])
+        for(c[1] = ixn[1][1] ; c[1] >= ixn[1][0]; --c[1])
         {
-          if (m_id_cp_map.count(c) == 0)
-            continue;
-
-          int cp_idx = m_id_cp_map[c];
-
-          critpt_t *pr[] = {m_cps[cp_idx],NULL};
-
-          if(!pr[0]->is_paired)
-            continue;
-
-          pr[1] =  m_cps[pr[0]->pair_idx];
-
-          if(bnd.contains(pr[1]->cellid))
-            continue;
-
-          uncancel_pair(this,uint_pair_t(cp_idx,pr[0]->pair_idx));
-
-          mscomplex_t &msc_out = ((msc1.m_rect.contains(pr[1]->cellid))?(msc2):(msc1));
-          msc_out.add_critpt(*pr[1]);
-          msc_out.pair_cps(pr[0]->cellid,pr[1]->cellid);
-
-          for(int m = 0 ; m < 2; ++m)
+          for(c[0] = ixn[0][1] ; c[0] >= ixn[0][0]; --c[0])
           {
-            mscomplex_t &msc = *msc_arr[m];
-            try
-            {
-              for(int d = 0 ; d < 2; ++d)
-              {
-                ASSERT(msc.m_id_cp_map.count(pr[d]->cellid) == 1);
-                msc.m_cps[msc.m_id_cp_map[pr[d]->cellid]]->conn[d^1].clear();
+            if (m_id_cp_map.count(c) == 0)
+              continue;
 
-                for(conn_iter_t it = pr[d]->conn[d^1].begin();it != pr[d]->conn[d^1].end();++it)
-                {
-                  critpt_t * ccp  = m_cps[*it];
+            int cp_idx = m_id_cp_map[c];
 
-                  try
-                  {
-                    ASSERT(ccp->is_paired == false);
+            critpt_t * cp= m_cps[cp_idx];
 
-                    if(msc.m_id_cp_map.count(ccp->cellid) == 0)
-                      msc.add_critpt(*ccp);
+            if(!cp->is_paired)
+              continue;
 
-                    msc.dir_connect_cps(pr[d]->cellid,ccp->cellid);
-                  }
-                  catch(assertion_error e)
-                  {
-                    e<<"\n";
-                    e<<FILEFUNCLINE<<endl;
-                    e<<"failed to connect "<<pr[d]->cellid<<ccp->cellid<<endl;
-                    throw;
-                  }
-                }
-              }
-            }
-            catch( assertion_error e)
-            {
-              e<<"\n";
-              e<<FILEFUNCLINE<<endl;
-              e<<VARSTR(msc.m_rect)<<endl;
-              throw;
-            }
+            critpt_t * cp_pr =  m_cps[cp->pair_idx];
+
+            if(bnd.contains(cp_pr->cellid))
+              continue;
+
+            uncancel_pair(this,uint_pair_t(cp_idx,cp->pair_idx));
           }
         }
       }
     }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR(bnd));
+      e.push(SVAR2(m_rect,m_ext_rect));
+      e.push(SVAR2(msc1.m_rect,msc1.m_ext_rect));
+      e.push(SVAR2(msc2.m_rect,msc2.m_ext_rect));
+      throw;
+    }
+
+    vector<int> cpi_to_mcpi(m_cps.size());
 
     for(int m = 0 ; m < 2; ++m)
     {
       mscomplex_t &msc = *msc_arr[m];
 
-      for(int i = 0 ; i < msc.m_cps.size(); ++i)
+      for(int cpi = 0 ; cpi < m_cps.size(); ++cpi)
       {
-        critpt_t * cp = msc.m_cps[i];
+        critpt_t * cp = m_cps[cpi];
 
-        if(cp->is_paired)
+        if(msc.m_id_cp_map.count(cp->cellid) == 0 )
+          cpi_to_mcpi[cpi] = -1;
+        else
+          cpi_to_mcpi[cpi] = msc.m_id_cp_map[cp->cellid];
+      }
+
+      for(int cpi = 0 ; cpi < m_cps.size(); ++cpi)
+      {
+        critpt_t * cp = m_cps[cpi];
+
+        if(cpi_to_mcpi[cpi] == -1 )
           continue;
 
-        for(int d = 0 ; d < 2; ++d)
+        int mcpi       = cpi_to_mcpi[cpi];
+        critpt_t * mcp = msc.m_cps[mcpi];
+
+        mcp->conn[0].clear();
+        mcp->conn[1].clear();
+
+        if(cp->is_paired == false)
+          continue;
+
+        critpt_t * cp_pr =  m_cps[cp->pair_idx];
+
+        if(cpi_to_mcpi[cp->pair_idx] != -1)
+          continue;
+
+        cpi_to_mcpi[cp->pair_idx] = msc.add_critpt(*cp_pr);
+        msc.pair_cps(cp->cellid,cp_pr->cellid);
+      }
+
+      for(int cpi = 0 ; cpi < m_cps.size(); ++cpi)
+      {
+        critpt_t * cp = m_cps[cpi];
+
+        if(cpi_to_mcpi[cpi] == -1 )
+          continue;
+
+        if(cp->is_paired == false)
+          continue;
+
+        critpt_t * cp_pr =  m_cps[cp->pair_idx];
+
+        int d = (cp_pr->index - cp->index + 1)/2;
+
+        if(d == 0 && (msc.m_rect.contains(cp->cellid)))
+          continue;
+
+        if(d == 1 && (msc.m_rect.contains(cp_pr->cellid) == false))
+          continue;
+
+        for(conn_iter_t it = cp->conn[d].begin();it != cp->conn[d].end();++it)
         {
-          for(conn_iter_t it = cp->conn[d].begin();it != cp->conn[d].end();)
+          int ccpi = *it;
+
+          critpt_t * ccp  = m_cps[ccpi];
+
+          try
           {
-            conn_iter_t it_ =it; ++it;
+            ASSERT(ccp->is_paired == false);
 
-            critpt_t * ccp  = msc.m_cps[*it_];
+            if(cpi_to_mcpi[ccpi] == -1)
+              cpi_to_mcpi[ccpi] = msc.add_critpt(*ccp);
 
-            if(ccp->is_paired)
-              cp->conn[d].erase(it_);
+            uint_pair_t mpr(cpi_to_mcpi[cpi],cpi_to_mcpi[ccpi]);
+
+            msc.dir_connect_cps(mpr);
+          }
+          catch(assertion_error e)
+          {
+            e.push(_FFL);
+            e.push(SVAR2(cp->cellid,ccp->cellid));
+            e.push(SVAR2(cp->cellid,cp_pr->cellid));
+            e.push(SVAR2(cp->is_paired,ccp->is_paired));
+            e.push(SVAR2(msc.m_rect,msc.m_ext_rect));
+            e.push(SVAR2(m_rect,m_ext_rect));
+            throw;
           }
         }
       }
@@ -641,9 +765,9 @@ namespace grid
 
       critpt_t * cp[] = {m_cps[e[0]],m_cps[e[1]]};
 
-      ensure_ordered_index_one_separation(this,e);
-
-      ensure_pairing(this,e);
+      ASSERT(cp[1]->index+1 == cp[0]->index);
+      ASSERT(cp[0]->is_paired == true && cp[1]->is_paired == true);
+      ASSERT(cp[0]->pair_idx  == e[1] && cp[1]->pair_idx  == e[0]);
 
       for(uint dir = 0 ; dir < 2 ;++dir)
       {
@@ -652,7 +776,7 @@ namespace grid
         for(conn_iter_t it  = cp[dir]->conn[dir].begin();
                         it != cp[dir]->conn[dir].end(); ++it)
         {
-          ensure_cp_is_not_paired(this,*it);
+          ASSERT(m_cps[*it]->is_paired == false);
 
           m_cps[*it]->contrib[dir^1].push_back(e[dir^1]);
 

@@ -12,7 +12,6 @@
 #include <logutil.h>
 
 #include <grid_dataset.h>
-#include <grid_dataset_ensure.h>
 #include <grid_mscomplex.h>
 
 namespace bl = boost::lambda;
@@ -113,8 +112,6 @@ namespace grid
 
   inline uint get_cell_adj_dir(cellid_t c,cellid_t p)
   {
-    ensure_cell_incidence(c,p);
-
     for(uint i = 0 ;i < gc_grid_dim;++i)
       if(c[i] != p[i])
         return (1+i*2+(((c[i]-p[i])==1)?(0):(1)));
@@ -299,26 +296,28 @@ namespace grid
 
   uint dataset_t::getCellEst (cellid_t c,cellid_t* est)  const
   {
-    cellid_list_t cofaces(40);
+    cellid_t cfs[40];
 
-    cofaces.resize(getCellCofaces(c,cofaces.data()));
+    int cfs_ct = getCellCofaces(c,cfs);
+
+    ASSERT(is_in_range(cfs_ct,0,40));
 
     uint pos = 0;
 
-    for(uint i = 0 ; i< cofaces.size();++i)
+    for(int i = 0 ; i< cfs_ct;++i)
     {
-      cellid_t cf = cofaces[i];
+      cellid_t cf = cfs[i];
 
       ASSERT(m_ext_rect.contains(cf));
 
-      uint c_dim = getCellDim(c);
+      uint c_dim  = getCellDim(c);
       uint cf_dim = getCellDim(cf);
 
       for(uint j = c_dim; j < cf_dim ; ++j)
         cf = getCellMaxFacetId(cf);
 
       if(cf == c)
-        est[pos++] = cofaces[i];
+        est[pos++] = cfs[i];
     }
 
     return pos;
@@ -346,7 +345,9 @@ namespace grid
 
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
-    ensure_pairable(this,c,p);
+    ASSERT(areCellsIncident(c,p));
+    ASSERT(isCellPaired(c) == false);
+    ASSERT(isCellPaired(p) == false);
 
     m_cell_pairs (c) = get_cell_adj_dir(c,p);
     m_cell_pairs (p) = get_cell_adj_dir(p,c);
@@ -369,19 +370,21 @@ namespace grid
     m_cell_flags (c) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
     m_cell_flags (p) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
 
-    ASSERT(!isCellPaired(c));
-    ASSERT(!isCellPaired(p));
+    ASSERT(isCellPaired(c) == false);
+    ASSERT(isCellPaired(p) == false);
   }
 
   void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
   {
     ASSERT(getCellDim(c) == getCellDim(f)+1);
+    ASSERT(areCellsIncident(c,f));
 
     m_cell_mxfct (c) = get_cell_adj_dir(c,f);
   }
 
   void dataset_t::markCellCritical (cellid_t c)
   {
+    ASSERT(isCellCritical(c) == false);
     m_cell_flags (c) |= CELLFLAG_CRITICAL;
   }
 
@@ -569,26 +572,39 @@ namespace grid
   {
     try
     {
-      ASSERT(m_rect.contains(bnd.lower_corner()));
-      ASSERT(m_rect.contains(bnd.upper_corner()));
+      ASSERT(m_ext_rect.intersection(bnd) == bnd);
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR(bnd));
+      e.push(SVAR(m_rect));
+      e.push(SVAR(m_ext_rect));
 
-      for(cellid_t c = bnd.lower_corner() ; c[2] <= bnd[2][1]; c[2] += 1)
+      throw;
+    }
+
+    rect_t ixn = bnd.intersection(m_rect);
+
+    for(cellid_t c = ixn.lower_corner() ; c[2] <= ixn[2][1]; c[2] += 1)
+    {
+      for(c[1] = ixn[1][0] ; c[1] <= ixn[1][1]; c[1] += 1)
       {
-        for(c[1] = bnd[1][0] ; c[1] <= bnd[1][1]; c[1] += 1)
+        for(c[0] = ixn[0][0] ; c[0] <= ixn[0][1]; c[0] += 1)
         {
-          for(c[0] = bnd[0][0] ; c[0] <= bnd[0][1]; c[0] += 1)
+          if(!isCellPaired(c))
+            continue;
+
+          cellid_t p = getCellPairId(c);
+
+          if(!isPairOrientationCorrect(c,p))
+            continue;
+
+          if(bnd.contains(p))
+            continue;
+
+          try
           {
-            if(!isCellPaired(c))
-              continue;
-
-            cellid_t p = getCellPairId(c);
-
-            if(!isPairOrientationCorrect(c,p))
-              continue;
-
-            if(bnd.contains(p))
-              continue;
-
             markCellCritical(c);
             m_critical_cells.push_back(c);
 
@@ -598,17 +614,18 @@ namespace grid
             markCellCritical(p);
             m_critical_cells.push_back(p);
           }
+          catch(assertion_error e)
+          {
+            e.push(_FFL);
+            e.push(SVAR(c));
+            e.push(SVAR(p));
+            e.push(SVAR(ixn));
+            e.push(SVAR(m_rect));
+
+            throw;
+          }
         }
       }
-    }
-    catch(assertion_error e)
-    {
-      e<<"\n";
-      e<<FILEFUNCLINE<<endl;
-      e<<VARSTR(bnd)<<endl;
-      e<<VARSTR(m_rect)<<endl;
-
-      throw;
     }
   }
 
@@ -664,13 +681,13 @@ namespace grid
         }
         catch(assertion_error e)
         {
-          e<<"\n";
-          e<<FILEFUNCLINE<<endl;
-          e<<VARSTR(cets[i])<<endl;
-          e<<VARSTR(isCellPaired(cets[i]))<<endl;
-          e<<VARSTR(isCellCritical(cets[i]))<<endl;
-          e<<VARSTR(top_cell)<<endl;
-          e<<VARSTR(start_cell)<<endl;
+          e.push(_FFL);
+          e.push(SVAR(cets[i]));
+          e.push(SVAR(isCellPaired(cets[i])));
+          e.push(SVAR(isCellCritical(cets[i])));
+          e.push(SVAR(top_cell));
+          e.push(SVAR(start_cell));
+
           throw;
         }
       }
@@ -707,7 +724,22 @@ namespace grid
       for( int j = 0 ; j < getCellDim(c);++j)
         v=getCellMaxFacetId(v);
 
-      msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c),v);
+      try
+      {
+        msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c),v);
+      }
+      catch (assertion_error e)
+      {
+        e.push(_FFL);
+        e.push(SVAR(c));
+        e.push(SVAR(isCellPaired(c)));
+        e.push(SVAR(isCellCritical(c)));
+
+        if(isCellPaired(c))
+          e.push(SVAR(isCellPaired(c)));
+
+        throw;
+      }
     }
 
     for(uint i = 0 ; i < m_critical_cells.size();++i)
@@ -741,11 +773,10 @@ namespace grid
     }
     catch(assertion_error e)
     {
-      e<<"\n";
-      e<<FILEFUNCLINE<<endl;
-      e<<VARSTR(m_rect)<<endl;
-      e<<VARSTR(m_ext_rect)<<endl;
-      e<<VARSTR(m_domain_rect)<<endl;
+      e.push(_FFL);
+      e.push(SVAR(m_rect));
+      e.push(SVAR(m_ext_rect));
+      e.push(SVAR(m_domain_rect));
 
       throw;
     }
@@ -777,11 +808,10 @@ namespace grid
     }
     catch(assertion_error e)
     {
-      e<<"\n";
-      e<<FILEFUNCLINE<<endl;
-      e<<VARSTR(m_rect)<<endl;
-      e<<VARSTR(m_ext_rect)<<endl;
-      e<<VARSTR(m_domain_rect)<<endl;
+      e.push(_FFL);
+      e.push(SVAR(m_rect));
+      e.push(SVAR(m_ext_rect));
+      e.push(SVAR(m_domain_rect));
 
       throw;
     }
@@ -884,6 +914,14 @@ namespace grid
       }
 
     }
+  }
+
+  void dataset_t::log_pairs(const std::string &s)
+  {
+    std::ofstream fs(s.c_str());
+    ensure(fs.is_open(),"unable to open file");
+    log_pairs(fs);
+    fs.close();
   }
 
   void dataset_t::log_max_facets()

@@ -27,11 +27,9 @@ if(BUILD_EXEC)
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset_ensure.h
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_dataset.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex_ensure.h
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_mscomplex.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_datamanager.h

@@ -169,7 +169,7 @@ namespace grid
 
     void   markCellCritical ( cellid_t c );
 
-    inline uint getCellDim ( cellid_t c ) const;
+    inline int getCellDim ( cellid_t c ) const;
 
     bool   isTrueBoundryCell ( cellid_t c ) const;
 
@@ -210,14 +210,16 @@ namespace grid
 
     void log_pairs(std::ostream &os = std::cout);
 
+    void log_pairs(const std::string &s);
+
     void log_max_facets();
 
     void extract_vdata_subarray(rect_t r,const std::string &filename);
   };
 
-  inline uint dataset_t::getCellDim ( cellid_t c ) const
+  inline int dataset_t::getCellDim ( cellid_t c ) const
   {
-    uint dim = 0;
+    int dim = 0;
 
     for (size_t i = 0 ; i < gc_grid_dim;++i)
       dim += ( c[i]&0x01 );

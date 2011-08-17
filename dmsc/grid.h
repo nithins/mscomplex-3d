@@ -14,6 +14,7 @@ namespace grid
 
   typedef int16_t                                         cell_coord_t;
   typedef float                                           cell_fn_t;
+  typedef boost::shared_ptr<cell_fn_t >                   cell_fn_ptr_t;
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>          rect_t;
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>::point_t cellid_t;
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>::point_t rect_point_t;
@@ -29,5 +30,7 @@ namespace grid
   };
 
 }
+
+#define _FFL            (std::string("\n")+FILEFUNCLINE)
 
 #endif
