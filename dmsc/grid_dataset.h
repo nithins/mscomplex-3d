@@ -35,6 +35,8 @@ namespace grid
 
   class mscomplex_t;
 
+  typedef u_int8_t cell_flag_t;
+
   class dataset_t
   {
 
@@ -43,10 +45,10 @@ namespace grid
     // used as a bit mask.. cells can be critical and paired..in theory they all are
     enum eCellFlags
     {
-      CELLFLAG_UNKNOWN  = 0,
-      CELLFLAG_PAIRED   = 1,
-      CELLFLAG_CRITICAL = 2,
-      CELLFLAG_MASK     = 0x03,
+      CELLFLAG_UNKNOWN  = 0x00,
+      CELLFLAG_PAIRED   = 0x80,
+      CELLFLAG_CRITICAL = 0x40,
+      CELLFLAG_MASK     = 0xc0,
     };
 
     enum eCellAdjDirection
@@ -60,8 +62,6 @@ namespace grid
       CELLADJDIR_FRONT     = (6),
     };
 
-
-    typedef u_int8_t                                        cell_flag_t;
     typedef boost::multi_array<cellid_t,gc_grid_dim>        cellid_array_t;
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
     typedef boost::multi_array_ref<cell_fn_t,gc_grid_dim>   varray_ref_t;
@@ -76,8 +76,6 @@ namespace grid
     varray_ref_ptr_t   m_vert_fns_ref;
 
     cellflag_array_t   m_cell_flags;
-    cellflag_array_t   m_cell_pairs;
-    cellflag_array_t   m_cell_mxfct;
     cellid_list_t      m_critical_cells;
 
     boost::function<bool (cellid_t,cellid_t)> cmp_ftor;

@@ -43,9 +43,7 @@ namespace grid
       m_rect (r),
       m_ext_rect (e),
       m_domain_rect(d),
-      m_cell_flags(cellid_t::zero,boost::fortran_storage_order()),
-      m_cell_pairs(cellid_t::zero,boost::fortran_storage_order()),
-      m_cell_mxfct(cellid_t::zero,boost::fortran_storage_order())
+      m_cell_flags(cellid_t::zero,boost::fortran_storage_order())
   {
     // TODO: assert that the given rect is of even size..
     //       since each vertex is in the even positions
@@ -69,20 +67,14 @@ namespace grid
     rect_size_t   s = m_ext_rect.span() + cellid_t::one;
 
     m_cell_flags.resize(s);
-    m_cell_pairs.resize(s);
-    m_cell_mxfct.resize(s);
 
     uint num_cells = s[0]*s[1]*s[2];
 
     std::fill_n(m_cell_flags.data(),num_cells,CELLFLAG_UNKNOWN);
-    std::fill_n(m_cell_pairs.data(),num_cells,CELLADJDIR_UNKNOWN);
-    std::fill_n(m_cell_mxfct.data(),num_cells,CELLADJDIR_UNKNOWN);
 
     rect_point_t bl = m_ext_rect.lower_corner();
 
     m_cell_flags.reindex (bl);
-    m_cell_pairs.reindex (bl);
-    m_cell_mxfct.reindex (bl);
 
     ASSERT(pData);
 
@@ -98,60 +90,65 @@ namespace grid
     m_critical_cells.clear();
 
     m_cell_flags.resize(cellid_t::zero);
-    m_cell_pairs.resize(cellid_t::zero);
-    m_cell_mxfct.resize(cellid_t::zero);
 
     m_vert_fns_ref.reset();
   }
 
-  inline cellid_t get_adj_cell(cellid_t c,uint d)
+  inline cellid_t flag_to_mxfct(cellid_t c,cell_flag_t f)
   {
+    cell_flag_t d = f&0x07;
+    ASSERT(is_in_range(d,1,7));
     c[(d-1)>>1] += (d&1)?(-1):(+1);
     return c;
   }
 
-  inline uint get_cell_adj_dir(cellid_t c,cellid_t p)
+  inline cell_flag_t mxfct_to_flag(cellid_t c,cellid_t fct)
   {
-    for(uint i = 0 ;i < gc_grid_dim;++i)
-      if(c[i] != p[i])
-        return (1+i*2+(((c[i]-p[i])==1)?(0):(1)));
+    ASSERT(euclid_norm2(c-fct) == 1);
 
-    ASSERT(false&&"cell coords are the same");
+    int d = 0;
 
-    return (uint)-1;
+    if(c[1] != fct[1])
+      d = 1;
+    else if(c[2] != fct[2])
+      d = 2;
+
+    if(c[d] > fct[d])
+      return (1 + d*2 + 0);
+    else
+      return (1 + d*2 + 1);
   }
 
-  bool   dataset_t::areCellsIncident(cellid_t c1,cellid_t c2) const
+  inline cellid_t flag_to_pair(cellid_t c,cell_flag_t f)
   {
-    uint dim_diff = 0;
+    return flag_to_mxfct(c,(f>>3)&0x07);
+  }
 
-    for(uint i = 0 ;i < gc_grid_dim;++i)
-      dim_diff += abs((int)c1[i]-(int)c2[i]);
+  inline cell_flag_t pair_to_flag(cellid_t c,cellid_t p)
+  {
+    return (mxfct_to_flag(c,p)<<3);
+  }
 
-    return (dim_diff == 1);
+  bool dataset_t::areCellsIncident(cellid_t c1,cellid_t c2) const
+  {
+    return ( euclid_norm2(c1-c2) == 1);
   }
 
   cellid_t dataset_t::getCellPairId (cellid_t c) const
   {
     ASSERT(isCellPaired(c));
 
-    return get_adj_cell(c,m_cell_pairs(c));
+    return flag_to_pair(c,m_cell_flags(c));
   }
 
   cellid_t dataset_t::getCellMaxFacetId (cellid_t c) const
   {
-    ASSERT(m_cell_mxfct(c) != dataset_t::CELLADJDIR_UNKNOWN);
-
-    return get_adj_cell(c,m_cell_mxfct(c));
+    return flag_to_mxfct(c,m_cell_flags(c));
   }
 
   cellid_t dataset_t::getCellSecondMaxFacetId (cellid_t c) const
   {
-    ASSERT(m_cell_mxfct(c) != dataset_t::CELLADJDIR_UNKNOWN);
-
-    uint mxfct = m_cell_mxfct(c);
-
-    return get_adj_cell(c,(mxfct&1)?(mxfct+1):(mxfct-1));
+    return (2*c - flag_to_mxfct(c,m_cell_flags(c)));
   }
 
   inline bool compareCells_dim
@@ -160,12 +157,6 @@ namespace grid
        const cellid_t &c2,
        const int & dim)
   {
-    bool is_boundry_c1 = ds->isTrueBoundryCell(c1);
-    bool is_boundry_c2 = ds->isTrueBoundryCell(c2);
-
-    if(is_boundry_c1 != is_boundry_c2)
-      return is_boundry_c1;
-
     if(dim == 0)
       return ds->ptLt(c1,c2);
 
@@ -177,6 +168,12 @@ namespace grid
 
     f1 = ds->getCellSecondMaxFacetId(c1);
     f2 = ds->getCellSecondMaxFacetId(c2);
+
+    bool is_boundry_f1 = ds->isTrueBoundryCell(f1);
+    bool is_boundry_f2 = ds->isTrueBoundryCell(f2);
+
+    if(is_boundry_f1 != is_boundry_f2)
+      return is_boundry_f1;
 
     return compareCells_dim(ds,f1,f2,dim-1);
   }
@@ -328,10 +325,10 @@ namespace grid
     return (getCellDim (c) <getCellDim (p));
   }
 
-  bool dataset_t::isCellMarked (cellid_t c) const
-  {
-    return ! (m_cell_flags (c) == CELLFLAG_UNKNOWN);
-  }
+//  bool dataset_t::isCellMarked (cellid_t c) const
+//  {
+//    return ! (m_cell_flags (c) == CELLFLAG_UNKNOWN);
+//  }
 
   bool dataset_t::isCellCritical (cellid_t c) const
   {
@@ -345,47 +342,43 @@ namespace grid
 
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
-    ASSERT(areCellsIncident(c,p));
     ASSERT(isCellPaired(c) == false);
     ASSERT(isCellPaired(p) == false);
 
-    m_cell_pairs (c) = get_cell_adj_dir(c,p);
-    m_cell_pairs (p) = get_cell_adj_dir(p,c);
-
-    m_cell_flags (c) |= CELLFLAG_PAIRED;
-    m_cell_flags (p) |= CELLFLAG_PAIRED;
+    m_cell_flags (c) |= (pair_to_flag(c,p)|CELLFLAG_PAIRED);
+    m_cell_flags (p) |= (pair_to_flag(p,c)|CELLFLAG_PAIRED);
 
     ASSERT(getCellPairId(c) == p);
     ASSERT(getCellPairId(p) == c);
   }
 
-  void  dataset_t::unpairCells ( cellid_t c,cellid_t p )
-  {
-    ASSERT(getCellPairId(c) == p);
-    ASSERT(getCellPairId(p) == c);
+//  void  dataset_t::unpairCells ( cellid_t c,cellid_t p )
+//  {
+//    ASSERT(getCellPairId(c) == p);
+//    ASSERT(getCellPairId(p) == c);
 
-    m_cell_pairs (c) = CELLADJDIR_UNKNOWN;
-    m_cell_pairs (p) = CELLADJDIR_UNKNOWN;
+//    m_cell_pairs (c) = CELLADJDIR_UNKNOWN;
+//    m_cell_pairs (p) = CELLADJDIR_UNKNOWN;
 
-    m_cell_flags (c) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
-    m_cell_flags (p) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
+//    m_cell_flags (c) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
+//    m_cell_flags (p) &= (CELLFLAG_MASK^CELLFLAG_PAIRED);
 
-    ASSERT(isCellPaired(c) == false);
-    ASSERT(isCellPaired(p) == false);
-  }
+//    ASSERT(isCellPaired(c) == false);
+//    ASSERT(isCellPaired(p) == false);
+//  }
 
   void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
   {
     ASSERT(getCellDim(c) == getCellDim(f)+1);
-    ASSERT(areCellsIncident(c,f));
-
-    m_cell_mxfct (c) = get_cell_adj_dir(c,f);
+    m_cell_flags (c) |= mxfct_to_flag(c,f);
+    ASSERT(getCellMaxFacetId(c) == f);
   }
 
   void dataset_t::markCellCritical (cellid_t c)
   {
     ASSERT(isCellCritical(c) == false);
     m_cell_flags (c) |= CELLFLAG_CRITICAL;
+    ASSERT(isCellCritical(c) == true);
   }
 
   bool dataset_t::isTrueBoundryCell (cellid_t c) const
