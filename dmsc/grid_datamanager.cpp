@@ -193,19 +193,8 @@ namespace grid
     for(int pc_i = pc_beg ; pc_i < pc_end;++pc_i)
     {
       piece_ptr_t dp = m_pieces[pc_i];
-      int num_pts    = dp->m_ext_prct.volume();
 
-      string filename = dp->get_basename(m_basename)+".raw";
-      ifstream ifs(filename.c_str(),ios::in|ios::binary);
-      ensure(ifs.is_open(),"unable to open file");
-
-      ifs.read((char*)(void*)pData.get(),sizeof(cell_fn_t)*num_pts);
-      ensure(ifs.fail()==false,"failed to read some data");
-
-      ifs.seekg(0,ios::end);
-      ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
-
-      dp->m_dataset->init(pData.get());
+      dp->m_dataset->init(dp->get_basename(m_basename)+".raw");
       dp->m_dataset->assignGradient();
 
       rect_t r = dp->m_dataset->get_rect();
@@ -227,10 +216,7 @@ namespace grid
         }
       }
 
-      dp->m_dataset->log_pairs(dp->get_basename(m_basename)+".pairs");
-
-      dp->m_dataset->computeMsGraph(dp->m_msgraph.get());
-      dp->m_dataset->clear();
+      dp->m_dataset->computeMsGraph(dp->m_msgraph);
     }
   }
 
@@ -312,8 +298,17 @@ namespace grid
     for(int i = 0 ;i < m_pieces.size(); ++i)
     {
       piece_ptr_t dp = m_pieces[i];
+      string name = dp->get_basename(m_basename);
+      mscomplex_ptr_t msc = dp->m_msgraph;
+      dataset_ptr_t   ds  = dp->m_dataset;
 
-      dp->m_msgraph->write_graph(dp->get_basename(m_basename)+".msgraph.txt");
+      msc->write_graph(name+".graph.txt");
+
+      if(ds)
+      {
+        msc->invert_for_collection();
+        ds->saveManifolds(msc,name+".mfold.bin");
+      }
     }
   }
 
@@ -394,35 +389,26 @@ namespace grid
     dataset_ptr_t   dataset(new dataset_t(d,d,d));
     mscomplex_ptr_t msgraph(new mscomplex_t(d,d));
 
-    int num_pts = size[0]*size[1]*size[2];
-    std::vector<cell_fn_t> pt_data(num_pts);
-
-    ifstream ifs(filename.c_str(),ios::in|ios::binary);
-    ensure(ifs.is_open(),"unable to open file");
-
-    ifs.read((char*)(void*)pt_data.data(),sizeof(cell_fn_t)*num_pts);
-    ensure(ifs.fail()==false,"failed to read some data");
-
-    ifs.seekg(0,ios::end);
-    ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
+    dataset->init(filename);
     cout<<"data read ---------------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    dataset->init(pt_data.data());
+
     dataset->assignGradient();
     cout<<"gradient done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    dataset->computeMsGraph(msgraph.get());
+    dataset->computeMsGraph(msgraph);
     cout<<"msgraph done ------------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->simplify_un_simplify(simp_tresh);
     cout<<"simplification done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    dataset->collectManifolds(msgraph.get());
-    cout<<"collect manifolds done --- "<<t.getElapsedTimeInMilliSec()<<endl;
-
-    msgraph->write_manifolds("msc_manifolds.txt");
     msgraph->write_graph("msc_graph.txt");
-    cout<<"results write done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"write msgraph done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+
+    msgraph->invert_for_collection();
+    msgraph->write_graph("msc_graph_invert.txt");
+    dataset->saveManifolds(msgraph,"msc_mfolds.bin");
+    cout<<"write msmfolds done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     cout<<"------------------------------------"<<endl;
     cout<<"        Finished Processing         "<<endl;

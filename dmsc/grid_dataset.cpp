@@ -1,6 +1,7 @@
 #include <stack>
 #include <queue>
 #include <list>
+#include <set>
 
 #include <fstream>
 
@@ -17,6 +18,9 @@
 namespace bl = boost::lambda;
 
 using namespace std;
+
+#define TRACEM(msg) (cout<<msg<<endl)
+#define TRACEV(v)   (cout<<SVAR(v)<<endl)
 
 namespace grid
 {
@@ -43,7 +47,9 @@ namespace grid
       m_rect (r),
       m_ext_rect (e),
       m_domain_rect(d),
-      m_cell_flags(cellid_t::zero,boost::fortran_storage_order())
+      m_cell_flags(cellid_t::zero,boost::fortran_storage_order()),
+      m_vert_fns(cellid_t::zero,boost::fortran_storage_order())
+
   {
     // TODO: assert that the given rect is of even size..
     //       since each vertex is in the even positions
@@ -60,29 +66,35 @@ namespace grid
     clear();
   }
 
-  void dataset_t::init(cell_fn_t * pData)
+  void dataset_t::init(const std::string &filename)
   {
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
-    rect_size_t   s = m_ext_rect.span() + cellid_t::one;
-
-    m_cell_flags.resize(s);
-
-    uint num_cells = s[0]*s[1]*s[2];
-
-    std::fill_n(m_cell_flags.data(),num_cells,CELLFLAG_UNKNOWN);
-
+    rect_size_t   span   = m_ext_rect.span() + 1;
+    rect_size_t  pt_span = (m_ext_rect.span()/2)+1;
     rect_point_t bl = m_ext_rect.lower_corner();
 
-    m_cell_flags.reindex (bl);
+    m_cell_flags.resize(span);
+    m_vert_fns.resize(pt_span);
 
-    ASSERT(pData);
+    uint num_cells = span[0]*span[1]*span[2];
+    uint num_pts   = pt_span[0]*pt_span[1]*pt_span[2];
 
-    m_vert_fns_ref.reset
-        (new varray_ref_t(pData,boost::extents[1+s[0]/2][1+s[1]/2][1+s[2]/2],
-                         boost::fortran_storage_order()));
+    m_cell_flags.reindex(bl);
+    m_vert_fns.reindex(bl/2);
 
-    (*m_vert_fns_ref).reindex (bl/2);
+    std::fill_n(m_cell_flags.data(),num_cells,0);
+
+    ifstream ifs(filename.c_str(),ios::in|ios::binary);
+    ensure(ifs.is_open(),"unable to open file");
+
+    ifs.read((char*)(void*)m_vert_fns.data(),sizeof(cell_fn_t)*num_pts);
+    ensure(ifs.fail()==false,"failed to read some data");
+
+    ifs.seekg(0,ios::end);
+    ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
+
+    ifs.close();
   }
 
   void  dataset_t::clear()
@@ -91,7 +103,7 @@ namespace grid
 
     m_cell_flags.resize(cellid_t::zero);
 
-    m_vert_fns_ref.reset();
+    m_vert_fns.resize(cellid_t::zero);
   }
 
   inline cellid_t flag_to_mxfct(cellid_t c,cell_flag_t f)
@@ -169,11 +181,11 @@ namespace grid
     f1 = ds->getCellSecondMaxFacetId(c1);
     f2 = ds->getCellSecondMaxFacetId(c2);
 
-    bool is_boundry_f1 = ds->isTrueBoundryCell(f1);
-    bool is_boundry_f2 = ds->isTrueBoundryCell(f2);
+    int boundry_ct1 = ds->m_domain_rect.boundryCount(f1);
+    int boundry_ct2 = ds->m_domain_rect.boundryCount(f2);
 
-    if(is_boundry_f1 != is_boundry_f2)
-      return is_boundry_f1;
+    if(boundry_ct1 != boundry_ct2)
+      return (boundry_ct2 < boundry_ct1);
 
     return compareCells_dim(ds,f1,f2,dim-1);
   }
@@ -337,19 +349,32 @@ namespace grid
 
   bool dataset_t::isCellPaired (cellid_t c) const
   {
-    return (m_cell_flags (c) & CELLFLAG_PAIRED);
+    return (((m_cell_flags(c)>>3) & 0x07) !=0);
   }
+
+  bool dataset_t::isCellVisited (cellid_t c) const
+  {
+    return (m_cell_flags (c) & CELLFLAG_VISITED);
+  }
+
 
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
     ASSERT(isCellPaired(c) == false);
     ASSERT(isCellPaired(p) == false);
 
-    m_cell_flags (c) |= (pair_to_flag(c,p)|CELLFLAG_PAIRED);
-    m_cell_flags (p) |= (pair_to_flag(p,c)|CELLFLAG_PAIRED);
+    m_cell_flags (c) |= (pair_to_flag(c,p));
+    m_cell_flags (p) |= (pair_to_flag(p,c));
 
     ASSERT(getCellPairId(c) == p);
     ASSERT(getCellPairId(p) == c);
+  }
+
+  void dataset_t::visitCell(cellid_t c)
+  {
+    ASSERT(isCellVisited(c) == false);
+    m_cell_flags (c) |= CELLFLAG_VISITED;
+    ASSERT(isCellVisited(c) == true);
   }
 
 //  void  dataset_t::unpairCells ( cellid_t c,cellid_t p )
@@ -473,32 +498,28 @@ namespace grid
 //            est_vert(est_arr[i]) = c;
 //          }
 
-          cellid_llist_t est_list(est_arr,est_arr+est_ct);
-
-//          if(c[2] == 32)
-//            log_range(est_arr,est_arr+est_ct);
-
-          for(cellid_llist_t::iterator j = est_list.begin(); j != est_list.end();)
+          for(int j = 0; j < est_ct; ++j)
           {
-            cellid_llist_t::iterator c_it = j,p_it = j;
+            cellid_t c = est_arr[j];
 
-            ++j;
-
-            ++p_it;
-
-            if(p_it != est_list.end())
+            if(j+1 < est_ct)
             {
-              bool is_adj        = areCellsIncident(*c_it,*p_it);
-              bool is_same_bndry = (isTrueBoundryCell(*c_it) == isTrueBoundryCell(*p_it));
+              cellid_t p = est_arr[j+1];
+
+              bool is_adj        = areCellsIncident(c,p);
+              bool is_same_bndry = (isTrueBoundryCell(c) == isTrueBoundryCell(p));
 
               if(is_adj && is_same_bndry)
               {
-                ++j;
-
-                pairCells(*c_it,*p_it);
-                est_list.erase(c_it);
-                est_list.erase(p_it);
+                pairCells(c,p);++j;
+                continue;
               }
+            }
+
+            if(m_rect.contains(c))
+            {
+              markCellCritical(c);
+              m_critical_cells.push_back(c);
             }
           }
 
@@ -506,16 +527,12 @@ namespace grid
 //          for(cellid_llist_t::iterator j = est_list.begin(); j != est_list.end();)
 //          {
 //            cellid_llist_t::iterator c_it = j,p_it = j;
-
 //            ++j;
-
 //            while( p_it != est_list.begin())
 //            {
 //              p_it--;
-
 //              bool is_adj        = areCellsIncident(*c_it,*p_it);
 //              bool is_same_bndry = (isTrueBoundryCell(*c_it) == isTrueBoundryCell(*p_it));
-
 //              if(is_adj && is_same_bndry)
 //              {
 //                ++j;
@@ -524,17 +541,8 @@ namespace grid
 //                est_list.erase(p_it);
 //              }
 //            }
-
 //          }
 
-          for(cellid_llist_t::iterator j = est_list.begin() ; j != est_list.end() ; ++j)
-          {
-            if(m_rect.contains(*j))
-            {
-              markCellCritical(*j);
-              m_critical_cells.push_back(*j);
-            }
-          }
         }
       }
     }
@@ -622,62 +630,88 @@ namespace grid
     }
   }
 
-  template <typename cell_visited_ftor_t,typename cp_visited_ftor_t>
-  void dataset_t::do_gradient_bfs
-      (cellid_t start_cell,
-       eGradientDirection dir,
-       cell_visited_ftor_t cell_visited_ftor,
-       cp_visited_ftor_t   cp_visited_ftor)
+  namespace dfs
   {
+    using namespace grid;
     using namespace boost::lambda;
 
-    std::stack<cellid_t> cell_stack;
+    typedef std::stack<cellid_t>                              stack_t;
+    typedef boost::function<bool (cellid_t,const stack_t &)>  can_visit_ftor_t;
+    typedef boost::function<void (cellid_t,const stack_t &)>  visit_ftor_t;
+    typedef boost::function<void (cellid_t,const stack_t &)>  cp_visit_ftor_t;
 
-    cell_stack.push ( start_cell );
-
-    uint dim = getCellDim(start_cell);
-
-    while ( !cell_stack.empty() )
+    void do_dfs
+        (dataset_ptr_t ds,
+         cellid_t start_cell,
+         eGradientDirection dir,
+         can_visit_ftor_t can_visit_ftor,
+         visit_ftor_t visit_ftor,
+         cp_visit_ftor_t  cp_visit_ftor)
     {
-      cellid_t top_cell = cell_stack.top();
+      stack_t cell_stack;
 
-      cell_visited_ftor(top_cell);
+      cell_stack.push ( start_cell );
 
-      cell_stack.pop();
+      uint dim = ds->getCellDim(start_cell);
 
-      cellid_t      cets[20];
-
-      uint cet_ct = ( this->*getcets[dir] ) ( top_cell,cets );
-
-      for ( uint i = 0 ; i < cet_ct ; i++ )
+      while ( !cell_stack.empty() )
       {
+        cellid_t top_cell = cell_stack.top();
+
         try
         {
-          if ( isCellExterior ( cets[i] ) )
-            continue;
+          ASSERT(ds->m_rect.contains(top_cell));
 
-          if ( isCellCritical ( cets[i] ) )
-          {
-            cp_visited_ftor(cets[i]);
-          }
-          else
-          {
-            cellid_t next_cell = getCellPairId ( cets[i] );
-            bool is_dim        = (dim  == getCellDim ( next_cell ));
-            bool is_vnext      = cmp_ftors[dir](next_cell,top_cell);
+          visit_ftor(top_cell,cell_stack);
 
-            if (is_dim  &&  is_vnext )
+          cell_stack.pop();
+
+          cellid_t      cets[20];
+
+          uint cet_ct = ( ds.get()->*getcets[dir] ) ( top_cell,cets );
+
+          for ( uint i = 0 ; i < cet_ct ; i++ )
+          {
+            try
             {
-              cell_stack.push ( next_cell );
+              if ( ds->isCellExterior ( cets[i] ) )
+                continue;
+
+              if ( ds->isCellCritical ( cets[i] ) )
+              {
+                cp_visit_ftor(cets[i],cell_stack);
+                continue;
+              }
+
+              cellid_t next_cell = ds->getCellPairId ( cets[i] );
+
+              ASSERT(ds->m_rect.contains(next_cell));
+
+              if(can_visit_ftor(next_cell,cell_stack) == false)
+                continue;
+
+              bool is_dim        = (dim  == ds->getCellDim ( next_cell ));
+              bool is_vnext      = ds->cmp_ftors[dir](next_cell,top_cell);
+
+              if (is_dim && is_vnext)
+              {
+                cell_stack.push ( next_cell );
+              }
+            }
+            catch(assertion_error e)
+            {
+              e.push(_FFL);
+              e.push(SVAR(cets[i]));
+              e.push(SVAR(ds->isCellPaired(cets[i])));
+              e.push(SVAR(ds->isCellCritical(cets[i])));
+              throw;
             }
           }
         }
         catch(assertion_error e)
         {
           e.push(_FFL);
-          e.push(SVAR(cets[i]));
-          e.push(SVAR(isCellPaired(cets[i])));
-          e.push(SVAR(isCellCritical(cets[i])));
+          e.push(SVAR(dim));
           e.push(SVAR(top_cell));
           e.push(SVAR(start_cell));
 
@@ -685,26 +719,122 @@ namespace grid
         }
       }
     }
-  }
 
-  void connect_cps(dataset_t * ds,mscomplex_t *msg,cellid_t c1,cellid_t c2)
-  {
-    // if a d-cp hits a d+-1 cp and the d+-1 cp is paired
-    // then the connection is useful iff the dimension of the pair is d
+    typedef std::stack<int> age_stack_t;
+    typedef boost::function<bool (cellid_t,const stack_t &,const stack_t &)>  path_can_visit_ftor_t;
+    typedef boost::function<void (cellid_t,const stack_t &,const stack_t &)>  path_visit_ftor_t;
+    typedef boost::function<void (cellid_t,const stack_t &,const stack_t &)>  path_cp_visit_ftor_t;
 
-    if((!ds->isCellPaired(c2)) || (ds->getCellDim(ds->getCellPairId(c2)) == ds->getCellDim(c1)) )
-      if(((!ds->isCellPaired(c1)) || (ds->getCellDim(ds->getCellPairId(c1)) == ds->getCellDim(c2)) ))
-        msg->connect_cps(c1,c2);
-  }
+    void visit_ftor_wrapper
+        (path_visit_ftor_t path_visit_ftor,
+         cellid_t c,
+         const stack_t &cell_stack,
+         stack_t *path_stack,
+         age_stack_t *age_stack)
+    {
+      ASSERT(cell_stack.top() == c);
 
-  void add_to_disc(disc_t *disc,cellid_t c1)
-  {
-    disc->push_back(c1);
-  }
+      while(age_stack->top() > cell_stack.size())
+      {
+        age_stack->pop();
+        path_stack->pop();
+      }
 
-  void pass_visit(cellid_t ){}
+      path_stack->push(c);
+      age_stack->push(cell_stack.size());
 
-  void  dataset_t::computeMsGraph(mscomplex_t *msgraph)
+      path_visit_ftor(c,cell_stack,*path_stack);
+    }
+
+    void do_path_dfs
+        (dataset_ptr_t ds,
+         cellid_t c,
+         eGradientDirection dir,
+         path_visit_ftor_t    path_visit_ftor,
+         path_cp_visit_ftor_t path_cp_visit_ftor,
+         path_can_visit_ftor_t path_can_visit_ftor)
+    {
+      stack_t     path_stack;
+      age_stack_t age_stack;
+
+      do_dfs
+          (ds,c,dir,
+           bind(path_can_visit_ftor,_1,_2,path_stack),
+           bind(visit_ftor_wrapper,path_visit_ftor,_1,_2,&path_stack,&age_stack),
+           bind(path_cp_visit_ftor,_1,_2,path_stack));
+    }
+
+    void pass_visit(cellid_t ,const stack_t &)
+    {
+      return;
+    }
+
+    bool pass_can_visit(cellid_t ,const stack_t &)
+    {
+      return true;
+    }
+
+    void connect_cps(mscomplex_ptr_t msc,cellid_t c1,cellid_t c2,const stack_t &)
+    {
+      msc->connect_cps(c1,c2);
+    }
+
+    void do_dfs_connect
+        (dataset_ptr_t ds,
+         mscomplex_ptr_t msc,
+         cellid_t c,
+         eGradientDirection dir)
+    {
+      do_dfs(ds,c,dir,pass_can_visit,pass_visit,bind(connect_cps,msc,c,_1,_2));
+    }
+
+    void add_to_disc(std::set<cellid_t> *mfold,cellid_t c,const stack_t &)
+    {
+      mfold->insert(c);
+    }
+
+    void do_dfs_collect_manifolds
+        (dataset_ptr_t ds,
+         std::set<cellid_t> *mfold,
+         cellid_t c,
+         eGradientDirection dir)
+    {
+      do_dfs(ds,c,dir,pass_can_visit,bind(add_to_disc,mfold,_1,_2),pass_visit);
+    }
+
+    bool visit_if_not_visited(dataset_ptr_t ds,cellid_t c,const stack_t &)
+    {
+      return (ds->isCellVisited(c) == false);
+    }
+
+    void mark_visit(dataset_ptr_t ds,cellid_t c,const stack_t &)
+    {
+      ds->visitCell(c);
+    }
+
+    void do_dfs_mark_visit(dataset_ptr_t ds,cellid_t c,eGradientDirection dir)
+    {
+      do_dfs(ds,c,dir,bind(visit_if_not_visited,ds,_1,_2),
+             bind(mark_visit,ds,_1,_2),pass_visit);
+    }
+
+    bool visit_if_pair_visited(dataset_ptr_t ds,cellid_t c,const stack_t &)
+    {
+      return (ds->isCellVisited(c) && ds->isCellVisited(ds->getCellPairId(c)));
+    }
+
+    void do_dfs_connect_thru_visted_pairs
+        (dataset_ptr_t ds,
+         mscomplex_ptr_t msc,
+         cellid_t c,
+         eGradientDirection dir)
+    {
+      do_dfs(ds,c,dir,bind(visit_if_pair_visited,ds,_1,_2),
+             pass_visit,bind(connect_cps,msc,c,_1,_2));
+    }
+  };
+
+  void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
     using namespace boost::lambda;
 
@@ -759,10 +889,32 @@ namespace grid
       {
         cellid_t c = m_critical_cells[i];
 
-        do_gradient_bfs
-            (c,GRADDIR_DESCENDING,
-             pass_visit,bind(connect_cps,this,msgraph,c,_1));
+        switch(getCellDim(c))
+        {
+        case 0:
+          dfs::do_dfs_connect(shared_from_this(),msgraph,c,GRADDIR_ASCENDING);
+          break;
+        case 1:
+          dfs::do_dfs_mark_visit(shared_from_this(),c,GRADDIR_ASCENDING);
+          break;
+        case 2:
+          dfs::do_dfs_mark_visit(shared_from_this(),c,GRADDIR_DESCENDING);
+          break;
+        case 3:
+          dfs::do_dfs_connect(shared_from_this(),msgraph,c,GRADDIR_DESCENDING);
+          break;
+        }
       }
+
+      for(uint i = 0 ; i < m_critical_cells.size();++i)
+      {
+        cellid_t c = m_critical_cells[i];
+
+        if(getCellDim(c) == 2)
+          dfs::do_dfs_connect_thru_visted_pairs
+              (shared_from_this(),msgraph,c,GRADDIR_DESCENDING);
+      }
+
     }
     catch(assertion_error e)
     {
@@ -775,39 +927,123 @@ namespace grid
     }
   }
 
-  void dataset_t::collectManifolds(mscomplex_t *msgraph)
+  template<typename T>
+  void bin_write(std::ostream & os,const T & d)
   {
-    using namespace boost::lambda;
+    os.write((const char*)(const void*)&d,sizeof(T));
+//    os<<d<<endl;
+  }
 
-    msgraph->add_disc_tracking_seed_cps();
+  int dataset_t::saveManifolds(mscomplex_ptr_t msc,std::ostream &os,int i,int dir)
+  {
+    critpt_t * cp = msc->m_cps[i];
+
+    set<cellid_t> mfold;
 
     try
     {
-      for(uint i = 0 ; i < msgraph->m_cps.size() ; ++i)
-      {
-        critpt_t * cp = msgraph->m_cps[i];
+      ASSERT(cp->is_paired == false);
 
-        for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
-        {
-          if(cp->disc[dir].size() == 1)
-          {
-            cp->disc[dir].clear();
-            do_gradient_bfs
-                (cp->cellid,(eGradientDirection)dir,
-                 bind(add_to_disc,&cp->disc[dir],_1),pass_visit);
-          }
-        }
+      if(m_rect.contains(cp->cellid))
+        dfs::do_dfs_collect_manifolds
+            (shared_from_this(),&mfold,cp->cellid,(eGradientDirection)dir);
+
+      for( conn_iter_t it = cp->conn[dir].begin(); it != cp->conn[dir].end();++it)
+      {
+        critpt_t * ccp    = msc->m_cps[*it];
+        critpt_t * ccp_pr = msc->m_cps[ccp->pair_idx];
+
+        ASSERT(ccp->is_paired == true);
+        ASSERT(cp->index == ccp_pr->index);
+
+        dfs::do_dfs_collect_manifolds
+            (shared_from_this(),&mfold,ccp_pr->cellid,(eGradientDirection)dir);
       }
+
+      for(set<cellid_t>::iterator it = mfold.begin();it != mfold.end(); ++it)
+        bin_write(os,*it);
     }
     catch(assertion_error e)
     {
       e.push(_FFL);
       e.push(SVAR(m_rect));
       e.push(SVAR(m_ext_rect));
-      e.push(SVAR(m_domain_rect));
 
       throw;
     }
+
+    return mfold.size();
+  }
+
+
+  void  dataset_t::saveManifolds(mscomplex_ptr_t msc,std::ostream &os)
+  {
+
+    bin_write(os,m_rect);
+
+    int cp_ct_wpos = os.tellp();
+    os.seekp(sizeof(int),ios::cur);
+    int num_cps = 0;
+
+    for(int i = 0 ; i < msc->m_cps.size();++i)
+    {
+      critpt_t * cp = msc->m_cps[i];
+
+      if(cp->is_paired)
+        continue;
+
+      bin_write<cellid_t>(os,cp->cellid);
+      num_cps++;
+    }
+
+    os.seekp(cp_ct_wpos,ios::beg);
+    bin_write<int>(os,num_cps);
+    os.seekp(0,ios::end);
+
+    std::vector<int> mfold_offsets;
+    mfold_offsets.reserve(2*num_cps+1);
+    int mfold_off_wpos= os.tellp();
+    os.seekp(sizeof(int)*(2*num_cps+1),ios::cur);
+    int mfold_offset  = 0;
+    mfold_offsets.push_back(mfold_offset);
+
+    try
+    {
+      for(int i = 0 ; i < msc->m_cps.size();++i)
+      {
+        if(msc->m_cps[i]->is_paired)
+          continue;
+
+        for(int d = 0 ; d < 2;++d)
+        {
+          mfold_offset += saveManifolds(msc,os,i,d);
+          mfold_offsets.push_back(mfold_offset);
+        }
+      }
+      ASSERT(mfold_offsets.size() == 2*num_cps+1);
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR(num_cps));
+      e.push(SVAR(mfold_offset));
+      e.push(SVAR(mfold_offsets.size()));
+
+      throw;
+    }
+
+    os.seekp(mfold_off_wpos,ios::beg);
+    for(int i = 0 ; i < mfold_offsets.size();++i)
+      bin_write<int>(os,mfold_offsets[i]);
+    os.seekp(0,ios::end);
+  }
+
+  void  dataset_t::saveManifolds(mscomplex_ptr_t msc,const std::string &s)
+  {
+    std::ofstream fs(s.c_str());
+    ensure(fs.is_open(),"unable to open file");
+    saveManifolds(msc,fs);
+    fs.close();
   }
 
   void dataset_t::log_flags()
@@ -909,6 +1145,52 @@ namespace grid
     }
   }
 
+  void dataset_t::log_visits(std::ostream &os)
+  {
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+    {
+      os<<"sheet no:: "<<c[2]<<std::endl;
+      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+      {
+        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+        {
+          if(isCellVisited(c))
+            os<<"x ";
+          else
+            os<<". ";
+        }
+        os<<std::endl;
+      }
+    }
+  }
+
+  void dataset_t::log_pair_visits(std::ostream &os)
+  {
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    cellid_t c;
+
+    for(c[2] = m_rect[2][0] ; c[2] <= m_rect[2][1]; ++c[2])
+    {
+      os<<"sheet no:: "<<c[2]<<std::endl;
+      for(c[1] = m_rect[1][0] ; c[1] <= m_rect[1][1]; ++c[1])
+      {
+        for(c[0] = m_rect[0][0] ; c[0] <= m_rect[0][1]; ++c[0])
+        {
+          if(isCellVisited(c)&&isCellPaired(c)&&isCellVisited(getCellPairId(c)))
+            os<<"x ";
+          else
+            os<<". ";
+        }
+        os<<std::endl;
+      }
+    }
+  }
+
   void dataset_t::log_pairs(const std::string &s)
   {
     std::ofstream fs(s.c_str());
@@ -916,6 +1198,23 @@ namespace grid
     log_pairs(fs);
     fs.close();
   }
+
+  void dataset_t::log_pair_visits(const std::string &s)
+  {
+    std::ofstream fs(s.c_str());
+    ensure(fs.is_open(),"unable to open file");
+    log_pair_visits(fs);
+    fs.close();
+  }
+
+  void dataset_t::log_visits(const std::string &s)
+  {
+    std::ofstream fs(s.c_str());
+    ensure(fs.is_open(),"unable to open file");
+    log_visits(fs);
+    fs.close();
+  }
+
 
   void dataset_t::log_max_facets()
   {

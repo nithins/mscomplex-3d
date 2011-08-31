@@ -95,17 +95,14 @@ namespace grid
 
     void simplify_un_simplify(double simplification_treshold );
 
-    void add_disc_tracking_seed_cps();
+    void invert_for_collection();
 
     void clear();
 
     void merge_up  (const mscomplex_t& ,const mscomplex_t& ,const rect_t&);
     void merge_down(mscomplex_t& ,mscomplex_t& ,const rect_t&);
 
-    void write_manifolds(std::ostream &os);
     void write_graph(std::ostream & os) const;
-
-    void write_manifolds(const std::string &fn);
     void write_graph(const std::string & fn) const;
   };
 

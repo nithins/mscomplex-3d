@@ -6,6 +6,8 @@
 #include <aabb.h>
 
 #include <boost/static_assert.hpp>
+#include <boost/enable_shared_from_this.hpp>
+
 #define static_assert BOOST_STATIC_ASSERT
 
 namespace grid
@@ -29,6 +31,13 @@ namespace grid
     GRADDIR_COUNT,
   };
 
+  class dataset_t;
+  class mscomplex_t;
+  class data_manager_t;
+
+  typedef boost::shared_ptr<dataset_t>      dataset_ptr_t;
+  typedef boost::shared_ptr<mscomplex_t>    mscomplex_ptr_t;
+  typedef boost::shared_ptr<data_manager_t> data_manager_ptr_t;
 }
 
 #define _FFL            (std::string("\n")+FILEFUNCLINE)

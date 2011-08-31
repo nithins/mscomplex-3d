@@ -64,10 +64,11 @@ int main(int ac , char **av)
     return 1;
   }
 
-  data_manager_t * gdm = new data_manager_t
-      (filename,size,levels,simp_tresh);
+  data_manager_ptr_t gdm(new data_manager_t(filename,size,levels,simp_tresh));
 
   gdm->work();
+
+//  compute_mscomplex_basic(filename,size,simp_tresh);
 
 #ifdef BUILD_EXEC_GUI
   if(gui)
@@ -82,11 +83,5 @@ int main(int ac , char **av)
 
     application.exec();
   }
-  else
-  {
-    delete gdm;
-  }
-#else
-  delete gdm;
 #endif
 }

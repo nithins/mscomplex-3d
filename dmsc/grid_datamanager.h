@@ -29,12 +29,6 @@
 
 namespace grid
 {
-  class dataset_t;
-  class mscomplex_t;
-
-  typedef boost::shared_ptr<dataset_t>   dataset_ptr_t;
-  typedef boost::shared_ptr<mscomplex_t> mscomplex_ptr_t;
-
   struct octtree_piece_t
   {
     dataset_ptr_t   m_dataset;

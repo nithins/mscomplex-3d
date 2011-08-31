@@ -100,14 +100,23 @@ namespace grid
   {
     order_pr_by_cp_index(this,e);
 
-    ASSERT(m_cps[e[1]]->index+1 == m_cps[e[0]]->index);
+    critpt_t *cps[]={m_cps[e[0]],m_cps[e[1]]};
+
+    ASSERT(cps[1]->index+1 == cps[0]->index);
+
+    // if a d-cp hits a d+-1 cp and the d+-1 cp is paired
+    // then the connection is useful iff the dimension of the pair is d
 
     for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
-      if(m_cps[e[dir]]->conn[dir].count(e[dir^1]) == 2)
+      if(cps[dir]->is_paired && m_cps[cps[dir]->pair_idx]->index != cps[dir^1]->index)
         return;
 
     for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
-      m_cps[e[dir]]->conn[dir].insert(e[dir^1]);
+      if(cps[dir]->conn[dir].count(e[dir^1]) == 2)
+        return;
+
+    for(uint dir = 0 ; dir < GRADDIR_COUNT;++dir)
+      cps[dir]->conn[dir].insert(e[dir^1]);
 
   }
 
@@ -175,9 +184,22 @@ namespace grid
 
     critpt_t * cp[] = {msc->m_cps[e[0]],msc->m_cps[e[1]]};
 
-    ASSERT(cp[0]->index == cp[1]->index+1);
-    ASSERT(cp[0]->conn[0].count(e[1]) == 1);
-    ASSERT(cp[0]->conn[0].count(e[1]) == cp[1]->conn[1].count(e[0]));
+    try
+    {
+      ASSERT(cp[0]->index == cp[1]->index+1);
+      ASSERT(cp[0]->conn[0].count(e[1]) == 1);
+      ASSERT(cp[0]->conn[0].count(e[1]) == cp[1]->conn[1].count(e[0]));
+    }
+    catch (assertion_error ex)
+    {
+      ex.push(_FFL);
+      ex.push(SVAR(cp[0]->cellid));
+      ex.push(SVAR(cp[1]->cellid));
+      ex.push(SVAR(cp[0]->conn[0].count(e[1])));
+      ex.push(SVAR(cp[1]->conn[1].count(e[0])));
+      throw;
+    }
+
 
     conn_iter_t it[GRADDIR_COUNT];
 
@@ -706,6 +728,7 @@ namespace grid
 //             <<   "no = "<<num_cancellations<<" "
 //             << "pers = "<<persistence<<" "
 //             <<"index = ("<<(int)m_cps[pr[0]]->index<<","<<(int)m_cps[pr[1]]->index<<") "
+//             << "edge = "<<pr<<" "
 //             << "edge = "<<edge_to_string(this,pr)<<" "
 //             <<std::endl;
 
@@ -743,105 +766,45 @@ namespace grid
     un_simplify(canc_pairs_list);
   }
 
-  void mscomplex_t::add_disc_tracking_seed_cps()
+  void mscomplex_t::invert_for_collection()
   {
     for(uint i = 0 ; i < m_cps.size(); ++i)
     {
-      if(!m_cps[i]->is_paired)
-      {
-        for(uint dir = 0 ; dir < 2 ;++dir)
-        {
-          m_cps[i]->disc[dir].push_back(m_cps[i]->cellid);
-          m_cps[i]->contrib[dir].push_back(i);
-        }
-        continue;
-      }
-
-      uint_pair_t e(i,m_cps[i]->pair_idx);
-
-      order_pr_by_cp_index(this,e);
-
-      if(e[0] != i) continue;
-
-      critpt_t * cp[] = {m_cps[e[0]],m_cps[e[1]]};
-
-      ASSERT(cp[1]->index+1 == cp[0]->index);
-      ASSERT(cp[0]->is_paired == true && cp[1]->is_paired == true);
-      ASSERT(cp[0]->pair_idx  == e[1] && cp[1]->pair_idx  == e[0]);
-
-      for(uint dir = 0 ; dir < 2 ;++dir)
-      {
-        bool need_disc = false;
-
-        for(conn_iter_t it  = cp[dir]->conn[dir].begin();
-                        it != cp[dir]->conn[dir].end(); ++it)
-        {
-          ASSERT(m_cps[*it]->is_paired == false);
-
-          m_cps[*it]->contrib[dir^1].push_back(e[dir^1]);
-
-          need_disc = true;
-        }
-
-        if(need_disc)
-          cp[dir^1]->disc[dir^1].push_back(cp[dir^1]->cellid);
-
-      }
-    }
-  }
-
-  void mscomplex_t::write_manifolds(std::ostream &os)
-  {
-    const char *mfold_txt[] = {"des","asc"};
-
-    for(uint i = 0 ; i < m_cps.size();++i)
-    {
-      critpt_t * cp = m_cps[i];
+      critpt_t *cp = m_cps[i];
 
       if(cp->is_paired == true)
         continue;
 
-      for(uint dir = 0 ; dir <2 ;++dir)
-      {
-        std::set<cellid_t> cset;
-
-        for(uint j = 0 ; j < cp->contrib[dir].size();++j)
-        {
-          critpt_t *cp_contrib = m_cps[cp->contrib[dir][j]];
-
-          for(uint k = 0; k < cp_contrib->disc[dir].size(); ++k)
-          {
-            cellid_t c = cp_contrib->disc[dir][k];
-
-            if(cset.count(c) == 0)
-              cset.insert(c);
-          }
-        }
-
-        os<<mfold_txt[dir]<<" "<<cp->cellid<<" "<<cset.size()<<"\n";
-
-        std::copy(cset.begin(),cset.end(),
-                  std::ostream_iterator<cellid_t>(os,"\n"));
-
-        os<<std::endl;
-      }
+      cp->conn[0].clear();
+      cp->conn[1].clear();
+      continue;
     }
-  }
 
-  void mscomplex_t::write_manifolds(const std::string &fn)
-  {
-    std::fstream os(fn.c_str(),std::ios::out);
 
-    ensure(os.is_open(),"failed to open file");
+    for(uint i = 0 ; i < m_cps.size(); ++i)
+    {
+      critpt_t *cp = m_cps[i];
 
-    write_manifolds((std::ostream&)os);
+      if(cp->is_paired == false)
+        continue;
 
-    os.close();
-  }
+      critpt_t * cp_pr = m_cps[cp->pair_idx];
 
-  cellid_t get_cp_cellid(mscomplex_t *msc,uint idx)
-  {
-    return msc->m_cps[idx]->cellid;
+      ASSERT(abs<int>(cp->index-cp_pr->index) == 1);
+      ASSERT(cp->is_paired == true && cp_pr->is_paired == true);
+      ASSERT(cp_pr->pair_idx  == i);
+
+      int dir = (cp->index > cp_pr->index)?(0):(1);
+
+      for(conn_iter_t it  = cp->conn[dir].begin(); it != cp->conn[dir].end(); ++it)
+      {
+        ASSERT(m_cps[*it]->is_paired == false);
+
+        m_cps[*it]->conn[dir^1].insert(i);
+      }
+
+      cp->conn[dir].clear();
+    }
   }
 
   void mscomplex_t::write_graph(std::ostream & os) const

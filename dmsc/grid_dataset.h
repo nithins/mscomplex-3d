@@ -37,7 +37,7 @@ namespace grid
 
   typedef u_int8_t cell_flag_t;
 
-  class dataset_t
+  class dataset_t:public boost::enable_shared_from_this<dataset_t>
   {
 
   public:
@@ -45,27 +45,21 @@ namespace grid
     // used as a bit mask.. cells can be critical and paired..in theory they all are
     enum eCellFlags
     {
-      CELLFLAG_UNKNOWN  = 0x00,
-      CELLFLAG_PAIRED   = 0x80,
+      CELLFLAG_VISITED   = 0x80,
       CELLFLAG_CRITICAL = 0x40,
       CELLFLAG_MASK     = 0xc0,
     };
 
-    enum eCellAdjDirection
-    {
-      CELLADJDIR_UNKNOWN   = (0),
-      CELLADJDIR_LEFT      = (1),
-      CELLADJDIR_RIGHT     = (2),
-      CELLADJDIR_DOWN      = (3),
-      CELLADJDIR_UP        = (4),
-      CELLADJDIR_BACK      = (5),
-      CELLADJDIR_FRONT     = (6),
-    };
+    // bits [0,3) max facet of a cell
+    // bits [3,6) pair of a cell
+    // bit 6 ..  mark bit used by bfs to say visted or not
+    // bit 7 .. is cell critical or not.
+
 
     typedef boost::multi_array<cellid_t,gc_grid_dim>        cellid_array_t;
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
-    typedef boost::multi_array_ref<cell_fn_t,gc_grid_dim>   varray_ref_t;
-    typedef boost::shared_ptr<varray_ref_t>                 varray_ref_ptr_t;
+    typedef boost::multi_array<cell_fn_t,gc_grid_dim>       varray_t;
+
 
   public:
 
@@ -73,7 +67,7 @@ namespace grid
     rect_t             m_ext_rect;
     rect_t             m_domain_rect;
 
-    varray_ref_ptr_t   m_vert_fns_ref;
+    varray_t           m_vert_fns;
 
     cellflag_array_t   m_cell_flags;
     cellid_list_t      m_critical_cells;
@@ -88,7 +82,7 @@ namespace grid
     dataset_t ( const rect_t &r,const rect_t &e,const rect_t &d );
     ~dataset_t ();
 
-    void  init(cell_fn_t * pData);
+    void  init(const std::string &filename);
     void  clear();
 
   // the actual work routines
@@ -97,23 +91,19 @@ namespace grid
 
     void  markBoundryCritical(const rect_t &b);
 
-    void  computeMsGraph(mscomplex_t *msgraph);
+    void  computeMsGraph(mscomplex_ptr_t msgraph);
 
-    void  collectManifolds(mscomplex_t *msgraph);
+    int   saveManifolds(mscomplex_ptr_t msc,std::ostream &os,int i,int dir);
+
+    void  saveManifolds(mscomplex_ptr_t msgraph,std::ostream &);
+
+    void  saveManifolds(mscomplex_ptr_t msgraph,const std::string &);
 
   // subroutines to main functions
   private:
     void  assignMaxFacets();
 
     void  pairCellsWithinEst();
-
-    template <typename cell_visited_ftor_t,typename cp_visited_ftor_t>
-    void do_gradient_bfs
-        (cellid_t start_cellId,
-         eGradientDirection gradient_dir,
-         cell_visited_ftor_t cell_visited_ftor,
-         cp_visited_ftor_t   cp_visited_ftor);
-
 
   // dataset interface
   public:
@@ -126,8 +116,8 @@ namespace grid
 
     inline bool   ptLt ( cellid_t c1,cellid_t c2) const
     {
-      cell_fn_t f1 = (*m_vert_fns_ref)(c1/2);
-      cell_fn_t f2 = (*m_vert_fns_ref)(c2/2);
+      cell_fn_t f1 = m_vert_fns(c1/2);
+      cell_fn_t f2 = m_vert_fns(c2/2);
 
       if (f1 != f2)
         return f1 < f2;
@@ -151,17 +141,17 @@ namespace grid
 
     bool   isPairOrientationCorrect ( cellid_t c, cellid_t p ) const;
 
-    bool   isCellMarked ( cellid_t c ) const;
-
     bool   isCellCritical ( cellid_t c ) const;
 
     bool   isCellPaired ( cellid_t c ) const;
+
+    bool   isCellVisited ( cellid_t c ) const;
 
     bool   areCellsIncident(cellid_t c1,cellid_t c2) const;
 
     void   pairCells ( cellid_t c,cellid_t p );
 
-    void   unpairCells ( cellid_t c,cellid_t p );
+    void   visitCell( cellid_t c);
 
     void   setCellMaxFacet (cellid_t c,cellid_t f);
 
@@ -184,11 +174,11 @@ namespace grid
 
       uint f_ct = getCellPoints(c,f);
 
-      cell_fn_t ret = (*m_vert_fns_ref)(f[0]/2);
+      cell_fn_t ret = m_vert_fns(f[0]/2);
 
       for(uint i = 1 ;i < f_ct;++i)
       {
-        ret = std::max(ret,(*m_vert_fns_ref)(f[i]/2));
+        ret = std::max(ret,m_vert_fns(f[i]/2));
       }
 
       return ret;
@@ -207,8 +197,14 @@ namespace grid
     void log_flags();
 
     void log_pairs(std::ostream &os = std::cout);
-
     void log_pairs(const std::string &s);
+
+    void log_visits(std::ostream &os = std::cout);
+    void log_visits(const std::string &s);
+
+    void log_pair_visits(std::ostream &os = std::cout);
+    void log_pair_visits(const std::string &s);
+
 
     void log_max_facets();
 
