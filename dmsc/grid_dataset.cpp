@@ -458,8 +458,6 @@ namespace grid
   {
     using namespace boost::lambda;
 
-    typedef std::list<cellid_t> cellid_llist_t;
-
     static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
 
 //    cellid_array_t est_vert;
@@ -978,8 +976,9 @@ namespace grid
 
   void  dataset_t::saveManifolds(mscomplex_ptr_t msc,std::ostream &os)
   {
-
     bin_write(os,m_rect);
+    bin_write(os,m_ext_rect);
+    bin_write(os,m_domain_rect);
 
     int cp_ct_wpos = os.tellp();
     os.seekp(sizeof(int),ios::cur);
