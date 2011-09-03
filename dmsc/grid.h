@@ -24,11 +24,11 @@ namespace grid
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>::range_t rect_range_t;
   typedef std::vector<cellid_t>                           cellid_list_t;
 
-  enum eGradientDirection
+  enum eGDIR
   {
-    GRADDIR_DESCENDING,
-    GRADDIR_ASCENDING,
-    GRADDIR_COUNT,
+    GDIR_DES,
+    GDIR_ASC,
+    GDIR_CT,
   };
 
   class dataset_t;

@@ -641,7 +641,7 @@ namespace grid
     void do_dfs
         (dataset_ptr_t ds,
          cellid_t start_cell,
-         eGradientDirection dir,
+         eGDIR dir,
          can_visit_ftor_t can_visit_ftor,
          visit_ftor_t visit_ftor,
          cp_visit_ftor_t  cp_visit_ftor)
@@ -747,7 +747,7 @@ namespace grid
     void do_path_dfs
         (dataset_ptr_t ds,
          cellid_t c,
-         eGradientDirection dir,
+         eGDIR dir,
          path_visit_ftor_t    path_visit_ftor,
          path_cp_visit_ftor_t path_cp_visit_ftor,
          path_can_visit_ftor_t path_can_visit_ftor)
@@ -772,18 +772,24 @@ namespace grid
       return true;
     }
 
-    void connect_cps(mscomplex_ptr_t msc,cellid_t c1,cellid_t c2,const stack_t &)
+    void connect_cps(dataset_ptr_t ds, mscomplex_ptr_t msc,cellid_t p,cellid_t q,const stack_t &)
     {
-      msc->connect_cps(c1,c2);
+      if(ds->isCellPaired(p) && ds->getCellDim(ds->getCellPairId(p)) != ds->getCellDim(q))
+        return;
+
+      if(ds->isCellPaired(q) && ds->getCellDim(ds->getCellPairId(q)) != ds->getCellDim(p))
+        return;
+
+      msc->connect_cps(p,q);
     }
 
     void do_dfs_connect
         (dataset_ptr_t ds,
          mscomplex_ptr_t msc,
          cellid_t c,
-         eGradientDirection dir)
+         eGDIR dir)
     {
-      do_dfs(ds,c,dir,pass_can_visit,pass_visit,bind(connect_cps,msc,c,_1,_2));
+      do_dfs(ds,c,dir,pass_can_visit,pass_visit,bind(connect_cps,ds,msc,c,_1,_2));
     }
 
     void add_to_disc(std::set<cellid_t> *mfold,cellid_t c,const stack_t &)
@@ -795,7 +801,7 @@ namespace grid
         (dataset_ptr_t ds,
          std::set<cellid_t> *mfold,
          cellid_t c,
-         eGradientDirection dir)
+         eGDIR dir)
     {
       do_dfs(ds,c,dir,pass_can_visit,bind(add_to_disc,mfold,_1,_2),pass_visit);
     }
@@ -810,7 +816,7 @@ namespace grid
       ds->visitCell(c);
     }
 
-    void do_dfs_mark_visit(dataset_ptr_t ds,cellid_t c,eGradientDirection dir)
+    void do_dfs_mark_visit(dataset_ptr_t ds,cellid_t c,eGDIR dir)
     {
       do_dfs(ds,c,dir,bind(visit_if_not_visited,ds,_1,_2),
              bind(mark_visit,ds,_1,_2),pass_visit);
@@ -825,10 +831,10 @@ namespace grid
         (dataset_ptr_t ds,
          mscomplex_ptr_t msc,
          cellid_t c,
-         eGradientDirection dir)
+         eGDIR dir)
     {
       do_dfs(ds,c,dir,bind(visit_if_pair_visited,ds,_1,_2),
-             pass_visit,bind(connect_cps,msc,c,_1,_2));
+             pass_visit,bind(connect_cps,ds,msc,c,_1,_2));
     }
   };
 
@@ -890,16 +896,16 @@ namespace grid
         switch(getCellDim(c))
         {
         case 0:
-          dfs::do_dfs_connect(shared_from_this(),msgraph,c,GRADDIR_ASCENDING);
+          dfs::do_dfs_connect(shared_from_this(),msgraph,c,GDIR_ASC);
           break;
         case 1:
-          dfs::do_dfs_mark_visit(shared_from_this(),c,GRADDIR_ASCENDING);
+          dfs::do_dfs_mark_visit(shared_from_this(),c,GDIR_ASC);
           break;
         case 2:
-          dfs::do_dfs_mark_visit(shared_from_this(),c,GRADDIR_DESCENDING);
+          dfs::do_dfs_mark_visit(shared_from_this(),c,GDIR_DES);
           break;
         case 3:
-          dfs::do_dfs_connect(shared_from_this(),msgraph,c,GRADDIR_DESCENDING);
+          dfs::do_dfs_connect(shared_from_this(),msgraph,c,GDIR_DES);
           break;
         }
       }
@@ -910,7 +916,7 @@ namespace grid
 
         if(getCellDim(c) == 2)
           dfs::do_dfs_connect_thru_visted_pairs
-              (shared_from_this(),msgraph,c,GRADDIR_DESCENDING);
+              (shared_from_this(),msgraph,c,GDIR_DES);
       }
 
     }
@@ -934,28 +940,23 @@ namespace grid
 
   int dataset_t::saveManifolds(mscomplex_ptr_t msc,std::ostream &os,int i,int dir)
   {
-    critpt_t * cp = msc->m_cps[i];
-
     set<cellid_t> mfold;
 
     try
     {
-      ASSERT(cp->is_paired == false);
+      ASSERT(msc->is_paired(i) == false);
 
-      if(m_rect.contains(cp->cellid))
+      if(m_rect.contains(msc->cellid(i)))
         dfs::do_dfs_collect_manifolds
-            (shared_from_this(),&mfold,cp->cellid,(eGradientDirection)dir);
+            (shared_from_this(),&mfold,msc->cellid(i),(eGDIR)dir);
 
-      for( conn_iter_t it = cp->conn[dir].begin(); it != cp->conn[dir].end();++it)
+      for( conn_iter_t j = msc->m_conn[dir][i].begin(); j != msc->m_conn[dir][i].end();++j)
       {
-        critpt_t * ccp    = msc->m_cps[*it];
-        critpt_t * ccp_pr = msc->m_cps[ccp->pair_idx];
-
-        ASSERT(ccp->is_paired == true);
-        ASSERT(cp->index == ccp_pr->index);
+        ASSERT(msc->is_paired(*j) == true);
+        ASSERT(msc->index(i) == msc->index(msc->pair_idx(*j)));
 
         dfs::do_dfs_collect_manifolds
-            (shared_from_this(),&mfold,ccp_pr->cellid,(eGradientDirection)dir);
+            (shared_from_this(),&mfold,msc->cellid(msc->pair_idx(*j)),(eGDIR)dir);
       }
 
       for(set<cellid_t>::iterator it = mfold.begin();it != mfold.end(); ++it)
@@ -986,12 +987,10 @@ namespace grid
 
     for(int i = 0 ; i < msc->m_cps.size();++i)
     {
-      critpt_t * cp = msc->m_cps[i];
-
-      if(cp->is_paired)
+      if(msc->is_paired(i))
         continue;
 
-      bin_write<cellid_t>(os,cp->cellid);
+      bin_write<cellid_t>(os,msc->cellid(i));
       num_cps++;
     }
 
@@ -1010,7 +1009,7 @@ namespace grid
     {
       for(int i = 0 ; i < msc->m_cps.size();++i)
       {
-        if(msc->m_cps[i]->is_paired)
+        if(msc->is_paired(i))
           continue;
 
         for(int d = 0 ; d < 2;++d)
