@@ -21,11 +21,7 @@
 #ifndef GRID_DATAMANAGER_H_INCLUDED_
 #define GRID_DATAMANAGER_H_INCLUDED_
 
-#include <fstream>
-#include <vector>
-
 #include <grid.h>
-#include <boost/shared_ptr.hpp>
 
 namespace grid
 {

@@ -24,10 +24,11 @@
 #include <set>
 #include <map>
 
-#include <grid.h>
-
 #include <boost/noncopyable.hpp>
 #include <boost/thread/mutex.hpp>
+#include <boost/function.hpp>
+
+#include <grid.h>
 
 namespace grid
 {

@@ -24,8 +24,8 @@
 
 #include <vector>
 
+#include <boost/enable_shared_from_this.hpp>
 #include <boost/multi_array.hpp>
-#include <boost/shared_ptr.hpp>
 #include <boost/function.hpp>
 
 #include <grid.h>

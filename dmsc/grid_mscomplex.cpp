@@ -3,9 +3,9 @@
 #include <iostream>
 #include <fstream>
 #include <limits>
+#include <cstdlib>
 
 #include <grid_mscomplex.h>
-#include <grid_dataset.h>
 
 using namespace std;
 
@@ -732,7 +732,7 @@ namespace grid
         continue;
 
       ASSERT(is_paired(i) && is_paired(pair_idx(i))== true);
-      ASSERT(abs<int>(index(i)- index(pair_idx(i))) == 1);
+      ASSERT(abs(index(i)- index(pair_idx(i))) == 1);
       ASSERT(pair_idx(pair_idx(i))  == i);
 
       int dir = (index(i) > index(pair_idx(i)))?(0):(1);

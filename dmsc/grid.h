@@ -2,13 +2,10 @@
 #define GRID_H_INCLUDED
 
 #include <vector>
-#include <cpputils.h>
+
+#include <boost/shared_ptr.hpp>
+
 #include <aabb.h>
-
-#include <boost/static_assert.hpp>
-#include <boost/enable_shared_from_this.hpp>
-
-#define static_assert BOOST_STATIC_ASSERT
 
 namespace grid
 {

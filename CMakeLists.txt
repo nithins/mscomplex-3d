@@ -6,16 +6,9 @@ cmake_minimum_required(VERSION 2.6)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-option(BUILD_PYMOD "build python modlue" OFF)
-
-if(BUILD_PYMOD)
-  add_subdirectory(dmsc_pymod)
-endif(BUILD_PYMOD)
-
 option(BUILD_EXEC "build standard exec" ON)
 
 if(BUILD_EXEC)
-  #I should move this to a separate CMakelists.txt
 
   find_package(Boost COMPONENTS program_options thread serialization REQUIRED)
 
@@ -32,6 +25,8 @@ if(BUILD_EXEC)
 
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_datamanager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/grid_datamanager.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
     )
 
   include_directories(
@@ -41,6 +36,8 @@ if(BUILD_EXEC)
   )
 
   set(${PROJECT_NAME}_LIBS ${${PROJECT_NAME}_LIBS} ${Boost_LIBRARIES})
+
+  option(BUILD_EXEC_CUDA "build with cuda support" ON)
 
   option(BUILD_EXEC_GUI "build with qt gui" OFF)
 
@@ -147,11 +144,20 @@ if(BUILD_EXEC)
 
   configure_file(${PROJECT_SOURCE_DIR}/config.h.in ${PROJECT_BINARY_DIR}/config.h)
 
-  set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+  if(BUILD_EXEC_CUDA)
+
+    find_package(CUDA REQUIRED)
+
+    set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
     )
 
-  add_executable(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})
+    CUDA_ADD_EXECUTABLE(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})
+
+  else(BUILD_EXEC_CUDA)
+
+    add_executable(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})        
+
+  endif(BUILD_EXEC_CUDA)  
 
   target_link_libraries(${PROJECT_NAME} ${${PROJECT_NAME}_LIBS})
 endif(BUILD_EXEC)

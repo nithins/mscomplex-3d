@@ -11,14 +11,14 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
 #include <boost/tuple/tuple.hpp>
+#include <boost/static_assert.hpp>
+
+#define static_assert BOOST_STATIC_ASSERT
 
 #include <grid_dataset.h>
 #include <grid_mscomplex.h>
 
 using namespace std;
-
-#define TRACEM(msg) (cout<<msg<<endl)
-#define TRACEV(v)   (cout<<SVAR(v)<<endl)
 
 #define MUTEX_CALL(__c) \
   {static boost::mutex __mutex;\
