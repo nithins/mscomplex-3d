@@ -17,9 +17,7 @@ option(BUILD_EXEC "build standard exec" ON)
 if(BUILD_EXEC)
   #I should move this to a separate CMakelists.txt
 
-  find_package(Boost COMPONENTS program_options thread serialization regex REQUIRED)
-
-  add_subdirectory(utls)
+  find_package(Boost COMPONENTS program_options thread serialization REQUIRED)
 
   set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
 
@@ -38,19 +36,37 @@ if(BUILD_EXEC)
 
   include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/
-    ${utls_SOURCE_DIR}/include
     ${Boost_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}
   )
 
-  set(${PROJECT_NAME}_LIBS ${${PROJECT_NAME}_LIBS}
-    utls
-    ${Boost_LIBRARIES}
-    )
+  set(${PROJECT_NAME}_LIBS ${${PROJECT_NAME}_LIBS} ${Boost_LIBRARIES})
 
-  option(BUILD_EXEC_GUI "build with qt gui" ON)
+  option(BUILD_EXEC_GUI "build with qt gui" OFF)
 
-  if(BUILD_EXEC_GUI)
+  if(NOT BUILD_EXEC_GUI)
+    set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/include/cpputils.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/src/cpputils.cpp
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/include/n_vector.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/src/n_vector.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/include/aabb.h
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/include/timer.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/utls/src/timer.cpp
+        )
+
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/utls/include)
+
+  else(NOT BUILD_EXEC_GUI)
+
+    add_subdirectory(utls)
+
+    set(${PROJECT_NAME}_LIBS ${${PROJECT_NAME}_LIBS} utls)
+
+    include_directories(${utls_SOURCE_DIR}/include)
 
     set(QT_MIN_VERSION "4.5.0")
     set(QT_USE_QTGUI TRUE)
@@ -127,7 +143,7 @@ if(BUILD_EXEC)
       ${QXT_LIBRARIES}
       )
 
-  endif(BUILD_EXEC_GUI)
+  endif(NOT BUILD_EXEC_GUI)
 
   configure_file(${PROJECT_SOURCE_DIR}/config.h.in ${PROJECT_BINARY_DIR}/config.h)
 

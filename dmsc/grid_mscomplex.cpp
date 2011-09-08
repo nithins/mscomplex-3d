@@ -1,26 +1,21 @@
 #include <cmath>
 #include <queue>
 #include <iostream>
+#include <fstream>
+#include <limits>
 
 #include <grid_mscomplex.h>
 #include <grid_dataset.h>
-#include <fstream>
-#include <limits>
 
 using namespace std;
 
 namespace grid
 {
-  inline std::string idx_to_string(mscomplex_t *msc,uint i)
-  {
-    return to_string(msc->cellid(i));
-  }
-
   inline std::string edge_to_string(mscomplex_t *msc,int_pair_t e)
   {
     std::stringstream ss;
 
-    ss<<idx_to_string(msc,e[0])<<"----"<<idx_to_string(msc,e[1]);
+    ss<<utls::to_string(msc->cellid(e[0]))<<"----"<<utls::to_string(msc->cellid(e[0]));
 
     return ss.str();
   }
@@ -53,6 +48,11 @@ namespace grid
   mscomplex_t::~mscomplex_t()
   {
     clear();
+  }
+
+  int  mscomplex_t::get_num_critpts() const
+  {
+    return m_cps.size();
   }
 
   int mscomplex_t::add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t v)
@@ -802,6 +802,75 @@ namespace grid
     os.close();
   }
 
+  cp_producer_t::cp_producer_t(mscomplex_const_ptr_t msc, cp_filter_t cf)
+  {
+    boost::mutex::scoped_lock scoped_lock(m_mutex);
+
+    m_msc       = msc;
+    m_cp_filter = cf;
+    m_ni        = 0;
+
+
+    while(m_ni < m_msc->get_num_critpts() && (m_cp_filter(m_msc,m_ni) == false))
+      ++m_ni;
+  }
+
+  bool cp_producer_t::next(int & i)
+  {
+    boost::mutex::scoped_lock scoped_lock(m_mutex);
+
+    if(!is_in_range(m_ni,0,m_msc->get_num_critpts()))
+      return false;
+
+    i = m_ni++;
+
+    while(m_ni < m_msc->get_num_critpts() && (m_cp_filter(m_msc,m_ni) == false))
+      ++m_ni;
+
+    return true;
+  }
+
+  int cp_producer_t::count() const
+  {
+    if (m_cp_filter == pass_filter)
+      return m_msc->get_num_critpts();
+
+    int ct = 0;
+
+    for(int i = 0 ; i < m_msc->get_num_critpts(); ++i)
+    {
+      if (m_cp_filter(m_msc,i))
+        ++ct;
+    }
+
+    return ct;
+  }
+
+
+  bool cp_producer_t::pass_filter(mscomplex_const_ptr_t msc, int i)
+  {
+    return true;
+  }
+  bool cp_producer_t::extrema_filter(mscomplex_const_ptr_t msc, int i)
+  {
+    return msc->index(i) == 3 || msc->index(i) == 0;
+  }
+  bool cp_producer_t::twosaddle_filter(mscomplex_const_ptr_t msc, int i)
+  {
+    return msc->index(i) == 2;
+  }
+  bool cp_producer_t::saddle_filter(mscomplex_const_ptr_t msc, int i)
+  {
+    return msc->index(i) == 2 || msc->index(i) == 1;
+  }
+  bool cp_producer_t::unpaired_cp_filter(mscomplex_const_ptr_t msc, int i)
+  {
+    return !msc->is_paired(i);
+  }
+  bool cp_producer_t::unpaired_saddle_filter(mscomplex_const_ptr_t msc, int i)
+  {
+    return (!msc->is_paired(i)) && (msc->index(i) == 2 || msc->index(i) == 1);
+  }
 }
 
 

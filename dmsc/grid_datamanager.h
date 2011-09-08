@@ -84,7 +84,9 @@ namespace grid
 
     void merge_down_subdomain_msgraphs ();
 
-    void save_results ();
+    void save_graphs ();
+
+    void save_mfolds ();
 
     void destoryPieces();
   };

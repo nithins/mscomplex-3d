@@ -25,7 +25,6 @@
 #include <boost/lambda/lambda.hpp>
 #include <boost/multi_array.hpp>
 
-#include <logutil.h>
 #include <timer.h>
 #include <cpputils.h>
 
@@ -292,23 +291,23 @@ namespace grid
     }
   }
 
-
-  void data_manager_t::save_results()
+  void data_manager_t::save_graphs()
   {
     for(int i = 0 ;i < m_pieces.size(); ++i)
     {
       piece_ptr_t dp = m_pieces[i];
-      string name = dp->get_basename(m_basename);
-      mscomplex_ptr_t msc = dp->m_msgraph;
-      dataset_ptr_t   ds  = dp->m_dataset;
+      dp->m_msgraph->write_graph(dp->get_basename(m_basename)+".graph.txt");
+    }
+  }
 
-      msc->write_graph(name+".graph.txt");
-
-      if(ds)
-      {
-        msc->invert_for_collection();
-        ds->saveManifolds(msc,name+".mfold.bin");
-      }
+  void data_manager_t::save_mfolds()
+  {
+    for(int i = two_power(m_level_ct)-1 ;i < m_pieces.size(); ++i)
+    {
+      piece_ptr_t dp = m_pieces[i];
+      string name    = dp->get_basename(m_basename)+".mfold.bin";
+      dp->m_msgraph->invert_for_collection();
+      dp->m_dataset->saveManifolds(dp->m_msgraph,name);
     }
   }
 
@@ -341,8 +340,11 @@ namespace grid
     merge_down_subdomain_msgraphs();
     cout<<"merge down done ---------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    save_results();
-    cout<<"save results done -------- "<<t.getElapsedTimeInMilliSec()<<endl;
+//    save_graphs();
+//    cout<<"save graphs done --------- "<<t.getElapsedTimeInMilliSec()<<endl;
+
+    save_mfolds();
+    cout<<"save mfolds done --------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     destoryPieces();
     cout<<"destroy pieces done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
@@ -378,12 +380,12 @@ namespace grid
 
   void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh)
   {
+    Timer t;
+    t.start();
+
     cout<<"===================================="<<endl;
     cout<<"         Starting Processing        "<<endl;
     cout<<"------------------------------------"<<endl;
-
-    Timer t;
-    t.start();
 
     rect_t d(cellid_t::zero,(size-cellid_t::one)*2);
     dataset_ptr_t   dataset(new dataset_t(d,d,d));
@@ -391,7 +393,6 @@ namespace grid
 
     dataset->init(filename);
     cout<<"data read ---------------- "<<t.getElapsedTimeInMilliSec()<<endl;
-
 
     dataset->assignGradient();
     cout<<"gradient done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
@@ -402,12 +403,11 @@ namespace grid
     msgraph->simplify_un_simplify(simp_tresh);
     cout<<"simplification done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
 
-    msgraph->write_graph("msc_graph.txt");
+    msgraph->write_graph("graph.txt");
     cout<<"write msgraph done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->invert_for_collection();
-    msgraph->write_graph("msc_graph_invert.txt");
-    dataset->saveManifolds(msgraph,"msc_mfolds.bin");
+    dataset->saveManifolds(msgraph,"mfolds.bin");
     cout<<"write msmfolds done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
 
     cout<<"------------------------------------"<<endl;
@@ -437,6 +437,6 @@ namespace grid
 
   std::string octtree_piece_t::get_basename(const std::string& basename)
   {
-    return basename+"."+to_string(m_ext_prct);
+    return basename+"."+utls::to_string(m_ext_prct);
   }
 }

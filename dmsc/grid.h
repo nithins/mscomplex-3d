@@ -13,6 +13,7 @@
 namespace grid
 {
   const uint gc_grid_dim = 3;
+  const int g_num_threads = 8;
 
   typedef int16_t                                         cell_coord_t;
   typedef float                                           cell_fn_t;
@@ -35,9 +36,17 @@ namespace grid
   class mscomplex_t;
   class data_manager_t;
 
-  typedef boost::shared_ptr<dataset_t>      dataset_ptr_t;
-  typedef boost::shared_ptr<mscomplex_t>    mscomplex_ptr_t;
-  typedef boost::shared_ptr<data_manager_t> data_manager_ptr_t;
+  typedef boost::shared_ptr<dataset_t>            dataset_ptr_t;
+  typedef boost::shared_ptr<mscomplex_t>          mscomplex_ptr_t;
+  typedef boost::shared_ptr<data_manager_t>       data_manager_ptr_t;
+
+  typedef boost::shared_ptr<const dataset_t>      dataset_const_ptr_t;
+  typedef boost::shared_ptr<const mscomplex_t>    mscomplex_const_ptr_t;
+  typedef boost::shared_ptr<const data_manager_t> data_manager_const_ptr_t;
+
+  class cp_producer_t;
+  typedef boost::shared_ptr<cp_producer_t>  cp_producer_ptr_t;
+
 }
 
 #define _FFL            (std::string("\n")+FILEFUNCLINE)

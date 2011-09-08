@@ -70,7 +70,7 @@ namespace grid
     varray_t           m_vert_fns;
 
     cellflag_array_t   m_cell_flags;
-    cellid_list_t      m_critical_cells;
+    cellid_list_t      m_critical_cells[g_num_threads];
 
     boost::function<bool (cellid_t,cellid_t)> cmp_ftor;
     boost::function<bool (cellid_t,cellid_t)> cmp_ftors[2];
@@ -93,17 +93,26 @@ namespace grid
 
     void  computeMsGraph(mscomplex_ptr_t msgraph);
 
-    int   saveManifolds(mscomplex_ptr_t msc,std::ostream &os,int i,int dir);
-
-    void  saveManifolds(mscomplex_ptr_t msgraph,std::ostream &);
-
-    void  saveManifolds(mscomplex_ptr_t msgraph,const std::string &);
+    void  saveManifolds(mscomplex_const_ptr_t msgraph,const std::string &);
 
   // subroutines to main functions
-  private:
-    void  assignMaxFacets();
+  public:
 
-    void  pairCellsWithinEst();
+    void  assignMaxFacets_thd(int tid,int dim);
+
+    void  pairCellsWithinEst_thd(int tid);
+
+
+    void  markBoundryCritical_thd(const rect_t &b,int tid);
+
+    void  saddle_visit(mscomplex_ptr_t msgraph);
+
+    void  extrema_connect_thd(mscomplex_ptr_t msgraph,cp_producer_ptr_t p);
+
+    void  saddle_connect_thd(mscomplex_ptr_t msgraph,cp_producer_ptr_t p);
+
+    template<typename mfold_t>
+    void  get_mfold(mfold_t * mfold,mscomplex_const_ptr_t msc,int i,int dir) const;
 
   // dataset interface
   public:
