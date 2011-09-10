@@ -20,11 +20,19 @@ using namespace grid;
 
 namespace bpo = boost::program_options ;
 
+#ifdef BUILD_EXEC_CUDA
+extern "C" void init_cuda();
+#endif
+
+#ifdef BUILD_EXEC_OPENCL
+void init_opencl();
+#endif
+
+
 int main(int ac , char **av)
 {
   string         filename;
   cellid_t size;
-  bool           use_ocl;
   double         simp_tresh;
   cellid_t levels;
 
@@ -63,6 +71,14 @@ int main(int ac , char **av)
     cout<<desc<<endl;
     return 1;
   }
+
+#ifdef BUILD_EXEC_CUDA
+  init_cuda();
+#endif
+
+#ifdef BUILD_EXEC_OPENCL
+    init_opencl();
+#endif
 
   data_manager_ptr_t gdm(new data_manager_t(filename,size,levels,simp_tresh));
 

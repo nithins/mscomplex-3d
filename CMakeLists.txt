@@ -37,7 +37,9 @@ if(BUILD_EXEC)
 
   set(${PROJECT_NAME}_LIBS ${${PROJECT_NAME}_LIBS} ${Boost_LIBRARIES})
 
-  option(BUILD_EXEC_CUDA "build with cuda support" ON)
+  option(BUILD_EXEC_CUDA "build with cuda support" OFF)
+
+  option(BUILD_EXEC_OPENCL "build with cuda support" ON)
 
   option(BUILD_EXEC_GUI "build with qt gui" OFF)
 
@@ -144,20 +146,44 @@ if(BUILD_EXEC)
 
   configure_file(${PROJECT_SOURCE_DIR}/config.h.in ${PROJECT_BINARY_DIR}/config.h)
 
-  if(BUILD_EXEC_CUDA)
+#   if(BUILD_EXEC_CUDA)
+#
+#     find_package(CUDA REQUIRED)
+#
+#     set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
+#         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/CUDA/grid_dataset.cu
+#         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/CUDA/cutil.h
+#     )
+#
+#     CUDA_ADD_EXECUTABLE(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})
+#
+#   else(BUILD_EXEC_CUDA)
+#
+#     add_executable(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})
+#
+#   endif(BUILD_EXEC_CUDA)
 
-    find_package(CUDA REQUIRED)
+  if(BUILD_EXEC_OPENCL)
+
+    find_package(OpenCL REQUIRED)
 
     set(${PROJECT_NAME}_SRCS ${${PROJECT_NAME}_SRCS}
-    )
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_cl.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_cl.cpp
 
-    CUDA_ADD_EXECUTABLE(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset.cl
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset.clh
 
-  else(BUILD_EXEC_CUDA)
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/cl.hpp)
 
-    add_executable(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})        
+    include_directories(${OPENCL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL)
 
-  endif(BUILD_EXEC_CUDA)  
+    set(${PROJECT_NAME}_LIBS ${${PROJECT_NAME}_LIBS} ${OPENCL_LIBRARIES})
+
+
+  endif(BUILD_EXEC_OPENCL)
+
+  add_executable(${PROJECT_NAME}  ${${PROJECT_NAME}_SRCS})
 
   target_link_libraries(${PROJECT_NAME} ${${PROJECT_NAME}_LIBS})
 endif(BUILD_EXEC)

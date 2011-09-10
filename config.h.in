@@ -1,3 +1,4 @@
 #cmakedefine BUILD_EXEC
 #cmakedefine BUILD_EXEC_GUI
 #cmakedefine BUILD_EXEC_CUDA
+#cmakedefine BUILD_EXEC_OPENCL

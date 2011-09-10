@@ -2,6 +2,7 @@
 #define GRID_H_INCLUDED
 
 #include <vector>
+#include <timer.h>
 
 #include <boost/shared_ptr.hpp>
 
@@ -13,6 +14,7 @@ namespace grid
   const int g_num_threads = 8;
 
   typedef int16_t                                         cell_coord_t;
+  typedef u_int8_t                                        cell_flag_t;
   typedef float                                           cell_fn_t;
   typedef boost::shared_ptr<cell_fn_t >                   cell_fn_ptr_t;
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>          rect_t;
@@ -26,7 +28,7 @@ namespace grid
   {
     GDIR_DES,
     GDIR_ASC,
-    GDIR_CT,
+    GDIR_CT
   };
 
   class dataset_t;
@@ -44,6 +46,8 @@ namespace grid
   class cp_producer_t;
   typedef boost::shared_ptr<cp_producer_t>  cp_producer_ptr_t;
 
+  extern "C"
+  Timer g_timer;
 }
 
 #define _FFL            (std::string("\n")+FILEFUNCLINE)

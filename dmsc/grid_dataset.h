@@ -35,8 +35,6 @@ namespace grid
 
   class mscomplex_t;
 
-  typedef u_int8_t cell_flag_t;
-
   class dataset_t:public boost::enable_shared_from_this<dataset_t>
   {
 
@@ -47,7 +45,7 @@ namespace grid
     {
       CELLFLAG_VISITED   = 0x80,
       CELLFLAG_CRITICAL = 0x40,
-      CELLFLAG_MASK     = 0xc0,
+      CELLFLAG_MASK     = 0xc0
     };
 
     // bits [0,3) max facet of a cell

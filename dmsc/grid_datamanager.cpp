@@ -318,36 +318,35 @@ namespace grid
 
   void data_manager_t::work()
   {
-    Timer t;
-    t.start();
+    g_timer.start();
 
     cout<<"===================================="<<endl;
     cout<<"         Starting Processing        "<<endl;
     cout<<"------------------------------------"<<endl;
 
     createPieces();
-    cout<<"create pieces done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"create pieces done ------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     split_dataset();
-    cout<<"split dataset done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"split dataset done ------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     compute_subdomain_msgraphs();
-    cout<<"subdomain msgraph done --- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"subdomain msgraph done --- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     merge_up_subdomain_msgraphs();
-    cout<<"merge up done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"merge up done ------------ "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     merge_down_subdomain_msgraphs();
-    cout<<"merge down done ---------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"merge down done ---------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
-//    save_graphs();
-//    cout<<"save graphs done --------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    save_graphs();
+    cout<<"save graphs done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     save_mfolds();
-    cout<<"save mfolds done --------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"save mfolds done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     destoryPieces();
-    cout<<"destroy pieces done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"destroy pieces done ------ "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     cout<<"------------------------------------"<<endl;
     cout<<"        Finished Processing         "<<endl;
@@ -380,8 +379,7 @@ namespace grid
 
   void compute_mscomplex_basic(std::string filename, cellid_t size, double simp_tresh)
   {
-    Timer t;
-    t.start();
+    g_timer.start();
 
     cout<<"===================================="<<endl;
     cout<<"         Starting Processing        "<<endl;
@@ -392,23 +390,23 @@ namespace grid
     mscomplex_ptr_t msgraph(new mscomplex_t(d,d));
 
     dataset->init(filename);
-    cout<<"data read ---------------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"data read ---------------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     dataset->assignGradient();
-    cout<<"gradient done ------------ "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"gradient done ------------ "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     dataset->computeMsGraph(msgraph);
-    cout<<"msgraph done ------------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"msgraph done ------------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->simplify_un_simplify(simp_tresh);
-    cout<<"simplification done ------ "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"simplification done ------ "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->write_graph("graph.txt");
-    cout<<"write msgraph done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"write msgraph done ------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     msgraph->invert_for_collection();
     dataset->saveManifolds(msgraph,"mfolds.bin");
-    cout<<"write msmfolds done ------- "<<t.getElapsedTimeInMilliSec()<<endl;
+    cout<<"write msmfolds done ------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     cout<<"------------------------------------"<<endl;
     cout<<"        Finished Processing         "<<endl;

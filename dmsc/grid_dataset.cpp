@@ -15,8 +15,14 @@
 
 #define static_assert BOOST_STATIC_ASSERT
 
+#include <config.h>
+
 #include <grid_dataset.h>
 #include <grid_mscomplex.h>
+
+#ifdef BUILD_EXEC_OPENCL
+#include <grid_dataset_cl.h>
+#endif
 
 using namespace std;
 
@@ -24,6 +30,9 @@ using namespace std;
   {static boost::mutex __mutex;\
    boost::mutex::scoped_lock scoped_lock(__mutex);\
    (__c);}
+
+
+
 
 namespace grid
 {
@@ -397,9 +406,19 @@ namespace grid
 
   void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
   {
-    ASSERT(getCellDim(c) == getCellDim(f)+1);
-    m_cell_flags (c) |= mxfct_to_flag(c,f);
-    ASSERT(getCellMaxFacetId(c) == f);
+    try
+    {
+      ASSERT(getCellDim(c) == getCellDim(f)+1);
+      m_cell_flags (c) |= mxfct_to_flag(c,f);
+      ASSERT(getCellMaxFacetId(c) == f);
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
+      e.push(SVAR(c)).push(SVAR(f)).push(SVAR((int)m_cell_flags(c)));
+
+      throw;
+    }
   }
 
   void dataset_t::markCellCritical (cellid_t c)
@@ -530,8 +549,53 @@ namespace grid
 
   void dataset_t::assignGradient()
   {
+#ifdef BUILD_EXEC_OPENCL
+
+//    rect_size_t   span = m_ext_rect.span() + 1;
+//    rect_point_t   bl  = m_ext_rect.lower_corner();
+
+//    cellflag_array_t flag(span,boost::fortran_storage_order());
+
+//    flag.reindex(bl);
+
+    assign_max_facet_opencl(m_ext_rect,m_vert_fns.data(),m_cell_flags.data());
+
+    for(int dim = 2 ; dim <= gc_grid_dim; ++dim)
+    {
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        assignMaxFacets_thd(tid,dim);
+    }
+
+//    cellid_t f[20],c,s(0,0,0),stride(2,2,2);
+
+//    s[0] = 1;
+
+//    while(true)
+//    {
+//      rect_t rect  = rect_t(m_ext_rect.lc()+s,m_ext_rect.uc()-s);
+
+//      int n = c_to_i(rect.uc(),rect,stride) + 1;
+
+//      for( int i = 0; i < n; i ++)
+//      {
+//        c = i_to_c(i,rect,stride);
+
+//        if(flag(c) != m_cell_flags(c))
+//        {
+//          cout<<SVAR(c)<<endl;
+//          cout<<SVAR((int)flag(c))<<endl;
+//          cout<<SVAR((int)m_cell_flags(c))<<endl;
+//        }
+//      }
+
+//      if(!next_permutation(s.rbegin(),s.rend()))
+//        break;
+//    }
+
+#else
     for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
     {
+
       boost::thread_group group;
 
       for(int tid = 0 ; tid < g_num_threads; ++tid)
@@ -539,6 +603,9 @@ namespace grid
 
       group.join_all();
     }
+
+#endif
+
 
     boost::thread_group group;
 
