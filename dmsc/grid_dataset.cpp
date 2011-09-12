@@ -547,51 +547,75 @@ namespace grid
     }
   }
 
+#ifdef BUILD_EXEC_OPENCL
+  void check_assign_gradient_opencl(dataset_ptr_t ds,int dim,
+                                    rect_t check_rect,cell_flag_t mask = 0xff)
+  {
+    rect_size_t   span = ds->m_ext_rect.span() + 1;
+    rect_point_t   bl  = ds->m_ext_rect.lower_corner();
+
+    dataset_t::cellflag_array_t flag(span,boost::fortran_storage_order());
+
+    flag.reindex(bl);
+
+    assign_gradient_opencl(ds->m_rect,ds->m_ext_rect,ds->m_domain_rect,
+                            ds->m_vert_fns.data(),flag.data());
+
+    for(int d = 1 ; d <= gc_grid_dim; ++d)
+    {
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        ds->assignMaxFacets_thd(tid,d);
+    }
+
+    for(int tid = 0 ; tid < g_num_threads; ++tid)
+      ds->pairCellsWithinEst_thd(tid);
+
+    for(int d = 0 ; d <= dim; ++d)
+    {
+      cellid_t c,s(0,0,0),stride(2,2,2);
+
+      for(int i = 0 ;  i < d; ++i)
+        s[i] = 1;
+
+      while(true)
+      {
+        rect_t rect  = rect_t(check_rect.lc()+s,check_rect.uc()-s);
+
+        int n = c_to_i(rect.uc(),rect,stride) + 1;
+
+        for( int i = 0; i < n; i ++)
+        {
+          c = i_to_c(i,rect,stride);
+
+          if((flag(c)&mask) != (ds->m_cell_flags(c)&mask))
+          {
+            int f_gpu =(flag(c)&mask);
+            int f_cpu =((int)(ds->m_cell_flags(c)&mask) &mask);
+
+            cout<<SVAR(c)<<endl;
+            cout<<SVAR(f_cpu)<<" "<<SVAR(f_gpu)<<endl;
+            cout<<SVAR(flag_to_pair(c,f_cpu))
+//                <<" "<<SVAR(flag_to_pair(c,f_gpu))
+                <<endl;
+
+
+          }
+        }
+
+        if(!next_permutation(s.rbegin(),s.rend()))
+          break;
+      }
+    }
+  }
+#endif
+
   void dataset_t::assignGradient()
   {
 #ifdef BUILD_EXEC_OPENCL
+//    assign_gradient_opencl(m_rect,m_ext_rect,m_domain_rect,
+//                            m_vert_fns.data(),m_cell_flags.data());
 
-//    rect_size_t   span = m_ext_rect.span() + 1;
-//    rect_point_t   bl  = m_ext_rect.lower_corner();
-
-//    cellflag_array_t flag(span,boost::fortran_storage_order());
-
-//    flag.reindex(bl);
-
-    assign_max_facet_opencl(m_ext_rect,m_vert_fns.data(),m_cell_flags.data());
-
-    for(int dim = 2 ; dim <= gc_grid_dim; ++dim)
-    {
-      for(int tid = 0 ; tid < g_num_threads; ++tid)
-        assignMaxFacets_thd(tid,dim);
-    }
-
-//    cellid_t f[20],c,s(0,0,0),stride(2,2,2);
-
-//    s[0] = 1;
-
-//    while(true)
-//    {
-//      rect_t rect  = rect_t(m_ext_rect.lc()+s,m_ext_rect.uc()-s);
-
-//      int n = c_to_i(rect.uc(),rect,stride) + 1;
-
-//      for( int i = 0; i < n; i ++)
-//      {
-//        c = i_to_c(i,rect,stride);
-
-//        if(flag(c) != m_cell_flags(c))
-//        {
-//          cout<<SVAR(c)<<endl;
-//          cout<<SVAR((int)flag(c))<<endl;
-//          cout<<SVAR((int)m_cell_flags(c))<<endl;
-//        }
-//      }
-
-//      if(!next_permutation(s.rbegin(),s.rend()))
-//        break;
-//    }
-
+    check_assign_gradient_opencl(shared_from_this(),3,m_rect,0x3f);
 #else
     for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
     {
@@ -604,15 +628,14 @@ namespace grid
       group.join_all();
     }
 
-#endif
-
-
     boost::thread_group group;
 
     for(int tid = 0 ; tid < g_num_threads; ++tid)
       group.create_thread(bind(&dataset_t::pairCellsWithinEst_thd,this,tid));
 
     group.join_all();
+
+#endif
   }
 
   void dataset_t::markBoundryCritical_thd(const rect_t &bnd, int tid)

@@ -2,8 +2,8 @@
 #define GRID_DATASET_CLH
 
 typedef short4 cell_t;
-typedef uchar flag_t;
-typedef float func_t;
+typedef uchar  flag_t;
+typedef float  func_t;
 
 typedef struct
 {
@@ -11,9 +11,37 @@ typedef struct
   cell_t uc;
 } rect_t;
 
-#define make_cell(x,y,z)          ((cell_t){(x),(y),(z),(0)})
-#define cell_to_int4(c)           ((int4){(c.x),(c.y),(c.z),(0)})
+
+typedef struct
+{
+  rect_t r;
+  rect_t e;
+  rect_t d;
+} dataset_t;
+
 #define flag_to_uint4(f)          ((uint4){(f),(0),(0),(0)})
+
+__constant cell_t invalid_cell = (cell_t){-1,-1,-1,-1};
+
+inline int4 to_int4(const cell_t c)
+{
+  return (int4){(c).x,(c).y,(c).z,(0)};
+}
+
+inline cell_t to_cell(short x,short y,short z)
+{
+  return (cell_t){x,y,z,0};
+}
+
+#define Xdir (to_cell(1,0,0))
+#define Ydir (to_cell(0,1,0))
+#define Zdir (to_cell(0,0,1))
+
+#define XYdir (to_cell(1,1,0))
+#define YZdir (to_cell(0,1,1))
+#define ZXdir (to_cell(1,0,1))
+
+#define XYZdir (to_cell(1,1,1))
 
 inline rect_t make_rect(const cell_t lc, const cell_t uc)
 {
@@ -23,6 +51,21 @@ inline rect_t make_rect(const cell_t lc, const cell_t uc)
   r.uc = uc;
 
   return r;
+}
+
+inline dataset_t make_dataset
+(
+  cell_t rct_lc,  cell_t rct_uc,
+  cell_t ext_lc,  cell_t ext_uc,
+  cell_t dom_lc,  cell_t dom_uc  )
+{
+  dataset_t ds;
+
+  ds.r = make_rect(rct_lc,rct_uc);
+  ds.e = make_rect(ext_lc,ext_uc);
+  ds.d = make_rect(dom_lc,dom_uc);
+
+  return ds;
 }
 
 inline int c_to_i(const rect_t r, const cell_t c)
@@ -42,7 +85,7 @@ inline cell_t i_to_c(const rect_t r, const int i)
   const short X = r.uc.x - r.lc.x +1;
   const short Y = r.uc.y - r.lc.y +1;
 
-  return make_cell(r.lc.x + i%X,r.lc.y + (i%(X*Y))/X,r.lc.z + i/(X*Y));
+  return to_cell(r.lc.x + i%X,r.lc.y + (i%(X*Y))/X,r.lc.z + i/(X*Y));
 }
 
 inline int c_to_i2(const rect_t r, const cell_t c)
@@ -62,7 +105,7 @@ inline cell_t i_to_c2(const rect_t r, const int i)
   const short X = (r.uc.x - r.lc.x)/2 +1;
   const short Y = (r.uc.y - r.lc.y)/2 +1;
 
-  return make_cell(r.lc.x + 2*(i%X),r.lc.y + 2*((i%(X*Y))/X),r.lc.z + 2*(i/(X*Y)));
+  return to_cell(r.lc.x + 2*(i%X),r.lc.y + 2*((i%(X*Y))/X),r.lc.z + 2*(i/(X*Y)));
 }
 
 inline int num_cells(const rect_t r)
@@ -78,9 +121,9 @@ inline int num_cells2(const rect_t r)
 
 inline bool contains(const rect_t r, const cell_t c)
 {
-  return (r.lc.x <= c.x && c.x < r.uc.x) &&
-      (r.lc.y <= c.y && c.y < r.uc.y) &&
-      (r.lc.z <= c.z && c.z < r.uc.z);
+  return (r.lc.x <= c.x) && (c.x <= r.uc.x) &&
+      (r.lc.y <= c.y) && (c.y <= r.uc.y) &&
+      (r.lc.z <= c.z) && (c.z <= r.uc.z);
 }
 
 inline cell_t flag_to_mxfct(const cell_t c,const flag_t f)
@@ -147,9 +190,17 @@ inline bool __compare_cells(cell_t c1, cell_t c2)
   return c1.z < c2.z;
 }
 
-inline bool __cell_equal(cell_t c1, cell_t c2)
+inline bool is_same_cell(cell_t c1, cell_t c2)
 {
   return (c1.x == c2.x) && (c1.y == c2.y) && (c1.z == c2.z);
 }
+
+inline int boundryCount(const rect_t r,const cell_t c)
+{
+  return ((c.x == r.lc.x || c.x == r.uc.x)?(1):(0)) +
+         ((c.y == r.lc.y || c.y == r.uc.y)?(1):(0)) +
+         ((c.z == r.lc.z || c.z == r.uc.z)?(1):(0));
+}
+
 
 #endif
