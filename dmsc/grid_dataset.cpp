@@ -406,19 +406,9 @@ namespace grid
 
   void dataset_t::setCellMaxFacet (cellid_t c,cellid_t f)
   {
-    try
-    {
-      ASSERT(getCellDim(c) == getCellDim(f)+1);
-      m_cell_flags (c) |= mxfct_to_flag(c,f);
-      ASSERT(getCellMaxFacetId(c) == f);
-    }
-    catch(assertion_error e)
-    {
-      e.push(_FFL);
-      e.push(SVAR(c)).push(SVAR(f)).push(SVAR((int)m_cell_flags(c)));
-
-      throw;
-    }
+    ASSERT(getCellDim(c) == getCellDim(f)+1);
+    m_cell_flags (c) |= mxfct_to_flag(c,f);
+    ASSERT(getCellMaxFacetId(c) == f);
   }
 
   void dataset_t::markCellCritical (cellid_t c)
@@ -442,37 +432,6 @@ namespace grid
   {
     return (!m_rect.contains (c));
   }
-
-  inline int c_to_i(cellid_t c,const rect_t &r)
-  {
-    cellid_t s = r.span()+1;
-    c = (c - r.lc());
-    return (s[0]*s[1]*c[2] + s[0]*c[1] + c[0]);
-  }
-
-  inline cellid_t i_to_c(int i,const rect_t &r)
-  {
-    cellid_t s = r.span()+1;
-    cellid_t c = r.lc() + (cellid_t(i%s[0],(i%(s[0]*s[1]))/s[0],i/(s[0]*s[1])));
-    ASSERT(r.contains(c));
-    return c;
-  }
-
-  inline int c_to_i(cellid_t c,const rect_t &r,const cellid_t &stride)
-  {
-    cellid_t s = divide_ri(r.span()+1,stride);
-    c = (c - r.lc())/stride;
-    return (s[0]*s[1]*c[2] + s[0]*c[1] + c[0]);
-  }
-
-  inline cellid_t i_to_c(int i,const rect_t &r,const cellid_t &stride)
-  {
-    cellid_t s = divide_ri(r.span()+1,stride);
-    cellid_t c = r.lc() + (cellid_t(i%s[0],(i%(s[0]*s[1]))/s[0],i/(s[0]*s[1]))*stride);
-    ASSERT(r.contains(c));
-    return c;
-  }
-
 
   void dataset_t::assignMaxFacets_thd(int thid,int dim)
   {
@@ -532,7 +491,26 @@ namespace grid
 
           if(is_adj && is_same_bndry)
           {
-            pairCells(p,q);++j;
+            if(m_rect.contains(p))
+            {
+              pairCells(p,q);
+
+              if(m_rect.contains(q) == false)
+              {
+                markCellCritical(p);
+                m_critical_cells[thid].push_back(p);
+              }
+              else if(m_rect.boundryCount(p) != m_rect.boundryCount(q))
+              {
+                markCellCritical(p);
+                m_critical_cells[thid].push_back(p);
+
+                markCellCritical(q);
+                m_critical_cells[thid].push_back(q);
+              }
+            }
+
+            ++j;
             continue;
           }
         }
@@ -540,83 +518,18 @@ namespace grid
         if(m_rect.contains(p))
         {
           markCellCritical(p);
-
           m_critical_cells[thid].push_back(p);
         }
       }
     }
   }
 
-#ifdef BUILD_EXEC_OPENCL
-  void check_assign_gradient_opencl(dataset_ptr_t ds,int dim,
-                                    rect_t check_rect,cell_flag_t mask = 0xff)
-  {
-    rect_size_t   span = ds->m_ext_rect.span() + 1;
-    rect_point_t   bl  = ds->m_ext_rect.lower_corner();
-
-    dataset_t::cellflag_array_t flag(span,boost::fortran_storage_order());
-
-    flag.reindex(bl);
-
-    assign_gradient_opencl(ds->m_rect,ds->m_ext_rect,ds->m_domain_rect,
-                            ds->m_vert_fns.data(),flag.data());
-
-    for(int d = 1 ; d <= gc_grid_dim; ++d)
-    {
-      for(int tid = 0 ; tid < g_num_threads; ++tid)
-        ds->assignMaxFacets_thd(tid,d);
-    }
-
-    for(int tid = 0 ; tid < g_num_threads; ++tid)
-      ds->pairCellsWithinEst_thd(tid);
-
-    for(int d = 0 ; d <= dim; ++d)
-    {
-      cellid_t c,s(0,0,0),stride(2,2,2);
-
-      for(int i = 0 ;  i < d; ++i)
-        s[i] = 1;
-
-      while(true)
-      {
-        rect_t rect  = rect_t(check_rect.lc()+s,check_rect.uc()-s);
-
-        int n = c_to_i(rect.uc(),rect,stride) + 1;
-
-        for( int i = 0; i < n; i ++)
-        {
-          c = i_to_c(i,rect,stride);
-
-          if((flag(c)&mask) != (ds->m_cell_flags(c)&mask))
-          {
-            int f_gpu =(flag(c)&mask);
-            int f_cpu =((int)(ds->m_cell_flags(c)&mask) &mask);
-
-            cout<<SVAR(c)<<endl;
-            cout<<SVAR(f_cpu)<<" "<<SVAR(f_gpu)<<endl;
-            cout<<SVAR(flag_to_pair(c,f_cpu))
-//                <<" "<<SVAR(flag_to_pair(c,f_gpu))
-                <<endl;
-
-
-          }
-        }
-
-        if(!next_permutation(s.rbegin(),s.rend()))
-          break;
-      }
-    }
-  }
-#endif
-
   void dataset_t::assignGradient()
   {
 #ifdef BUILD_EXEC_OPENCL
 //    assign_gradient_opencl(m_rect,m_ext_rect,m_domain_rect,
 //                            m_vert_fns.data(),m_cell_flags.data());
-
-    check_assign_gradient_opencl(shared_from_this(),3,m_rect,0x3f);
-#else
+//#else
     for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
     {
 
@@ -936,7 +849,7 @@ namespace grid
       do_dfs(ds,c,dir,bind(visit_if_pair_visited,ds,_1,_2),
              pass_visit,bind(connect_cps,ds,msc,c,_1,_2));
     }
-  };
+  }
 
   void  dataset_t::extrema_connect_thd
       (mscomplex_ptr_t msgraph, cp_producer_ptr_t prd)
@@ -977,6 +890,11 @@ namespace grid
 
   void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
+#ifdef BUILD_EXEC_OPENCL
+    check_assign_gradient_opencl(shared_from_this(),3,m_ext_rect,0xff);
+#endif
+
+
     for(int tid = 0 ; tid < g_num_threads; ++tid)
     {
       for(int i = 0 ; i < m_critical_cells[tid].size();++i)

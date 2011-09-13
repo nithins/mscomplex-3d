@@ -352,7 +352,7 @@ inline void set_pair_edge
   __global flag_t * flag_buf)
 {
   if(!contains(ds.r,e))
-    return false;
+    return;
 
   cell_t f0 = e - d0;
   cell_t f1 = e + d0;
@@ -389,7 +389,7 @@ inline void set_pair_face
   __global flag_t * flag_buf)
 {
   if(!contains(ds.r,f))
-    return false;
+    return;
 
   cell_t c0 = f - d;
   cell_t c1 = f + d;
@@ -437,5 +437,138 @@ __kernel void assign_pairs
     set_pair_face(func_img,flag_img,ds,v+XYdir,Zdir,flag_buf);
     set_pair_face(func_img,flag_img,ds,v+YZdir,Xdir,flag_buf);
     set_pair_face(func_img,flag_img,ds,v+ZXdir,Ydir,flag_buf);
+  }
+}
+
+__kernel void mark_cps
+(
+  cell_t rct_lc,  cell_t rct_uc,
+  cell_t ext_lc,  cell_t ext_uc,
+  cell_t dom_lc,  cell_t dom_uc,
+  __global flag_t   * flag_buf,
+  __global int      * num_cps_per_thd
+)
+{
+  int tid      = get_global_id(0);
+  int num_thds = get_global_size(0);
+
+  dataset_t ds = make_dataset(rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc);
+
+  int N = num_cells(ds.r);
+
+  int n_cp = 0;
+
+  for( int i = tid ; i < N; i += num_thds)
+  {
+    cell_t c = i_to_c(ds.r,i);
+
+    flag_t fg_in  = flag_buf[c_to_i(ds.e,c)];
+    flag_t fg_out = fg_in;
+
+    if( !is_paired(fg_in) )
+    {
+      fg_out |= CELLFLAG_CRITICAL;
+      n_cp ++;
+    }
+    else
+    {
+      cell_t p = c;
+      cell_t q = flag_to_pair(c,fg_in);
+
+      if(cell_dim(p) > cell_dim(q))
+      {
+        p = q;
+        q = c;
+      }
+
+      if((!contains(ds.r,q)) || ( boundryCount(ds.r,p) != boundryCount(ds.r,q)))
+      {
+        fg_out |= CELLFLAG_CRITICAL;
+
+        if(is_same_cell(p,c))
+          n_cp += 2;
+      }
+    }
+
+    if(fg_out != fg_in )
+      flag_buf[c_to_i(ds.e,c)] = fg_out;
+  }
+
+  num_cps_per_thd[tid] = n_cp;
+}
+
+__kernel void save_cps
+(
+  cell_t rct_lc,  cell_t rct_uc,
+  cell_t ext_lc,  cell_t ext_uc,
+  cell_t dom_lc,  cell_t dom_uc,
+  __global flag_t   * flag_buf,
+  __global int      * cp_buf_offset,
+  __global short    * cp_cellid_buf,
+  __global int      * cp_pair_idx_buf)
+{
+  int tid      = get_global_id(0);
+  int num_thds = get_global_size(0);
+
+  dataset_t ds = make_dataset(rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc);
+
+  int N = num_cells(ds.r);
+
+  int n_cp = cp_buf_offset[tid];
+
+  for( int i = tid ; i < N; i += num_thds)
+  {
+    cell_t c = i_to_c(ds.r,i);
+
+    flag_t fg  = flag_buf[c_to_i(ds.e,c)];
+
+    cell_t wp = invalid_cell;
+    cell_t wq = invalid_cell;
+
+    if( !is_paired(fg) )
+    {
+      wp = c;
+    }
+    else
+    {
+      cell_t p = c;
+      cell_t q = flag_to_pair(c,fg);
+
+      if(cell_dim(p) < cell_dim(q))
+      {
+        if((!contains(ds.r,q)) || ( boundryCount(ds.r,p) != boundryCount(ds.r,q)))
+        {
+          wp = p;
+          wq = q;
+        }
+      }
+    }
+
+    int pair_idx = -1;
+
+    if(!is_same_cell(wp,invalid_cell))
+    {
+      cp_cellid_buf[3*n_cp + 0] =wp.x;
+      cp_cellid_buf[3*n_cp + 1] =wp.y;
+      cp_cellid_buf[3*n_cp + 2] =wp.z;
+
+      if(!is_same_cell(wq,invalid_cell))
+        pair_idx = n_cp+1;
+
+      cp_pair_idx_buf[n_cp] = pair_idx;
+
+      ++n_cp;
+    }
+
+    if(!is_same_cell(wq,invalid_cell))
+    {
+      cp_cellid_buf[3*n_cp + 0] =wq.x;
+      cp_cellid_buf[3*n_cp + 1] =wq.y;
+      cp_cellid_buf[3*n_cp + 2] =wq.z;
+
+      cp_pair_idx_buf[n_cp] = n_cp-1;
+
+      ++n_cp;
+    }
   }
 }

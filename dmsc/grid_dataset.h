@@ -228,6 +228,35 @@ namespace grid
     return (dim);
   }
 
+  inline int c_to_i(cellid_t c,const rect_t &r)
+  {
+    cellid_t s = r.span()+1;
+    c = (c - r.lc());
+    return (s[0]*s[1]*c[2] + s[0]*c[1] + c[0]);
+  }
+
+  inline cellid_t i_to_c(int i,const rect_t &r)
+  {
+    cellid_t s = r.span()+1;
+    cellid_t c = r.lc() + (cellid_t(i%s[0],(i%(s[0]*s[1]))/s[0],i/(s[0]*s[1])));
+    ASSERT(r.contains(c));
+    return c;
+  }
+
+  inline int c_to_i(cellid_t c,const rect_t &r,const cellid_t &stride)
+  {
+    cellid_t s = divide_ri(r.span()+1,stride);
+    c = (c - r.lc())/stride;
+    return (s[0]*s[1]*c[2] + s[0]*c[1] + c[0]);
+  }
+
+  inline cellid_t i_to_c(int i,const rect_t &r,const cellid_t &stride)
+  {
+    cellid_t s = divide_ri(r.span()+1,stride);
+    cellid_t c = r.lc() + (cellid_t(i%s[0],(i%(s[0]*s[1]))/s[0],i/(s[0]*s[1]))*stride);
+    ASSERT(r.contains(c));
+    return c;
+  }
 }
 
 //namespace boost

@@ -274,9 +274,21 @@ namespace grid
           ex.push(SVAR(cp_info(ed)));
           throw;
         }
-
-        for(j = m_conn[d][r].begin(); j!= m_conn[d][r].end() ; ++j )
-          dir_connect_cps(ed,*j);
+        try
+        {
+          for(j = m_conn[d][r].begin(); j!= m_conn[d][r].end() ; ++j )
+            dir_connect_cps(ed,*j);
+        }
+        catch(assertion_error ex)
+        {
+          ex.push(_FFL)
+            .push("failed to connect ed to *j via pair (*i,r)")
+            .push(SVAR(cp_info(ed)))
+            .push(SVAR(cp_info(*i)))
+            .push(SVAR(cp_info(r)))
+            .push(SVAR(cp_info(*j)));
+          throw;
+        }
       }
     }
   }

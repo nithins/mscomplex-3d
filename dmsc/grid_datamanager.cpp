@@ -195,26 +195,6 @@ namespace grid
 
       dp->m_dataset->init(dp->get_basename(m_basename)+".raw");
       dp->m_dataset->assignGradient();
-
-      rect_t r = dp->m_dataset->get_rect();
-      rect_t e = dp->m_dataset->get_ext_rect();
-
-      for( int xyz_dir = 0 ; xyz_dir < gc_grid_dim; ++xyz_dir)
-      {
-        for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
-        {
-          rect_t bnd = e;
-
-          if(r[xyz_dir][lr_dir] != e[xyz_dir][lr_dir])
-          {
-            bnd[xyz_dir][0] = r[xyz_dir][lr_dir];
-            bnd[xyz_dir][1] = r[xyz_dir][lr_dir];
-
-            dp->m_dataset->markBoundryCritical(bnd);
-          }
-        }
-      }
-
       dp->m_dataset->computeMsGraph(dp->m_msgraph);
     }
   }
@@ -339,8 +319,8 @@ namespace grid
     merge_down_subdomain_msgraphs();
     cout<<"merge down done ---------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
-    save_graphs();
-    cout<<"save graphs done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
+//    save_graphs();
+//    cout<<"save graphs done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     save_mfolds();
     cout<<"save mfolds done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
