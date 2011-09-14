@@ -87,8 +87,6 @@ namespace grid
   public:
     void  assignGradient();
 
-    void  markBoundryCritical(const rect_t &b);
-
     void  computeMsGraph(mscomplex_ptr_t msgraph);
 
     void  saveManifolds(mscomplex_const_ptr_t msgraph,const std::string &);
@@ -100,8 +98,6 @@ namespace grid
 
     void  pairCellsWithinEst_thd(int tid);
 
-
-    void  markBoundryCritical_thd(const rect_t &b,int tid);
 
     void  saddle_visit(mscomplex_ptr_t msgraph);
 

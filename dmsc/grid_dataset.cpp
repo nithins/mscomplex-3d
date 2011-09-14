@@ -527,9 +527,8 @@ namespace grid
   void dataset_t::assignGradient()
   {
 #ifdef BUILD_EXEC_OPENCL
-//    assign_gradient_opencl(m_rect,m_ext_rect,m_domain_rect,
-//                            m_vert_fns.data(),m_cell_flags.data());
-//#else
+
+#else
     for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
     {
 
@@ -549,75 +548,6 @@ namespace grid
     group.join_all();
 
 #endif
-  }
-
-  void dataset_t::markBoundryCritical_thd(const rect_t &bnd, int tid)
-  {
-    try
-    {
-      ASSERT(m_ext_rect.intersection(bnd) == bnd);
-    }
-    catch(assertion_error e)
-    {
-      e.push(_FFL);
-      e.push(SVAR(bnd));
-      e.push(SVAR(m_rect));
-      e.push(SVAR(m_ext_rect));
-
-      throw;
-    }
-
-    rect_t ixn = bnd.intersection(m_rect);
-
-    int n = c_to_i(ixn.uc(),ixn)+1;
-
-    for(int i = tid; i < n; i += g_num_threads)
-    {
-      cellid_t c = i_to_c(i,ixn);
-
-      if(!isCellPaired(c))
-        continue;
-
-      cellid_t p = getCellPairId(c);
-
-      if(!isPairOrientationCorrect(c,p))
-        continue;
-
-      if(bnd.contains(p))
-        continue;
-
-      try
-      {
-        markCellCritical(c);
-        m_critical_cells[tid].push_back(c);
-
-        if(!m_rect.contains(p))
-          continue;
-
-        markCellCritical(p);
-        m_critical_cells[tid].push_back(p);
-      }
-      catch(assertion_error e)
-      {
-        e.push(_FFL);
-        e.push(SVAR(c));
-        e.push(SVAR(p));
-        e.push(SVAR(ixn));
-        e.push(SVAR(m_rect));
-
-        throw;
-      }
-    }
-  }
-
-  void dataset_t::markBoundryCritical(const rect_t &bnd)
-  {
-    boost::thread_group group;
-
-    for(int tid = 0 ; tid < g_num_threads; ++tid)
-      group.create_thread(bind(&dataset_t::markBoundryCritical_thd,this,bnd,tid));
-
-    group.join_all();
   }
 
   namespace dfs
@@ -891,9 +821,16 @@ namespace grid
   void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
 #ifdef BUILD_EXEC_OPENCL
-    check_assign_gradient_opencl(shared_from_this(),3,m_ext_rect,0xff);
-#endif
+    opencl::assign_gradient(shared_from_this(),msgraph);
+#else
+    int num_cps = 0;
 
+    for(int tid = 0 ; tid < g_num_threads; ++tid)
+      num_cps += m_critical_cells[tid].size();
+
+    msgraph->resize(num_cps);
+
+    int cp_no = 0;
 
     for(int tid = 0 ; tid < g_num_threads; ++tid)
     {
@@ -906,7 +843,7 @@ namespace grid
         for( int j = 0 ; j < getCellDim(c);++j)
           v=getCellMaxFacetId(v);
 
-        msgraph->add_critpt(c,getCellDim(c),get_cell_fn(c),v);
+        msgraph->set_critpt(cp_no++,c,getCellDim(c),get_cell_fn(c),v);
 
         if(!isCellPaired(c))
           continue;
@@ -919,9 +856,15 @@ namespace grid
         if(!m_rect.contains(p))
           continue;
 
-        msgraph->pair_cps(c,p);
+        ASSERT(m_critical_cells[tid][i-1] == p);
+
+        msgraph->pair_cps(cp_no-1,cp_no-2);
       }
     }
+
+#endif
+
+    msgraph->build_id_cp_map();
 
     {
       boost::thread_group group;
@@ -1019,7 +962,6 @@ namespace grid
     typedef boost::tuples::tuple<int,mfold_ptr_t,mfold_ptr_t> cp_no_mfolds_t;
     typedef producer_consumer_t<cp_no_mfolds_t>               mfolds_queue_t;
     typedef boost::shared_ptr<mfolds_queue_t>                 mfolds_queue_ptr_t;
-    typedef std::vector<int>                                  int_list_t;
 
     void process_mfold
         (dataset_const_ptr_t  ds,

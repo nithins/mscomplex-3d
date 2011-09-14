@@ -23,6 +23,10 @@ namespace grid
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>::point_t rect_size_t;
   typedef aabb::aabb_t<cell_coord_t,gc_grid_dim>::range_t rect_range_t;
   typedef std::vector<cellid_t>                           cellid_list_t;
+  typedef std::vector<int>                                int_list_t;
+  typedef std::vector<char>                               char_list_t;
+  typedef std::vector<cell_fn_t>                          cell_fn_list_t;
+  typedef std::vector<bool>                               bool_list_t;
 
   enum eGDIR
   {

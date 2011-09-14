@@ -45,27 +45,18 @@ namespace grid
   typedef std::multiset<uint>::const_iterator const_conn_iter_t;
   typedef std::vector<conn_t>                 conn_list_t;
 
-  struct critpt_t
-  {
-    cellid_t       m_cellid;
-    cellid_t       m_vertid;
-    char           m_index;
-    cell_fn_t      m_fn;
-
-    bool           m_is_cancelled;
-    bool           m_is_paired;
-    int            m_pair_idx;
-
-    critpt_t(cellid_t c,uchar i,cell_fn_t f, cellid_t v);
-    critpt_t(const critpt_t &);
-  };
-
 
   class mscomplex_t
   {
   public:
 
-    critpt_list_t m_cps;
+    cellid_list_t   m_cp_cellid;
+    cellid_list_t   m_cp_vertid;
+    int_list_t      m_cp_pair_idx;
+    char_list_t     m_cp_index;
+    bool_list_t     m_cp_is_cancelled;
+    cell_fn_list_t  m_cp_fn;
+
     id_cp_map_t   m_id_cp_map;
 
     conn_list_t   m_conn[GDIR_CT];
@@ -80,10 +71,13 @@ namespace grid
     mscomplex_t(rect_t r,rect_t e);
     ~mscomplex_t();
 
-    int  get_num_critpts() const;
+    inline int  get_num_critpts() const;
+    int  resize(int i);
 
-    int  add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t vert_cell);
-    int  add_critpt(const critpt_t &);
+    int  add_critpt(cellid_t c,char i,cell_fn_t f,cellid_t vert_cell);
+    void set_critpt(int i,cellid_t c,char idx,cell_fn_t f,cellid_t vert_cell);
+
+    void build_id_cp_map();
 
     void connect_cps(cellid_t c1,cellid_t c2);
     void connect_cps(int p, int q);
@@ -100,11 +94,10 @@ namespace grid
     inline int& pair_idx(int i);
     inline const int& pair_idx(int i) const;
 
-    inline bool& is_paired(int i);
-    inline const bool& is_paired(int i) const;
+    inline bool is_paired(int i) const;
 
-    inline bool& is_canceled(int i);
-    inline const bool& is_canceled(int i) const;
+    inline void set_is_canceled(int i,bool b);
+    inline bool is_canceled(int i) const;
 
     inline cellid_t& cellid(int i);
     inline const cellid_t& cellid(int i) const;
@@ -145,7 +138,6 @@ namespace grid
   {
     if(msc.index(p) < msc.index(q))
       std::swap(p,q);
-
   }
 
   class cp_producer_t: boost::noncopyable
@@ -186,117 +178,114 @@ namespace grid
 
   };
 
+  inline int  mscomplex_t::get_num_critpts() const
+  {
+    return m_cp_cellid.size();
+  }
 
   inline char& mscomplex_t::index(int i)
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_index.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_index;
+    return m_cp_index[i];
   }
 
   inline const char& mscomplex_t::index(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_index.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_index;
+    return m_cp_index[i];
   }
 
   inline int& mscomplex_t::pair_idx(int i)
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_pair_idx.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_pair_idx;
+    return m_cp_pair_idx[i];
   }
 
   inline const int& mscomplex_t::pair_idx(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_pair_idx.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_pair_idx;
+    return m_cp_pair_idx[i];
   }
 
-  inline bool& mscomplex_t::is_paired(int i)
+  inline bool mscomplex_t::is_paired(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_pair_idx.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_is_paired;
+    return (m_cp_pair_idx[i] != -1);
   }
 
-  inline const bool& mscomplex_t::is_paired(int i) const
+  inline void mscomplex_t::set_is_canceled(int i,bool c)
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_is_cancelled.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_is_paired;
+    m_cp_is_cancelled[i] = c;
   }
 
-  inline bool& mscomplex_t::is_canceled(int i)
+  inline bool mscomplex_t::is_canceled(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_is_cancelled.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_is_cancelled;
-  }
-
-  inline const bool& mscomplex_t::is_canceled(int i) const
-  {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
-    catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
-
-    return m_cps[i].m_is_cancelled;
+    return m_cp_is_cancelled[i];
   }
 
   inline cellid_t& mscomplex_t::cellid(int i)
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
-    catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
+    try{ASSERT(is_in_range(i,0,m_cp_cellid.size()));}
+    catch(assertion_error e)
+    {e.push(_FFL).push(SVAR(i)).push(SVAR(m_cp_cellid.size()));throw;}
 
-    return m_cps[i].m_cellid;
+    return m_cp_cellid[i];
   }
 
   inline const cellid_t& mscomplex_t::cellid(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_cellid.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_cellid;
+    return m_cp_cellid[i];
   }
 
   inline cellid_t& mscomplex_t::vertid(int i)
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_vertid.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_vertid;
+    return m_cp_vertid[i];
   }
 
   inline const cellid_t& mscomplex_t::vertid(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_vertid.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_vertid;
+    return m_cp_vertid[i];
   }
 
   inline cell_fn_t& mscomplex_t::fn(int i)
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_fn.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_fn;
+    return m_cp_fn[i];
   }
 
   inline const cell_fn_t& mscomplex_t::fn(int i) const
   {
-    try{ASSERT(is_in_range(i,0,m_cps.size()));}
+    try{ASSERT(is_in_range(i,0,m_cp_fn.size()));}
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
-    return m_cps[i].m_fn;
+    return m_cp_fn[i];
   }
 
   inline std::string mscomplex_t::cp_info (int cp_no) const
@@ -308,7 +297,7 @@ namespace grid
     ss<<"cellid       ::"<<cellid(cp_no)<<std::endl;
     ss<<"vert cell    ::"<<vertid(cp_no)<<std::endl;
     ss<<"index        ::"<<(int)index(cp_no)<<std::endl;
-//      ss<<"fn           ::"<<m_cps[cp_no].fn<<std::endl;
+//      ss<<"fn           ::"<<fn(cp_no)<<std::endl;
     ss<<"is_cancelled ::"<<is_canceled(cp_no)<<std::endl;
     ss<<"is_paired    ::"<<is_paired(cp_no)<<std::endl;
     ss<<"pair_idx     ::"<<pair_idx(cp_no)<<std::endl;

@@ -126,6 +126,11 @@ inline bool contains(const rect_t r, const cell_t c)
       (r.lc.z <= c.z) && (c.z <= r.uc.z);
 }
 
+inline int cell_dim(const cell_t c)
+{
+  return (c.x&1) + (c.y&1) + (c.z&1);
+}
+
 inline cell_t flag_to_mxfct(const cell_t c,const flag_t f)
 {
   short d = ((f&0x07) - 1)/2 ;
@@ -141,11 +146,6 @@ inline cell_t flag_to_mxfct(const cell_t c,const flag_t f)
   };
 
   return c;
-}
-
-inline int cell_dim(const cell_t c)
-{
-  return (c.x&1) + (c.y&1) + (c.z&1);
 }
 
 inline flag_t mxfct_to_flag(const cell_t c,const cell_t f)
@@ -217,6 +217,11 @@ enum eCellFlags
   CELLFLAG_CRITICAL = 0x40,
   CELLFLAG_MASK     = 0xc0
 };
+
+bool is_critical (const flag_t f)
+{
+  return (f&CELLFLAG_CRITICAL);
+}
 
 #define NUM_LOCAL_THREADS 256
 #define NUM_GROUPS        32

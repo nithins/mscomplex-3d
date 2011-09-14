@@ -20,26 +20,6 @@ namespace grid
     return ss.str();
   }
 
-  critpt_t::critpt_t(cellid_t c,uchar i,cell_fn_t f, cellid_t v):
-      m_cellid(c),m_index(i),m_fn(f),m_vertid(v)
-  {
-    m_is_cancelled          = false;
-    m_is_paired             = false;
-    m_pair_idx              = -1;
-  }
-
-  critpt_t::critpt_t(const critpt_t &c)
-  {
-    m_cellid       = c.m_cellid;
-    m_index        = c.m_index;
-    m_vertid       = c.m_vertid;
-    m_fn           = c.m_fn;
-
-    m_is_cancelled = c.m_is_cancelled;
-    m_is_paired    = c.m_is_paired;
-    m_pair_idx     = c.m_pair_idx;
-  }
-
   mscomplex_t::mscomplex_t(rect_t r,rect_t e)
     :m_rect(r),m_ext_rect(e),m_des_conn(m_conn[0]),m_asc_conn(m_conn[1])
   {
@@ -50,35 +30,57 @@ namespace grid
     clear();
   }
 
-  int  mscomplex_t::get_num_critpts() const
+  void mscomplex_t::set_critpt(int i,cellid_t c,char idx,cell_fn_t f,cellid_t v)
   {
-    return m_cps.size();
+    cellid(i) = c;
+    vertid(i) = v;
+    index(i)  = idx;
+    fn(i)     = f;
   }
 
-  int mscomplex_t::add_critpt(cellid_t c,uchar i,cell_fn_t f,cellid_t v)
+  int mscomplex_t::add_critpt(cellid_t c,char idx,cell_fn_t f,cellid_t v)
   {
+    int i = get_num_critpts();
+
     ASSERT(m_id_cp_map.count(c) == 0);
+    m_id_cp_map.insert(std::make_pair(c,i));
 
-    m_id_cp_map.insert(std::make_pair(c,m_cps.size()));
-    m_cps.push_back(critpt_t(c,i,f,v));
+    resize(i+1);
+    set_critpt(i,c,idx,f,v);
 
-    m_des_conn.resize(m_cps.size());
-    m_asc_conn.resize(m_cps.size());
-
-    return (m_cps.size()-1);
+    return (i);
   }
 
-  int mscomplex_t::add_critpt(const critpt_t &c)
+  int  mscomplex_t::resize(int i)
   {
-    ASSERT(m_id_cp_map.count(c.m_cellid) == 0);
+    m_cp_cellid.resize(i,cellid_t(-1,-1,-1));
+    m_cp_vertid.resize(i,cellid_t(-1,-1,-1));
+    m_cp_index.resize(i,-1);
+    m_cp_pair_idx.resize(i,-1);
+    m_cp_is_cancelled.resize(i,false);
+    m_cp_fn.resize(i);
+    m_des_conn.resize(i);
+    m_asc_conn.resize(i);
+  }
 
-    m_id_cp_map.insert(std::make_pair(c.m_cellid,m_cps.size()));
-    m_cps.push_back(critpt_t(c));
+  void mscomplex_t::build_id_cp_map()
+  {
+    for(int i = 0 ; i < get_num_critpts(); ++i)
+    {
+      try
+      {
+        ASSERT(cellid(i) != cellid_t(-1,-1,-1));
+        ASSERT(m_id_cp_map.count(cellid(i)) == 0);
+        m_id_cp_map.insert(std::make_pair(cellid(i),i));
+      }
+      catch(assertion_error e)
+      {
+        e.push(_FFL);
+        e.push(SVAR(cp_info(i)));
 
-    m_des_conn.resize(m_cps.size());
-    m_asc_conn.resize(m_cps.size());
-
-    return (m_cps.size()-1);
+        throw;
+      }
+    }
   }
 
   void mscomplex_t::connect_cps(cellid_t c0,cellid_t c1)
@@ -164,9 +166,6 @@ namespace grid
   {
     pair_idx(p) = q;
     pair_idx(q) = p;
-
-    is_paired(p) = true;
-    is_paired(q) = true;
   }
 
   void mscomplex_t::cancel_pair ( int p, int q)
@@ -216,8 +215,8 @@ namespace grid
     for(j = m_asc_conn[q].begin();j != m_asc_conn[q].end();++j)
       m_des_conn[*j].erase(q);
 
-    is_canceled(p) = true;
-    is_canceled(q) = true;
+    set_is_canceled(p,true);
+    set_is_canceled(q,true);
 
     m_asc_conn[p].clear();
     m_des_conn[q].clear();
@@ -239,8 +238,8 @@ namespace grid
       throw;
     }
 
-    is_canceled(p) = false;
-    is_canceled(q) = false;
+    set_is_canceled(p,false);
+    set_is_canceled(q,false);
 
     conn_iter_t i,j;
 
@@ -311,7 +310,7 @@ namespace grid
       {
         const mscomplex_t &msc = *msc_arr[m];
 
-        for(int j = 0; j < msc.m_cps.size();++j)
+        for(int j = 0; j < msc.get_num_critpts();++j)
         {
           try
           {
@@ -341,7 +340,7 @@ namespace grid
       {
         const mscomplex_t &msc = *msc_arr[m];
 
-        for(int i = 0; i < msc.m_cps.size();++i)
+        for(int i = 0; i < msc.get_num_critpts();++i)
         {
           if(msc.is_canceled(i))
             continue;
@@ -453,13 +452,13 @@ namespace grid
       throw;
     }
 
-    vector<int> cpi_to_mcpi(m_cps.size());
+    vector<int> cpi_to_mcpi(get_num_critpts());
 
     for(int m = 0 ; m < 2; ++m)
     {
       mscomplex_t &msc = *msc_arr[m];
 
-      for(int cpi = 0 ; cpi < m_cps.size(); ++cpi)
+      for(int cpi = 0 ; cpi < get_num_critpts(); ++cpi)
       {
         if(msc.m_id_cp_map.count(cellid(cpi)) == 0 )
           cpi_to_mcpi[cpi] = -1;
@@ -467,7 +466,7 @@ namespace grid
           cpi_to_mcpi[cpi] = msc.m_id_cp_map[cellid(cpi)];
       }
 
-      for(int p = 0 ; p < m_cps.size(); ++p)
+      for(int p = 0 ; p < get_num_critpts(); ++p)
       {
         if(cpi_to_mcpi[p] == -1 )
           continue;
@@ -489,7 +488,7 @@ namespace grid
         msc.pair_cps(mp,cpi_to_mcpi[q]);
       }
 
-      for(int i = 0 ; i < m_cps.size(); ++i)
+      for(int i = 0 ; i < get_num_critpts(); ++i)
       {
         if(cpi_to_mcpi[i] == -1 )
           continue;
@@ -533,9 +532,13 @@ namespace grid
 
   void mscomplex_t::clear()
   {
-    m_cps.clear();
+    m_cp_cellid.clear();
+    m_cp_vertid.clear();
+    m_cp_pair_idx.clear();
+    m_cp_index.clear();
+    m_cp_is_cancelled.clear();
+    m_cp_fn.clear();
     m_id_cp_map.clear();
-
     m_des_conn.clear();
     m_asc_conn.clear();
   }
@@ -640,7 +643,7 @@ namespace grid
     cell_fn_t max_val = std::numeric_limits<cell_fn_t>::min();
     cell_fn_t min_val = std::numeric_limits<cell_fn_t>::max();
 
-    for(uint i = 0 ;i < m_cps.size();++i)
+    for(uint i = 0 ;i < get_num_critpts();++i)
     {
       max_val = std::max(max_val,fn(i));
       min_val = std::min(min_val,fn(i));
@@ -727,7 +730,7 @@ namespace grid
 
   void mscomplex_t::invert_for_collection()
   {
-    for(uint i = 0 ; i < m_cps.size(); ++i)
+    for(uint i = 0 ; i < get_num_critpts(); ++i)
     {
       if(is_paired(i)== true)
         continue;
@@ -738,7 +741,7 @@ namespace grid
     }
 
 
-    for(int i = 0 ; i < m_cps.size(); ++i)
+    for(int i = 0 ; i < get_num_critpts(); ++i)
     {
       if(is_paired(i) == false)
         continue;
@@ -765,14 +768,14 @@ namespace grid
     using namespace std;
 
     os<<"# Num Cps"<<endl;
-    os<<m_cps.size()<<endl;
+    os<<get_num_critpts()<<endl;
 
     os<<"# grid "<<endl;
     os<<m_rect<<endl;
 
     os<<"# SL.No idx isPaired pairIdx cpCell vertCell fn"<<endl;
 
-    for(int i = 0 ; i < m_cps.size();++i)
+    for(int i = 0 ; i < get_num_critpts();++i)
     {
       os<<i<<" ";
       os<<(int)index(i)<<" ";
@@ -786,7 +789,7 @@ namespace grid
 
     os<<"# SL.No  numDes numAsc connList"<<std::endl;
 
-    for(uint i = 0 ; i < m_cps.size();++i)
+    for(uint i = 0 ; i < get_num_critpts();++i)
     {
       os<<(int)i<<" ";
       os<<(int)m_des_conn[i].size()<<" ";

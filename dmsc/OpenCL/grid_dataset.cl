@@ -486,7 +486,12 @@ __kernel void mark_cps
         fg_out |= CELLFLAG_CRITICAL;
 
         if(is_same_cell(p,c))
-          n_cp += 2;
+        {
+          n_cp ++;
+
+          if(contains(ds.r,q))
+            n_cp++;
+        }
       }
     }
 
@@ -497,15 +502,32 @@ __kernel void mark_cps
   num_cps_per_thd[tid] = n_cp;
 }
 
+inline cell_t get_max_vert(const cell_t c, const dataset_t ds, __read_only image3d_t  flag_img)
+{
+  cell_t v = c;
+
+  switch(cell_dim(c))
+  {
+    case 3: v = flag_to_mxfct(v,read_imageui(flag_img, flag_sampler, to_int4(v-ds.e.lc)).x);
+    case 2: v = flag_to_mxfct(v,read_imageui(flag_img, flag_sampler, to_int4(v-ds.e.lc)).x);
+    case 1: v = flag_to_mxfct(v,read_imageui(flag_img, flag_sampler, to_int4(v-ds.e.lc)).x);
+  }
+  return v;
+}
+
 __kernel void save_cps
 (
+  __read_only image3d_t  func_img,
+  __read_only image3d_t  flag_img,
   cell_t rct_lc,  cell_t rct_uc,
   cell_t ext_lc,  cell_t ext_uc,
   cell_t dom_lc,  cell_t dom_uc,
-  __global flag_t   * flag_buf,
-  __global int      * cp_buf_offset,
-  __global short    * cp_cellid_buf,
-  __global int      * cp_pair_idx_buf)
+  __global int    * cp_buf_offset,
+  __global short  * cp_cellid_buf,
+  __global short  * cp_vertid_buf,
+  __global int    * cp_pair_idx_buf,
+  __global char   * cp_index_buf,
+  __global func_t * cp_func_buf)
 {
   int tid      = get_global_id(0);
   int num_thds = get_global_size(0);
@@ -520,53 +542,70 @@ __kernel void save_cps
   {
     cell_t c = i_to_c(ds.r,i);
 
-    flag_t fg  = flag_buf[c_to_i(ds.e,c)];
+    flag_t fg = read_imageui(flag_img, flag_sampler, to_int4(c-ds.e.lc)).x;
 
     cell_t wp = invalid_cell;
     cell_t wq = invalid_cell;
 
-    if( !is_paired(fg) )
+    if( is_critical(fg) )
     {
-      wp = c;
-    }
-    else
-    {
-      cell_t p = c;
-      cell_t q = flag_to_pair(c,fg);
-
-      if(cell_dim(p) < cell_dim(q))
+      if(is_paired(fg))
       {
-        if((!contains(ds.r,q)) || ( boundryCount(ds.r,p) != boundryCount(ds.r,q)))
+        cell_t q = flag_to_pair(c,fg);
+
+        if(cell_dim(c) < cell_dim(q))
         {
-          wp = p;
-          wq = q;
+          wp = c;
+
+          if(contains(ds.r,q) )
+            wq = q;
         }
       }
+      else
+        wp = c;
     }
-
-    int pair_idx = -1;
 
     if(!is_same_cell(wp,invalid_cell))
     {
-      cp_cellid_buf[3*n_cp + 0] =wp.x;
-      cp_cellid_buf[3*n_cp + 1] =wp.y;
-      cp_cellid_buf[3*n_cp + 2] =wp.z;
+      int pair_idx = -1;
+
+      cp_cellid_buf[3*n_cp + 0] = wp.x;
+      cp_cellid_buf[3*n_cp + 1] = wp.y;
+      cp_cellid_buf[3*n_cp + 2] = wp.z;
 
       if(!is_same_cell(wq,invalid_cell))
         pair_idx = n_cp+1;
 
       cp_pair_idx_buf[n_cp] = pair_idx;
 
+      cell_t v = get_max_vert(wp,ds, flag_img);
+
+      cp_vertid_buf[3*n_cp + 0] = v.x;
+      cp_vertid_buf[3*n_cp + 1] = v.y;
+      cp_vertid_buf[3*n_cp + 2] = v.z;
+
+      cp_index_buf[n_cp] = cell_dim(wp);
+      cp_func_buf[n_cp]  = read_imagef(func_img, func_sampler, to_int4(v-ds.e.lc)/2).x;
+
       ++n_cp;
     }
 
     if(!is_same_cell(wq,invalid_cell))
     {
-      cp_cellid_buf[3*n_cp + 0] =wq.x;
-      cp_cellid_buf[3*n_cp + 1] =wq.y;
-      cp_cellid_buf[3*n_cp + 2] =wq.z;
+      cp_cellid_buf[3*n_cp + 0] = wq.x;
+      cp_cellid_buf[3*n_cp + 1] = wq.y;
+      cp_cellid_buf[3*n_cp + 2] = wq.z;
 
       cp_pair_idx_buf[n_cp] = n_cp-1;
+
+      cell_t v = get_max_vert(wq,ds, flag_img);
+
+      cp_vertid_buf[3*n_cp + 0] = v.x;
+      cp_vertid_buf[3*n_cp + 1] = v.y;
+      cp_vertid_buf[3*n_cp + 2] = v.z;
+
+      cp_index_buf[n_cp] = cell_dim(wq);
+      cp_func_buf[n_cp]  = read_imagef(func_img, func_sampler, to_int4(v-ds.e.lc)/2).x;
 
       ++n_cp;
     }

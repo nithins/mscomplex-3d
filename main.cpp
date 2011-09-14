@@ -25,7 +25,14 @@ extern "C" void init_cuda();
 #endif
 
 #ifdef BUILD_EXEC_OPENCL
-void init_opencl();
+namespace grid
+{
+  namespace opencl
+  {
+    void init();
+  }
+}
+
 #endif
 
 
@@ -77,7 +84,7 @@ int main(int ac , char **av)
 #endif
 
 #ifdef BUILD_EXEC_OPENCL
-    init_opencl();
+    opencl::init();
 #endif
 
   data_manager_ptr_t gdm(new data_manager_t(filename,size,levels,simp_tresh));
