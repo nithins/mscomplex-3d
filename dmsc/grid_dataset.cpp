@@ -369,7 +369,6 @@ namespace grid
     return (m_cell_flags (c) & CELLFLAG_VISITED);
   }
 
-
   void dataset_t::pairCells (cellid_t c,cellid_t p)
   {
     ASSERT(isCellPaired(c) == false);
@@ -522,32 +521,6 @@ namespace grid
         }
       }
     }
-  }
-
-  void dataset_t::assignGradient()
-  {
-#ifdef BUILD_EXEC_OPENCL
-
-#else
-    for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
-    {
-
-      boost::thread_group group;
-
-      for(int tid = 0 ; tid < g_num_threads; ++tid)
-        group.create_thread(bind(&dataset_t::assignMaxFacets_thd,this,tid,dim));
-
-      group.join_all();
-    }
-
-    boost::thread_group group;
-
-    for(int tid = 0 ; tid < g_num_threads; ++tid)
-      group.create_thread(bind(&dataset_t::pairCellsWithinEst_thd,this,tid));
-
-    group.join_all();
-
-#endif
   }
 
   namespace dfs
@@ -818,48 +791,77 @@ namespace grid
     }
   }
 
+  void  dataset_t::setupCriticalPoint_thd(int tid, mscomplex_ptr_t msgraph, int cp_offset)
+  {
+    for(int i = 0 ; i < m_critical_cells[tid].size();++i)
+    {
+      cellid_t c = m_critical_cells[tid][i];
+
+      cellid_t v = c;
+
+      for( int j = 0 ; j < getCellDim(c);++j)
+        v=getCellMaxFacetId(v);
+
+      msgraph->set_critpt(cp_offset++,c,getCellDim(c),get_cell_fn(c),v);
+
+      if(!isCellPaired(c))
+        continue;
+
+      cellid_t p = getCellPairId(c);
+
+      if(isPairOrientationCorrect(c,p))
+        continue;
+
+      if(!m_rect.contains(p))
+        continue;
+
+      ASSERT(m_critical_cells[tid][i-1] == p);
+
+      msgraph->pair_cps(cp_offset-1,cp_offset-2);
+    }
+  }
+
   void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
 #ifdef BUILD_EXEC_OPENCL
     opencl::assign_gradient(shared_from_this(),msgraph);
 #else
-    int num_cps = 0;
 
-    for(int tid = 0 ; tid < g_num_threads; ++tid)
-      num_cps += m_critical_cells[tid].size();
-
-    msgraph->resize(num_cps);
-
-    int cp_no = 0;
-
-    for(int tid = 0 ; tid < g_num_threads; ++tid)
+    for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
     {
-      for(int i = 0 ; i < m_critical_cells[tid].size();++i)
-      {
-        cellid_t c = m_critical_cells[tid][i];
+      boost::thread_group group;
 
-        cellid_t v = c;
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        group.create_thread(bind(&dataset_t::assignMaxFacets_thd,this,tid,dim));
 
-        for( int j = 0 ; j < getCellDim(c);++j)
-          v=getCellMaxFacetId(v);
+      group.join_all();
+    }
 
-        msgraph->set_critpt(cp_no++,c,getCellDim(c),get_cell_fn(c),v);
+    {
+      boost::thread_group group;
 
-        if(!isCellPaired(c))
-          continue;
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        group.create_thread(bind(&dataset_t::pairCellsWithinEst_thd,this,tid));
 
-        cellid_t p = getCellPairId(c);
+      group.join_all();
+    }
 
-        if(isPairOrientationCorrect(c,p))
-          continue;
+    {
+      int cp_offset[g_num_threads+1];
 
-        if(!m_rect.contains(p))
-          continue;
+      cp_offset[0] = 0;
 
-        ASSERT(m_critical_cells[tid][i-1] == p);
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        cp_offset[tid + 1] = cp_offset[tid] + m_critical_cells[tid].size();
 
-        msgraph->pair_cps(cp_no-1,cp_no-2);
-      }
+      msgraph->resize(cp_offset[g_num_threads]);
+
+      boost::thread_group group;
+
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        group.create_thread(bind(&dataset_t::setupCriticalPoint_thd,this,tid,msgraph,cp_offset[tid]));
+
+      group.join_all();
     }
 
 #endif

@@ -85,8 +85,6 @@ namespace grid
 
   // the actual work routines
   public:
-    void  assignGradient();
-
     void  computeMsGraph(mscomplex_ptr_t msgraph);
 
     void  saveManifolds(mscomplex_const_ptr_t msgraph,const std::string &);
@@ -98,6 +96,7 @@ namespace grid
 
     void  pairCellsWithinEst_thd(int tid);
 
+    void  setupCriticalPoint_thd(int tid, mscomplex_ptr_t msgraph, int cp_offset);
 
     void  saddle_visit(mscomplex_ptr_t msgraph);
 

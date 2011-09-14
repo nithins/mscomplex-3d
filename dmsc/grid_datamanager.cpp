@@ -194,7 +194,6 @@ namespace grid
       piece_ptr_t dp = m_pieces[pc_i];
 
       dp->m_dataset->init(dp->get_basename(m_basename)+".raw");
-      dp->m_dataset->assignGradient();
       dp->m_dataset->computeMsGraph(dp->m_msgraph);
     }
   }
@@ -319,8 +318,8 @@ namespace grid
     merge_down_subdomain_msgraphs();
     cout<<"merge down done ---------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
-//    save_graphs();
-//    cout<<"save graphs done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
+    save_graphs();
+    cout<<"save graphs done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     save_mfolds();
     cout<<"save mfolds done --------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
@@ -371,9 +370,6 @@ namespace grid
 
     dataset->init(filename);
     cout<<"data read ---------------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
-
-    dataset->assignGradient();
-    cout<<"gradient done ------------ "<<g_timer.getElapsedTimeInMilliSec()<<endl;
 
     dataset->computeMsGraph(msgraph);
     cout<<"msgraph done ------------- "<<g_timer.getElapsedTimeInMilliSec()<<endl;
