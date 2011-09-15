@@ -27,6 +27,7 @@ namespace grid
   typedef std::vector<char>                               char_list_t;
   typedef std::vector<cell_fn_t>                          cell_fn_list_t;
   typedef std::vector<bool>                               bool_list_t;
+  typedef std::vector<rect_t>                             rect_list_t;
 
   enum eGDIR
   {

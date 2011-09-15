@@ -115,6 +115,25 @@ namespace grid
       return a;
     }
 
+    inline void get_boundry_rects(const rect_t &r,const rect_t & e,rect_list_t &bnds)
+    {
+      for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
+      {
+        for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
+        {
+          rect_t bnd = r;
+
+          if(r[xyz_dir][lr_dir] != e[xyz_dir][lr_dir])
+          {
+            bnd[xyz_dir][0] = r[xyz_dir][lr_dir];
+            bnd[xyz_dir][1] = r[xyz_dir][lr_dir];
+
+            bnds.push_back(bnd);
+          }
+        }
+      }
+    }
+
 
     cl::Context       s_context;
     cl::CommandQueue  s_queue;
@@ -161,6 +180,7 @@ namespace grid
     void init(void)
     {
       cl::Program             program1;
+      cl::Program             program2;
       std::vector<cl::Device> devices;
 
       try
@@ -177,6 +197,17 @@ namespace grid
 
         devices = s_context.getInfo<CL_CONTEXT_DEVICES>();
 
+        s_queue = cl::CommandQueue(s_context, devices[0]);
+
+      }
+      catch (cl::Error err)
+      {
+       cerr<< "SETUP QUEUE ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
+       throw;
+      }
+
+      try
+      {
         std::ifstream sourceFile(s_source1_file);
         ensure(sourceFile.is_open(),"unable to open file");
 
@@ -193,8 +224,6 @@ namespace grid
         program1 = cl::Program(s_context, sources);
         program1.build(devices);
 
-        s_queue = cl::CommandQueue(s_context, devices[0]);
-
         s_assign_max_facet_edge =  cl::Kernel(program1, "assign_max_facet_edge").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
@@ -209,13 +238,12 @@ namespace grid
       }
       catch (cl::Error err)
       {
-       cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
+       cerr<< "PROGRAM1 ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
        cerr<<program1.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0])<<endl;
 
        throw;
       }
 
-      cl::Program             program2;
       try
       {
         std::ifstream sourceFile(s_source2_file);
@@ -258,7 +286,7 @@ namespace grid
       }
       catch (cl::Error err)
       {
-       cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
+       cerr<< "PROGRAM2 ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
        cerr<<program2.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0])<<endl;
 
        throw;
@@ -330,23 +358,15 @@ namespace grid
 
         s_mark_cps(rct,ext,dom,flag_buf,cp_offset_buf);
 
-        for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
+        rect_list_t bnds;
+
+        get_boundry_rects(rect,ext_rect,bnds);
+
+        for( int i = 0 ; i < bnds.size(); ++i)
         {
-          cell_t bnd_dir = to_cell(0,0,0);
-          bnd_dir.s[xyz_dir] = 1;
-
-          for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
-          {
-            cell_pair_t bnd = to_cell_pair(rect);
-
-            if(rect[xyz_dir][lr_dir] != ext_rect[xyz_dir][lr_dir])
-            {
-              bnd.lo.s[xyz_dir] = rect[xyz_dir][lr_dir];
-              bnd.hi.s[xyz_dir] = rect[xyz_dir][lr_dir];
-
-              s_mark_boundry_cps(rct,ext,dom,bnd,bnd_dir,flag_buf,cp_offset_buf);
-            }
-          }
+          s_mark_boundry_cps(rct,ext,dom,to_cell_pair(bnds[i]),
+                             to_cell(bnds[i].get_normal()),
+                             flag_buf,cp_offset_buf);
         }
 
         s_scan_local_sums(cp_offset_buf,group_sums_buf);
@@ -400,30 +420,17 @@ namespace grid
         s_save_cps(func_img,flag_img,rct,ext,dom,cp_offset_buf,cp_cellid_buf,
                    cp_index_buf,cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
 
-        for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
+        rect_list_t bnds;
+
+        get_boundry_rects(rect,ext_rect,bnds);
+
+        for( int i = 0 ; i < bnds.size(); ++i)
         {
-          cell_t bnd_dir = to_cell(0,0,0);
-          bnd_dir.s[xyz_dir] = 1;
-
-          for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
-          {
-            cell_pair_t bnd = to_cell_pair(rect);
-
-            if(rect[xyz_dir][lr_dir] != ext_rect[xyz_dir][lr_dir])
-            {
-              bnd.lo.s[xyz_dir] = rect[xyz_dir][lr_dir];
-              bnd.hi.s[xyz_dir] = rect[xyz_dir][lr_dir];
-
-              s_save_boundry_cps(func_img,flag_img,rct,ext,dom,bnd,bnd_dir,
-                                 cp_offset_buf,cp_cellid_buf,cp_index_buf,
-                                 cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
-
-
-            }
-
-          }
+          s_save_boundry_cps(func_img,flag_img,rct,ext,dom,
+                             to_cell_pair(bnds[i]),to_cell(bnds[i].get_normal()),
+                             cp_offset_buf,cp_cellid_buf,cp_index_buf,
+                             cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
         }
-
 
         s_queue.finish();
 

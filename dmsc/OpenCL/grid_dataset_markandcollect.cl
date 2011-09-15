@@ -269,7 +269,7 @@ __kernel void save_boundry_cps
     cp_vertid_buf[3*n_cp + 2] = v.z;
 
     cp_index_buf[n_cp]        = cell_dim(c);
-    cp_pair_idx_buf[n_cp]     = -1;
+    cp_pair_idx_buf[n_cp]     = (contains(ds.r,p))?(n_cp+1):(-1);
     cp_func_buf[n_cp]         = func;
 
     n_cp++;
@@ -286,7 +286,7 @@ __kernel void save_boundry_cps
     cp_vertid_buf[3*n_cp + 2] = v.z;
 
     cp_index_buf[n_cp]        = cell_dim(p);
-    cp_pair_idx_buf[n_cp]     = -1;
+    cp_pair_idx_buf[n_cp]     = n_cp-1;
     cp_func_buf[n_cp]         = func;
 
     n_cp++;
