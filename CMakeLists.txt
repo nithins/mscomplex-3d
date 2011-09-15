@@ -173,6 +173,7 @@ if(BUILD_EXEC)
 
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset.cl
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset.clh
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_markandcollect.cl
 
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/cl.hpp)
 

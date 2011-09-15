@@ -461,6 +461,46 @@ namespace grid
     }
   }
 
+  inline bool is_pair_crossing(dataset_const_ptr_t ds,cellid_t p, cellid_t q)
+  {
+    ASSERT(euclid_norm2(p-q) == 1);
+
+    short pd = p[0];
+    short rl = ds->m_rect.lc()[0];
+    short ru = ds->m_rect.uc()[0];
+    short el = ds->m_ext_rect.lc()[0];
+    short eu = ds->m_ext_rect.uc()[0];
+
+    if(p[1] != q[1])
+    {
+      pd = p[1];
+      rl = ds->m_rect.lc()[1];
+      ru = ds->m_rect.uc()[1];
+      el = ds->m_ext_rect.lc()[1];
+      eu = ds->m_ext_rect.uc()[1];
+    }
+
+    if(p[2] != q[2])
+    {
+      pd = p[2];
+      rl = ds->m_rect.lc()[2];
+      ru = ds->m_rect.uc()[2];
+      el = ds->m_ext_rect.lc()[2];
+      eu = ds->m_ext_rect.uc()[2];
+    }
+
+    short rt = rl;
+    short et = el;
+
+    if(rt != pd)
+    {
+      rt = ru;
+      et = eu;
+    }
+
+    return ((rt==pd)&&(rt != et));
+  }
+
   void  dataset_t::pairCellsWithinEst_thd(int thid)
   {
     cellid_t stride(2,2,2);
@@ -494,18 +534,16 @@ namespace grid
             {
               pairCells(p,q);
 
-              if(m_rect.contains(q) == false)
+              if(is_pair_crossing(shared_from_this(),p,q))
               {
                 markCellCritical(p);
-                m_critical_cells[thid].push_back(p);
-              }
-              else if(m_rect.boundryCount(p) != m_rect.boundryCount(q))
-              {
-                markCellCritical(p);
+                markCellCritical(q);
+
                 m_critical_cells[thid].push_back(p);
 
-                markCellCritical(q);
-                m_critical_cells[thid].push_back(q);
+                if(m_rect.contains(q))
+                  m_critical_cells[thid].push_back(q);
+
               }
             }
 

@@ -231,64 +231,67 @@ namespace grid
       ASSERT(is_canceled(p) == true && is_canceled(q) == true);
       ASSERT(index(p) == index(q)+1);
       ASSERT(pair_idx(p) == q && pair_idx(q) == p);
+
+      set_is_canceled(p,false);
+      set_is_canceled(q,false);
+
+      conn_iter_t i,j;
+
+      for(int d = 0 ; d <2 ; ++d)
+      {
+        int ed = (d == 0)?(p):(q);
+
+        conn_t old_conn(m_conn[d][ed].begin(),m_conn[d][ed].end());
+
+        m_conn[d][ed].clear();
+
+        for(i = old_conn.begin();i != old_conn.end() ; ++i)
+        {
+          if(is_paired(*i) == false)
+          {
+            dir_connect_cps(ed,*i);
+            continue;
+          }
+
+          int r = pair_idx(*i);
+
+          try
+          {
+            ASSERT(is_canceled(*i) ==false && is_canceled(r) ==false);
+            ASSERT(abs(index(*i) - index(r)) == 1 && index(ed) == index(r));
+            ASSERT(pair_idx( r) == *i && pair_idx(*i) ==  r);
+          }
+          catch (assertion_error ex)
+          {
+            ex.push(_FFL).push(SVAR(cp_info(r))).push(SVAR(cp_info(*i)));
+            ex.push(SVAR(cp_info(ed)));
+            throw;
+          }
+          try
+          {
+            for(j = m_conn[d][r].begin(); j!= m_conn[d][r].end() ; ++j )
+              dir_connect_cps(ed,*j);
+          }
+          catch(assertion_error ex)
+          {
+            ex.push(_FFL)
+              .push("failed to connect ed to *j via pair (*i,r)")
+              .push(SVAR(cp_info(ed)))
+              .push(SVAR(cp_info(*i)))
+              .push(SVAR(cp_info(r)))
+              .push(SVAR(cp_info(*j)));
+
+            if(is_paired(*j))
+              ex.push(SVAR(cp_info(pair_idx(*j))));
+            throw;
+          }
+        }
+      }
     }
     catch (assertion_error ex)
     {
       ex.push(_FFL).push(SVAR(cp_info(p))).push(SVAR(cp_info(q)));
       throw;
-    }
-
-    set_is_canceled(p,false);
-    set_is_canceled(q,false);
-
-    conn_iter_t i,j;
-
-    for(int d = 0 ; d <2 ; ++d)
-    {
-      int ed = (d == 0)?(p):(q);
-
-      conn_t old_conn(m_conn[d][ed].begin(),m_conn[d][ed].end());
-
-      m_conn[d][ed].clear();
-
-      for(i = old_conn.begin();i != old_conn.end() ; ++i)
-      {
-        if(is_paired(*i) == false)
-        {
-          dir_connect_cps(ed,*i);
-          continue;
-        }
-
-        int r = pair_idx(*i);
-
-        try
-        {
-          ASSERT(is_canceled(*i) ==false && is_canceled(r) ==false);
-          ASSERT(abs(index(*i) - index(r)) == 1 && index(ed) == index(r));
-          ASSERT(pair_idx( r) == *i && pair_idx(*i) ==  r);
-        }
-        catch (assertion_error ex)
-        {
-          ex.push(_FFL).push(SVAR(cp_info(r))).push(SVAR(cp_info(*i)));
-          ex.push(SVAR(cp_info(ed)));
-          throw;
-        }
-        try
-        {
-          for(j = m_conn[d][r].begin(); j!= m_conn[d][r].end() ; ++j )
-            dir_connect_cps(ed,*j);
-        }
-        catch(assertion_error ex)
-        {
-          ex.push(_FFL)
-            .push("failed to connect ed to *j via pair (*i,r)")
-            .push(SVAR(cp_info(ed)))
-            .push(SVAR(cp_info(*i)))
-            .push(SVAR(cp_info(r)))
-            .push(SVAR(cp_info(*j)));
-          throw;
-        }
-      }
     }
   }
 

@@ -17,6 +17,10 @@
 #include<grid_dataset.h>
 #include<grid_mscomplex.h>
 
+const int WI_SIZE = 256;
+const int WG_NUM  = 32;
+const int WG_SIZE = WG_NUM*WI_SIZE;
+
 using namespace std;
 
 namespace utls
@@ -43,6 +47,7 @@ namespace grid
   namespace opencl
   {
     typedef cl_short4 cell_t;
+    typedef cl_short8   cell_pair_t;
 
     inline cell_t to_cell(const cellid_t & b)
     {
@@ -54,6 +59,41 @@ namespace grid
 
       return a;
     }
+
+    inline cell_pair_t to_cell_pair(const rect_t & b)
+    {
+      cell_pair_t a;
+
+      a.lo = to_cell(b.lc());
+      a.hi = to_cell(b.uc());
+
+      return a;
+    }
+
+
+    inline cell_t to_cell(int x , int y , int z)
+    {
+      cell_t a;
+
+      a.x = x;
+      a.y = y;
+      a.z = z;
+
+      return a;
+    }
+
+
+    inline cellid_t from_cell(const cell_t & b)
+    {
+      cellid_t a;
+
+      a[0] = b.x;
+      a[1] = b.y;
+      a[2] = b.z;
+
+      return a;
+    }
+
 
     inline cl::size_t<3> to_size(const cellid_t & b)
     {
@@ -84,6 +124,8 @@ namespace grid
     cl::KernelFunctor s_assign_max_facet_cube;
     cl::KernelFunctor s_assign_pairs;
     cl::KernelFunctor s_mark_cps;
+    cl::KernelFunctor s_mark_boundry_cps;
+    cl::KernelFunctor s_save_boundry_cps;
     cl::KernelFunctor s_save_cps;
 
     cl::KernelFunctor s_scan_local_sums;
@@ -92,12 +134,11 @@ namespace grid
 
     const char * s_header_file =
         "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset.clh";
-    const char * s_source_file =
+    const char * s_source1_file =
         "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset.cl";
+    const char * s_source2_file =
+        "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset_markandcollect.cl";
 
-    const int WI_SIZE = 256;
-    const int WG_NUM  = 32;
-    const int WG_SIZE = WG_NUM*WI_SIZE;
 
     template<typename T>
     void log_buffer(cl::Buffer buf,int n,std::ostream &os=cout,int nlrepeat = -1)
@@ -119,7 +160,7 @@ namespace grid
 
     void init(void)
     {
-      cl::Program             program;
+      cl::Program             program1;
       std::vector<cl::Device> devices;
 
       try
@@ -136,7 +177,7 @@ namespace grid
 
         devices = s_context.getInfo<CL_CONTEXT_DEVICES>();
 
-        std::ifstream sourceFile(s_source_file);
+        std::ifstream sourceFile(s_source1_file);
         ensure(sourceFile.is_open(),"unable to open file");
 
         std::ifstream headerFile(s_header_file);
@@ -149,43 +190,76 @@ namespace grid
         sources.push_back(std::make_pair(headerCode.c_str(),headerCode.size()));
         sources.push_back(std::make_pair(sourceCode.c_str(),sourceCode.size()));
 
-        program = cl::Program(s_context, sources);
-        program.build(devices);
+        program1 = cl::Program(s_context, sources);
+        program1.build(devices);
 
         s_queue = cl::CommandQueue(s_context, devices[0]);
 
-        s_assign_max_facet_edge =  cl::Kernel(program, "assign_max_facet_edge").
+        s_assign_max_facet_edge =  cl::Kernel(program1, "assign_max_facet_edge").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_assign_max_facet_face =  cl::Kernel(program, "assign_max_facet_face").
+        s_assign_max_facet_face =  cl::Kernel(program1, "assign_max_facet_face").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_assign_max_facet_cube =  cl::Kernel(program, "assign_max_facet_cube").
+        s_assign_max_facet_cube =  cl::Kernel(program1, "assign_max_facet_cube").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_assign_pairs = cl::Kernel(program, "assign_pairs").
+        s_assign_pairs = cl::Kernel(program1, "assign_pairs").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+      }
+      catch (cl::Error err)
+      {
+       cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
+       cerr<<program1.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0])<<endl;
+
+       throw;
+      }
+
+      cl::Program             program2;
+      try
+      {
+        std::ifstream sourceFile(s_source2_file);
+        ensure(sourceFile.is_open(),"unable to open file");
+
+        std::ifstream headerFile(s_header_file);
+        ensure(headerFile.is_open(),"unable to open file");
+
+        std::string headerCode(std::istreambuf_iterator<char>(headerFile),(std::istreambuf_iterator<char>()));
+        std::string sourceCode(std::istreambuf_iterator<char>(sourceFile),(std::istreambuf_iterator<char>()));
+
+        cl::Program::Sources sources;
+        sources.push_back(std::make_pair(headerCode.c_str(),headerCode.size()));
+        sources.push_back(std::make_pair(sourceCode.c_str(),sourceCode.size()));
+
+        program2 = cl::Program(s_context, sources);
+        program2.build(devices);
+
+        s_mark_cps = cl::Kernel(program2, "mark_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_mark_cps = cl::Kernel(program, "mark_cps").
+        s_save_cps = cl::Kernel(program2, "save_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_save_cps = cl::Kernel(program, "save_cps").
+        s_mark_boundry_cps = cl::Kernel(program2, "mark_boundry_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_scan_local_sums = cl::Kernel(program, "scan_local_sums").
+        s_save_boundry_cps = cl::Kernel(program2, "save_boundry_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_scan_group_sums= cl::Kernel(program, "scan_group_sums").
+        s_scan_local_sums = cl::Kernel(program2, "scan_local_sums").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_scan_group_sums= cl::Kernel(program2, "scan_group_sums").
             bind(s_queue,cl::NullRange,cl::NDRange(WI_SIZE),cl::NDRange(WI_SIZE));
 
-        s_scan_update_sums = cl::Kernel(program, "scan_update_sums").
+        s_scan_update_sums = cl::Kernel(program2, "scan_update_sums").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
       }
       catch (cl::Error err)
       {
        cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
-       cerr<<program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0])<<endl;
+       cerr<<program2.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0])<<endl;
 
        throw;
       }
@@ -202,14 +276,9 @@ namespace grid
         cell_fn_t   *h_func,
         cell_flag_t *h_flag)
     {
-      cell_t rct_lc = to_cell(rect.lc());
-      cell_t rct_uc = to_cell(rect.uc());
-
-      cell_t ext_lc = to_cell(ext_rect.lc());
-      cell_t ext_uc = to_cell(ext_rect.uc());
-
-      cell_t dom_lc = to_cell(domain_rect.lc());
-      cell_t dom_uc = to_cell(domain_rect.uc());
+      cell_pair_t rct = to_cell_pair(rect);
+      cell_pair_t ext = to_cell_pair(ext_rect);
+      cell_pair_t dom = to_cell_pair(domain_rect);
 
       cl::size_t<3> func_size = to_size(ext_rect.span()/2+ 1);
       cl::size_t<3> flag_size = to_size(ext_rect.span()  + 1);
@@ -229,7 +298,7 @@ namespace grid
         cl::Buffer   flag_buf(s_context,CL_MEM_READ_WRITE,flag_size_bytes);
 
         s_assign_max_facet_edge
-            (func_img,flag_img,rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc,flag_buf);
+            (func_img,flag_img,rct.lo,rct.hi,ext.lo,ext.hi,dom.lo,dom.hi,flag_buf);
         s_queue.finish();
 
         s_queue.enqueueCopyBufferToImage
@@ -237,7 +306,7 @@ namespace grid
         s_queue.finish();
 
         s_assign_max_facet_face
-            (func_img,flag_img,rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc,flag_buf);
+            (func_img,flag_img,rct.lo,rct.hi,ext.lo,ext.hi,dom.lo,dom.hi,flag_buf);
         s_queue.finish();
 
         s_queue.enqueueCopyBufferToImage
@@ -245,7 +314,7 @@ namespace grid
         s_queue.finish();
 
         s_assign_max_facet_cube
-            (func_img,flag_img,rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc,flag_buf);
+            (func_img,flag_img,rct.lo,rct.hi,ext.lo,ext.hi,dom.lo,dom.hi,flag_buf);
         s_queue.finish();
 
         s_queue.enqueueCopyBufferToImage
@@ -253,13 +322,33 @@ namespace grid
         s_queue.finish();
 
         s_assign_pairs
-            (func_img,flag_img,rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc,flag_buf);
+            (func_img,flag_img,rct.lo,rct.hi,ext.lo,ext.hi,dom.lo,dom.hi,flag_buf);
         s_queue.finish();
 
         cp_offset_buf = cl::Buffer(s_context,CL_MEM_READ_WRITE,sizeof(int)*WG_SIZE);
         cl::Buffer group_sums_buf(s_context,CL_MEM_READ_WRITE,sizeof(int)*(WG_NUM));
 
-        s_mark_cps(rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc,flag_buf,cp_offset_buf);
+        s_mark_cps(rct,ext,dom,flag_buf,cp_offset_buf);
+
+        for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
+        {
+          cell_t bnd_dir = to_cell(0,0,0);
+          bnd_dir.s[xyz_dir] = 1;
+
+          for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
+          {
+            cell_pair_t bnd = to_cell_pair(rect);
+
+            if(rect[xyz_dir][lr_dir] != ext_rect[xyz_dir][lr_dir])
+            {
+              bnd.lo.s[xyz_dir] = rect[xyz_dir][lr_dir];
+              bnd.hi.s[xyz_dir] = rect[xyz_dir][lr_dir];
+
+              s_mark_boundry_cps(rct,ext,dom,bnd,bnd_dir,flag_buf,cp_offset_buf);
+            }
+          }
+        }
+
         s_scan_local_sums(cp_offset_buf,group_sums_buf);
         s_scan_group_sums(group_sums_buf);
         s_scan_update_sums(cp_offset_buf,group_sums_buf);
@@ -294,14 +383,9 @@ namespace grid
        char       *h_index,
        cell_fn_t  *h_func)
     {
-      cell_t rct_lc = to_cell(rect.lc());
-      cell_t rct_uc = to_cell(rect.uc());
-
-      cell_t ext_lc = to_cell(ext_rect.lc());
-      cell_t ext_uc = to_cell(ext_rect.uc());
-
-      cell_t dom_lc = to_cell(domain_rect.lc());
-      cell_t dom_uc = to_cell(domain_rect.uc());
+      cell_pair_t rct = to_cell_pair(rect);
+      cell_pair_t ext = to_cell_pair(ext_rect);
+      cell_pair_t dom = to_cell_pair(domain_rect);
 
       try
       {
@@ -311,11 +395,37 @@ namespace grid
         cl::Buffer cp_index_buf(s_context,CL_MEM_READ_WRITE,sizeof(char)*num_cps);
         cl::Buffer cp_func_buf(s_context,CL_MEM_READ_WRITE,sizeof(cell_fn_t)*num_cps);
 
-        s_save_cps(func_img,flag_img,rct_lc,rct_uc,ext_lc,ext_uc,dom_lc,dom_uc,cp_offset_buf,
-                   cp_cellid_buf,cp_vertid_buf,cp_pair_idx_buf,cp_index_buf,cp_func_buf);
-
         s_queue.finish();
 
+        s_save_cps(func_img,flag_img,rct,ext,dom,cp_offset_buf,cp_cellid_buf,
+                   cp_index_buf,cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
+
+        for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
+        {
+          cell_t bnd_dir = to_cell(0,0,0);
+          bnd_dir.s[xyz_dir] = 1;
+
+          for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
+          {
+            cell_pair_t bnd = to_cell_pair(rect);
+
+            if(rect[xyz_dir][lr_dir] != ext_rect[xyz_dir][lr_dir])
+            {
+              bnd.lo.s[xyz_dir] = rect[xyz_dir][lr_dir];
+              bnd.hi.s[xyz_dir] = rect[xyz_dir][lr_dir];
+
+              s_save_boundry_cps(func_img,flag_img,rct,ext,dom,bnd,bnd_dir,
+                                 cp_offset_buf,cp_cellid_buf,cp_index_buf,
+                                 cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
+
+
+            }
+
+          }
+        }
+
+
+        s_queue.finish();
 
         s_queue.enqueueReadBuffer(cp_cellid_buf,false,0,sizeof(cellid_t)*num_cps,h_cellid);
         s_queue.enqueueReadBuffer(cp_vertid_buf,false,0,sizeof(cellid_t)*num_cps,h_vertid);
