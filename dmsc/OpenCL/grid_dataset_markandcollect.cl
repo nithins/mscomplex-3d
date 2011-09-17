@@ -2,9 +2,6 @@
 #define NUM_GROUPS        32
 #define binary_op(a, b) ((a) +(b))
 
-const sampler_t func_sampler  = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
-const sampler_t flag_sampler  = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
-
 inline void __scan_local_threads(__local int * array)
 {
   barrier(CLK_LOCAL_MEM_FENCE);

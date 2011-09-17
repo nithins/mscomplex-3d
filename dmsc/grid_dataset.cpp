@@ -106,6 +106,11 @@ namespace grid
     ensure(ifs.tellg()==num_pts*sizeof(cell_fn_t),"file/piece size mismatch");
 
     ifs.close();
+
+    cellid_t ex_span = (m_rect.span()/2);
+    m_owner_maxima.resize(ex_span);
+    m_owner_minima.resize(ex_span+1);
+
   }
 
   void  dataset_t::clear()
@@ -862,7 +867,11 @@ namespace grid
   void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
 #ifdef BUILD_EXEC_OPENCL
-    opencl::assign_gradient(shared_from_this(),msgraph);
+
+    opencl::worker w;
+
+    w.assign_gradient(shared_from_this(),msgraph);
+    w.owner_extrema(shared_from_this());
 #else
 
     for(int dim = 1 ; dim <= gc_grid_dim; ++dim)

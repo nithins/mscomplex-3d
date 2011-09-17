@@ -171,9 +171,10 @@ if(BUILD_EXEC)
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_cl.h
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_cl.cpp
 
-        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset.cl
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset.clh
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_assigngradient.cl
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_markandcollect.cl
+        ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/grid_dataset_ownerextrema.cl
 
         ${CMAKE_CURRENT_SOURCE_DIR}/dmsc/OpenCL/cl.hpp)
 

@@ -1,9 +1,3 @@
-#define __CL_ENABLE_EXCEPTIONS
-#if defined(__APPLE__) || defined(__MACOSX)
-#include <OpenCL/cl.hpp>
-#else
-#include <cl.hpp>
-#endif
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -20,6 +14,40 @@
 const int WI_SIZE = 256;
 const int WG_NUM  = 32;
 const int WG_SIZE = WG_NUM*WI_SIZE;
+
+cl::Context       s_context;
+cl::CommandQueue  s_queue;
+
+cl::KernelFunctor s_assign_max_facet_edge;
+cl::KernelFunctor s_assign_max_facet_face;
+cl::KernelFunctor s_assign_max_facet_cube;
+cl::KernelFunctor s_assign_pairs;
+
+cl::KernelFunctor s_mark_cps;
+cl::KernelFunctor s_mark_boundry_cps;
+cl::KernelFunctor s_save_boundry_cps;
+cl::KernelFunctor s_save_cps;
+cl::KernelFunctor s_scan_local_sums;
+cl::KernelFunctor s_scan_group_sums;
+cl::KernelFunctor s_scan_update_sums;
+
+cl::KernelFunctor s_init_maxima;
+cl::KernelFunctor s_init_minima;
+cl::KernelFunctor s_propagate_maxima;
+cl::KernelFunctor s_propagate_minima;
+cl::KernelFunctor s_finalize_maxima;
+cl::KernelFunctor s_finalize_minima;
+
+
+const char * s_header_file =
+    "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset.clh";
+const char * s_source1_file =
+    "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset_assigngradient.cl";
+const char * s_source2_file =
+    "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset_markandcollect.cl";
+const char * s_source3_file =
+    "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset_ownerextrema.cl";
+
 
 using namespace std;
 
@@ -134,33 +162,8 @@ namespace grid
       }
     }
 
-
-    cl::Context       s_context;
-    cl::CommandQueue  s_queue;
-
-    cl::KernelFunctor s_assign_max_facet_edge;
-    cl::KernelFunctor s_assign_max_facet_face;
-    cl::KernelFunctor s_assign_max_facet_cube;
-    cl::KernelFunctor s_assign_pairs;
-    cl::KernelFunctor s_mark_cps;
-    cl::KernelFunctor s_mark_boundry_cps;
-    cl::KernelFunctor s_save_boundry_cps;
-    cl::KernelFunctor s_save_cps;
-
-    cl::KernelFunctor s_scan_local_sums;
-    cl::KernelFunctor s_scan_group_sums;
-    cl::KernelFunctor s_scan_update_sums;
-
-    const char * s_header_file =
-        "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset.clh";
-    const char * s_source1_file =
-        "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset.cl";
-    const char * s_source2_file =
-        "/home/nithin/projects/mscomplex-3d/dmsc/OpenCL/grid_dataset_markandcollect.cl";
-
-
     template<typename T>
-    void log_buffer(cl::Buffer buf,int n,std::ostream &os=cout,int nlrepeat = -1)
+    void log_buffer(cl::Buffer buf,int n,int nlrepeat = -1,std::ostream &os=cout)
     {
       std::vector<T> buf_cpu(n);
 
@@ -179,9 +182,10 @@ namespace grid
 
     void init(void)
     {
+      std::vector<cl::Device> devices;
       cl::Program             program1;
       cl::Program             program2;
-      std::vector<cl::Device> devices;
+      cl::Program             program3;
 
       try
       {
@@ -291,6 +295,50 @@ namespace grid
 
        throw;
       }
+
+      try
+      {
+        std::ifstream sourceFile(s_source3_file);
+        ensure(sourceFile.is_open(),"unable to open file");
+
+        std::ifstream headerFile(s_header_file);
+        ensure(headerFile.is_open(),"unable to open file");
+
+        std::string headerCode(std::istreambuf_iterator<char>(headerFile),(std::istreambuf_iterator<char>()));
+        std::string sourceCode(std::istreambuf_iterator<char>(sourceFile),(std::istreambuf_iterator<char>()));
+
+        cl::Program::Sources sources;
+        sources.push_back(std::make_pair(headerCode.c_str(),headerCode.size()));
+        sources.push_back(std::make_pair(sourceCode.c_str(),sourceCode.size()));
+
+        program3 = cl::Program(s_context, sources);
+        program3.build(devices);
+
+        s_init_maxima =  cl::Kernel(program3, "init_maxima").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_init_minima=  cl::Kernel(program3, "init_minima").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_propagate_maxima=  cl::Kernel(program3, "propagate_maxima").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_propagate_minima= cl::Kernel(program3, "propagate_minima").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_finalize_maxima=  cl::Kernel(program3, "finalize_maxima").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_finalize_minima= cl::Kernel(program3, "finalize_minima").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+      }
+      catch (cl::Error err)
+      {
+       cerr<< "PROGRAM3 ERROR: "<< err.what()<< "("<< err.err()<< ")"<< endl;
+       cerr<<program3.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0])<<endl;
+
+       throw;
+      }
     }
 
     void __assign_gradient
@@ -376,8 +424,8 @@ namespace grid
 
         s_queue.enqueueCopyBufferToImage
             (flag_buf,flag_img,0,to_size(0,0,0),flag_size);
-        s_queue.enqueueReadBuffer(flag_buf,true,0,flag_size_bytes,h_flag);
-        s_queue.enqueueReadBuffer(group_sums_buf,true,sizeof(int)*(WG_NUM-1),sizeof(int),&num_cps);
+        s_queue.enqueueReadBuffer(flag_buf,false,0,flag_size_bytes,h_flag);
+        s_queue.enqueueReadBuffer(group_sums_buf,false,sizeof(int)*(WG_NUM-1),sizeof(int),&num_cps);
 
         s_queue.finish();
       }
@@ -415,8 +463,6 @@ namespace grid
         cl::Buffer cp_index_buf(s_context,CL_MEM_READ_WRITE,sizeof(char)*num_cps);
         cl::Buffer cp_func_buf(s_context,CL_MEM_READ_WRITE,sizeof(cell_fn_t)*num_cps);
 
-        s_queue.finish();
-
         s_save_cps(func_img,flag_img,rct,ext,dom,cp_offset_buf,cp_cellid_buf,
                    cp_index_buf,cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
 
@@ -450,11 +496,10 @@ namespace grid
       }
     }
 
-    void assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc)
+    void worker::assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc)
     {
       cl::Buffer cp_offset_buf;
       cl::Image3D  func_img;
-      cl::Image3D  flag_img;
       int          num_cps;
 
       __assign_gradient(ds->m_rect,ds->m_ext_rect,ds->m_domain_rect,
@@ -469,6 +514,75 @@ namespace grid
                         msc->m_cp_pair_idx.data(),msc->m_cp_index.data(),
                         msc->m_cp_fn.data());
     }
+
+    void __owner_extrema
+    ( cell_pair_t rct,
+      cell_pair_t ext,
+      cell_pair_t dom,
+      cl::Image3D &flag_img,
+      cl::KernelFunctor init_extrema,
+      cl::KernelFunctor propagate_extrema,
+      cl::size_t<3> size,
+      int *h_result)
+    {
+      int num_cells = size[2]*size[1]*size[0];
+
+      try
+      {
+        cl::Buffer own_buf1(s_context,CL_MEM_READ_WRITE,num_cells*sizeof(int));
+        cl::Buffer own_buf2(s_context,CL_MEM_READ_WRITE,num_cells*sizeof(int));
+        cl::Buffer is_updated_buf(s_context,CL_MEM_READ_WRITE,sizeof(int));
+
+        init_extrema(rct,ext,dom,flag_img,own_buf1);
+
+        int is_updated;
+
+        do
+        {
+          is_updated = 0;
+
+          s_queue.enqueueWriteBuffer(is_updated_buf,true,0,sizeof(int),&is_updated);
+          propagate_extrema(rct,ext,dom,own_buf1,own_buf2,is_updated_buf);
+          s_queue.finish();
+
+          s_queue.enqueueReadBuffer(is_updated_buf,true,0,sizeof(int),&is_updated);
+          s_queue.finish();
+
+          std::swap(own_buf1,own_buf2);
+        }
+        while(is_updated == 1);
+
+        log_buffer<int>(own_buf1,num_cells,30);
+
+        s_queue.enqueueReadBuffer(own_buf1,false,0,num_cells*sizeof(int),h_result);
+
+      }
+      catch(cl::Error err)
+      {
+        std::cerr<<_FFL<<std::endl;
+        std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
+        throw;
+      }
+    }
+
+    void worker::owner_extrema(dataset_ptr_t ds)
+    {
+      cell_pair_t rct = to_cell_pair(ds->m_rect);
+      cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
+      cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
+
+      __owner_extrema
+          (rct,ext,dom,flag_img,s_init_minima,s_propagate_minima,
+           to_size((ds->m_rect.span()/2)+1),ds->m_owner_minima.data());
+
+      __owner_extrema
+          (rct,ext,dom,flag_img,s_init_maxima,s_propagate_maxima,
+           to_size((ds->m_rect.span()/2)),ds->m_owner_maxima.data());
+
+      s_queue.finish();
+    }
+  }
+
 
 //    void check_assign_gradient_opencl
 //      (dataset_ptr_t ds,int dim,rect_t check_rect,cell_flag_t mask)
@@ -524,6 +638,6 @@ namespace grid
 //      }
 //    }
 
-  }
 }
+
 

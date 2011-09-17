@@ -3,14 +3,28 @@
 
 #include <grid.h>
 
+#define __CL_ENABLE_EXCEPTIONS
+#if defined(__APPLE__) || defined(__MACOSX)
+#include <OpenCL/cl.hpp>
+#else
+#include <cl.hpp>
+#endif
+
 namespace grid
 {
   namespace opencl
   {
-
     void init();
 
-    void assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc);
+    class worker
+    {
+    protected:
+      cl::Image3D flag_img;
+    public:
+      void assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc);
+      void owner_extrema(dataset_ptr_t ds);
+      void finalize_extrema(dataset_ptr_t ds);
+    };
 
 //    void check_assign_gradient(dataset_ptr_t ds, int dim,rect_t check_rect,cell_flag_t mask);
   }

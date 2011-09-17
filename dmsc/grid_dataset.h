@@ -57,6 +57,7 @@ namespace grid
     typedef boost::multi_array<cellid_t,gc_grid_dim>        cellid_array_t;
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
     typedef boost::multi_array<cell_fn_t,gc_grid_dim>       varray_t;
+    typedef boost::multi_array<int,gc_grid_dim>             owner_array_t;
 
 
   public:
@@ -68,6 +69,11 @@ namespace grid
     varray_t           m_vert_fns;
 
     cellflag_array_t   m_cell_flags;
+
+    owner_array_t      m_owner_maxima;
+    owner_array_t      m_owner_minima;
+
+
     cellid_list_t      m_critical_cells[g_num_threads];
 
     boost::function<bool (cellid_t,cellid_t)> cmp_ftor;

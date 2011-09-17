@@ -44,6 +44,9 @@ inline cell_t to_cell(short x,short y,short z)
 
 #define XYZdir (to_cell(1,1,1))
 
+const sampler_t func_sampler  = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
+const sampler_t flag_sampler  = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
+
 inline rect_t make_rect(const cell_t lc, const cell_t uc)
 {
   rect_t r;
@@ -234,7 +237,7 @@ inline int boundryCount(const rect_t r,const cell_t c)
          ((c.z == r.lc.z || c.z == r.uc.z)?(1):(0));
 }
 
-bool is_paired (const flag_t f)
+inline bool is_paired (const flag_t f)
 {
   return (((f>>3) & 0x07) !=0);
 }
@@ -246,8 +249,8 @@ enum eCellFlags
   CELLFLAG_MASK     = 0xc0
 };
 
-bool is_critical (const flag_t f)
+inline bool is_critical (const flag_t f)
 {
-  return (f&CELLFLAG_CRITICAL != 0);
+  return ((f&CELLFLAG_CRITICAL) != 0);
 }
 #endif
