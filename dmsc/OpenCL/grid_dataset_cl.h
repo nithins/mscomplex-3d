@@ -22,8 +22,7 @@ namespace grid
       cl::Image3D flag_img;
     public:
       void assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc);
-      void owner_extrema(dataset_ptr_t ds);
-      void finalize_extrema(dataset_ptr_t ds);
+      void owner_extrema(dataset_ptr_t ds,mscomplex_ptr_t msc);
     };
 
 //    void check_assign_gradient(dataset_ptr_t ds, int dim,rect_t check_rect,cell_flag_t mask);

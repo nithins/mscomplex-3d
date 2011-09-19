@@ -31,12 +31,11 @@ cl::KernelFunctor s_scan_local_sums;
 cl::KernelFunctor s_scan_group_sums;
 cl::KernelFunctor s_scan_update_sums;
 
-cl::KernelFunctor s_init_maxima;
-cl::KernelFunctor s_init_minima;
-cl::KernelFunctor s_propagate_maxima;
-cl::KernelFunctor s_propagate_minima;
-cl::KernelFunctor s_finalize_maxima;
-cl::KernelFunctor s_finalize_minima;
+cl::KernelFunctor s_init_propagate;
+cl::KernelFunctor s_propagate;
+cl::KernelFunctor s_init_update_to_cp_no;
+cl::KernelFunctor s_update_to_cp_no;
+cl::KernelFunctor s_update_to_surviving_cp_no;
 
 
 const char * s_header_file =
@@ -88,6 +87,18 @@ namespace grid
       return a;
     }
 
+    inline cellid_t from_cell(const cell_t & b)
+    {
+      cellid_t a;
+
+      a[0] = b.x;
+      a[1] = b.y;
+      a[2] = b.z;
+
+      return a;
+    }
+
+
     inline cell_pair_t to_cell_pair(const rect_t & b)
     {
       cell_pair_t a;
@@ -97,6 +108,12 @@ namespace grid
 
       return a;
     }
+
+    inline rect_t from_cell_pair(const cell_pair_t & r)
+    {
+      return rect_t(from_cell(r.lo),from_cell(r.hi));
+    }
+
 
 
     inline cell_t to_cell(int x , int y , int z)
@@ -109,19 +126,6 @@ namespace grid
 
       return a;
     }
-
-
-    inline cellid_t from_cell(const cell_t & b)
-    {
-      cellid_t a;
-
-      a[0] = b.x;
-      a[1] = b.y;
-      a[2] = b.z;
-
-      return a;
-    }
-
 
     inline cl::size_t<3> to_size(const cellid_t & b)
     {
@@ -143,29 +147,12 @@ namespace grid
       return a;
     }
 
-    inline void get_boundry_rects(const rect_t &r,const rect_t & e,rect_list_t &bnds)
-    {
-      for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
-      {
-        for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
-        {
-          rect_t bnd = r;
-
-          if(r[xyz_dir][lr_dir] != e[xyz_dir][lr_dir])
-          {
-            bnd[xyz_dir][0] = r[xyz_dir][lr_dir];
-            bnd[xyz_dir][1] = r[xyz_dir][lr_dir];
-
-            bnds.push_back(bnd);
-          }
-        }
-      }
-    }
-
     template<typename T>
     void log_buffer(cl::Buffer buf,int n,int nlrepeat = -1,std::ostream &os=cout)
     {
       std::vector<T> buf_cpu(n);
+
+      s_queue.finish();
 
       s_queue.enqueueReadBuffer(buf,true,0,sizeof(T)*n,buf_cpu.data());
 
@@ -314,23 +301,21 @@ namespace grid
         program3 = cl::Program(s_context, sources);
         program3.build(devices);
 
-        s_init_maxima =  cl::Kernel(program3, "init_maxima").
+        s_init_propagate =  cl::Kernel(program3, "init_propagate").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_init_minima=  cl::Kernel(program3, "init_minima").
+        s_propagate =  cl::Kernel(program3, "propagate").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_propagate_maxima=  cl::Kernel(program3, "propagate_maxima").
+        s_init_update_to_cp_no =  cl::Kernel(program3, "init_update_to_cp_no").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_propagate_minima= cl::Kernel(program3, "propagate_minima").
+        s_update_to_cp_no = cl::Kernel(program3, "update_to_cp_no").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_finalize_maxima=  cl::Kernel(program3, "finalize_maxima").
-            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+//        s_update_to_surviving_cp_no =  cl::Kernel(program3, "update_to_surviving_cp_no").
+//            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_finalize_minima= cl::Kernel(program3, "finalize_minima").
-            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
       }
       catch (cl::Error err)
       {
@@ -519,21 +504,23 @@ namespace grid
     ( cell_pair_t rct,
       cell_pair_t ext,
       cell_pair_t dom,
+      cell_pair_t ex_rect,
       cl::Image3D &flag_img,
-      cl::KernelFunctor init_extrema,
-      cl::KernelFunctor propagate_extrema,
-      cl::size_t<3> size,
-      int *h_result)
+      cellid_t *h_cp_cellid,
+      cl_int    num_cps,
+      int      *h_result)
     {
-      int num_cells = size[2]*size[1]*size[0];
+      int num_cells = num_cells2(from_cell_pair(ex_rect));
 
       try
       {
         cl::Buffer own_buf1(s_context,CL_MEM_READ_WRITE,num_cells*sizeof(int));
         cl::Buffer own_buf2(s_context,CL_MEM_READ_WRITE,num_cells*sizeof(int));
         cl::Buffer is_updated_buf(s_context,CL_MEM_READ_WRITE,sizeof(int));
+        cl::Buffer cp_cellid_buf(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,
+                                 num_cps*sizeof(cellid_t),h_cp_cellid);
 
-        init_extrema(rct,ext,dom,flag_img,own_buf1);
+        s_init_propagate(rct,ext,dom,ex_rect,flag_img,own_buf1);
 
         int is_updated;
 
@@ -542,7 +529,7 @@ namespace grid
           is_updated = 0;
 
           s_queue.enqueueWriteBuffer(is_updated_buf,true,0,sizeof(int),&is_updated);
-          propagate_extrema(rct,ext,dom,own_buf1,own_buf2,is_updated_buf);
+          s_propagate(rct,ext,dom,ex_rect,own_buf1,own_buf2,is_updated_buf);
           s_queue.finish();
 
           s_queue.enqueueReadBuffer(is_updated_buf,true,0,sizeof(int),&is_updated);
@@ -552,9 +539,12 @@ namespace grid
         }
         while(is_updated == 1);
 
-        log_buffer<int>(own_buf1,num_cells,30);
+        s_init_update_to_cp_no(rct,ext,dom,ex_rect,cp_cellid_buf,num_cps,own_buf1);
+        s_update_to_cp_no(rct,ext,dom,ex_rect,flag_img,own_buf1,own_buf2);
+        s_queue.finish();
 
-        s_queue.enqueueReadBuffer(own_buf1,false,0,num_cells*sizeof(int),h_result);
+        s_queue.enqueueReadBuffer(own_buf2,false,0,num_cells*sizeof(int),h_result);
+        s_queue.finish();
 
       }
       catch(cl::Error err)
@@ -565,24 +555,27 @@ namespace grid
       }
     }
 
-    void worker::owner_extrema(dataset_ptr_t ds)
+    void worker::owner_extrema(dataset_ptr_t ds,mscomplex_ptr_t msc)
     {
       cell_pair_t rct = to_cell_pair(ds->m_rect);
       cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
       cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
 
-      __owner_extrema
-          (rct,ext,dom,flag_img,s_init_minima,s_propagate_minima,
-           to_size((ds->m_rect.span()/2)+1),ds->m_owner_minima.data());
+      cell_pair_t max_rect = to_cell_pair(rect_t(ds->m_rect.lc()+1,ds->m_rect.uc()-1));
+      cell_pair_t min_rect = to_cell_pair(ds->m_rect);
 
-      __owner_extrema
-          (rct,ext,dom,flag_img,s_init_maxima,s_propagate_maxima,
-           to_size((ds->m_rect.span()/2)),ds->m_owner_maxima.data());
+      __owner_extrema(rct,ext,dom,max_rect,flag_img,
+                      msc->m_cp_cellid.data(),msc->get_num_critpts(),
+                      ds->m_owner_maxima.data());
+
+      __owner_extrema(rct,ext,dom,min_rect,flag_img,
+                      msc->m_cp_cellid.data(),msc->get_num_critpts(),
+                      ds->m_owner_minima.data());
 
       s_queue.finish();
     }
   }
-
+}
 
 //    void check_assign_gradient_opencl
 //      (dataset_ptr_t ds,int dim,rect_t check_rect,cell_flag_t mask)
@@ -638,6 +631,6 @@ namespace grid
 //      }
 //    }
 
-}
+
 
 

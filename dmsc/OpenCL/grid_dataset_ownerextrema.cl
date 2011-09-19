@@ -1,11 +1,15 @@
-inline void init
-  ( dataset_t ds,
+__kernel void init_propagate
+  ( cell_pair_t rct,
+    cell_pair_t ext,
+    cell_pair_t dom,
     rect_t ex_rect,
     __read_only image3d_t flag_img,
     __global int * ex_own_buf
   )
 {
   int N = num_cells2(ex_rect);
+
+  dataset_t ds = make_dataset2(rct,ext,dom);
 
   for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
   {
@@ -23,8 +27,11 @@ inline void init
     ex_own_buf[c_to_i2(ex_rect,c)] = c_to_i2(ex_rect,o);
   }
 }
-inline void propagate
-  ( dataset_t ds,
+
+__kernel void propagate
+(   cell_pair_t rct,
+    cell_pair_t ext,
+    cell_pair_t dom,
     rect_t ex_rect,
     __global int * ex_own_buf1,
     __global int * ex_own_buf2,
@@ -48,104 +55,82 @@ inline void propagate
   if(updated == 1)
     *is_updated = 1;
 }
-inline void finalize
-  ( dataset_t ds,
+
+__kernel void init_update_to_cp_no
+  ( cell_pair_t rct,
+    cell_pair_t ext,
+    cell_pair_t dom,
+    rect_t ex_rect,
+    __global short  *cp_cellid_buf,
+    int num_cps,
+    __global int    *ex_own_buf)
+{
+  int ex_dim = cell_dim(ex_rect.lc);
+
+  dataset_t ds = make_dataset2(rct,ext,dom);
+
+  for( int i = get_global_id(0) ; i < num_cps; i += get_global_size(0))
+  {
+    cell_t c;
+
+    c.x = cp_cellid_buf[3*i+0];
+    c.y = cp_cellid_buf[3*i+1];
+    c.z = cp_cellid_buf[3*i+2];
+
+    if(cell_dim(c) != ex_dim)
+      continue;
+
+    if(!contains(ds.r,c))
+      continue;
+
+    ex_own_buf[c_to_i2(ex_rect,c)] = i;
+  }
+}
+
+__kernel void update_to_cp_no
+  ( cell_pair_t rct,
+    cell_pair_t ext,
+    cell_pair_t dom,
     rect_t ex_rect,
     __read_only image3d_t  flag_img,
-    __global int * ex_own_buf1,
-    __global int * ex_own_buf2)
+    __global int    *ex_own_buf1,
+    __global int    *ex_own_buf2)
 {
   int N = num_cells2(ex_rect);
+  dataset_t ds = make_dataset2(rct,ext,dom);
 
   for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
   {
     cell_t c  = i_to_c2(ex_rect,i);
     flag_t fg = read_imageui(flag_img, flag_sampler, to_int4(c-ds.e.lc)).x;
 
+    int o  = ex_own_buf1[i];
+
     if(!is_critical(fg))
     {
-      int  o = ex_own_buf1[i];
-      int oo = ex_own_buf1[o];
-      ex_own_buf2[i] = oo;
+      o = ex_own_buf1[o];
     }
+
+    ex_own_buf2[c_to_i2(ex_rect,c)] = o;
   }
 }
 
-__kernel void init_minima
-( cell_pair_t rct,
-  cell_pair_t ext,
-  cell_pair_t dom,
-  __read_only image3d_t  flag_img,
-  __global int    * ex_own_buf
-)
-{
-  dataset_t ds = make_dataset2(rct,ext,dom);
-  init(ds,ds.r,flag_img,ex_own_buf);
-}
-__kernel void propagate_minima
-( cell_pair_t rct,
-  cell_pair_t ext,
-  cell_pair_t dom,
-  __global int * own_buf1,
-  __global int * own_buf2,
-  __global int * is_updated
+//__kernel void update_to_surviving_cp_no
+//  ( cell_pair_t rct,
+//    cell_pair_t ext,
+//    cell_pair_t dom,
+//    rect_t ex_rect,
+//    __global int *ex_own_buf,
+//    __global int *surv_cp_no,
+//    int n_cps)
+//{
+//  int N = num_cells2(ex_rect);
+//  dataset_t ds = make_dataset2(rct,ext,dom);
 
-)
-{
-  dataset_t ds = make_dataset2(rct,ext,dom);
-  propagate(ds,ds.r,own_buf1,own_buf2,is_updated);
-}
-__kernel void finalize_minima
-( cell_pair_t rct,
-  cell_pair_t ext,
-  cell_pair_t dom,
-  __read_only image3d_t  flag_img,
-  __global int * own_buf1,
-  __global int * own_buf2
-)
-{
-  dataset_t ds = make_dataset2(rct,ext,dom);
-  finalize(ds,ds.r,flag_img,own_buf1,own_buf2);
-}
-
-
-
-
-__kernel void init_maxima
-( cell_pair_t rct,
-  cell_pair_t ext,
-  cell_pair_t dom,
-  __read_only image3d_t  flag_img,
-  __global int    * ex_own_buf
-)
-{
-  dataset_t ds = make_dataset2(rct,ext,dom);
-  rect_t ex_rect = make_rect(ds.r.lc+to_cell(1,1,1),ds.r.uc-to_cell(1,1,1));
-  init(ds,ex_rect,flag_img,ex_own_buf);
-}
-__kernel void propagate_maxima
-( cell_pair_t rct,
-  cell_pair_t ext,
-  cell_pair_t dom,
-  __global int * own_buf1,
-  __global int * own_buf2,
-  __global int * is_updated
-)
-{
-  dataset_t ds = make_dataset2(rct,ext,dom);
-  rect_t ex_rect = make_rect(ds.r.lc+to_cell(1,1,1),ds.r.uc-to_cell(1,1,1));
-  propagate(ds,ex_rect,own_buf1,own_buf2,is_updated);
-}
-__kernel void finalize_maxima
-( cell_pair_t rct,
-  cell_pair_t ext,
-  cell_pair_t dom,
-  __read_only image3d_t  flag_img,
-  __global int * own_buf1,
-  __global int * own_buf2
-)
-{
-  dataset_t ds = make_dataset2(rct,ext,dom);
-  rect_t ex_rect = make_rect(ds.r.lc+to_cell(1,1,1),ds.r.uc-to_cell(1,1,1));
-  finalize(ds,ex_rect,flag_img,own_buf1,own_buf2);
-}
+//  for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
+//  {
+//    int o  = ex_own_buf1[i];
+//    int oo = surv_cp_no[o];
+//    ex_own_buf2[i] = oo;
+//  }
+//}

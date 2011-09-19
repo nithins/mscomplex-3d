@@ -73,9 +73,6 @@ namespace grid
     owner_array_t      m_owner_maxima;
     owner_array_t      m_owner_minima;
 
-
-    cellid_list_t      m_critical_cells[g_num_threads];
-
     boost::function<bool (cellid_t,cellid_t)> cmp_ftor;
     boost::function<bool (cellid_t,cellid_t)> cmp_ftors[2];
 
@@ -100,11 +97,13 @@ namespace grid
 
     void  assignMaxFacets_thd(int tid,int dim);
 
-    void  pairCellsWithinEst_thd(int tid);
+    void  pairCellsWithinEst_thd(int tid,cellid_list_t * ccells);
 
-    void  setupCriticalPoint_thd(int tid, mscomplex_ptr_t msgraph, int cp_offset);
+    void  markBoundry_thd(int tid,rect_t bnd,cellid_list_t * ccells);
 
-    void  saddle_visit(mscomplex_ptr_t msgraph);
+    void  setupCPs(mscomplex_ptr_t msgraph,cellid_list_t * ccells,int offset);
+
+    void  saddle_visit(mscomplex_ptr_t msgraph,eGDIR dir);
 
     void  extrema_connect_thd(mscomplex_ptr_t msgraph,cp_producer_ptr_t p);
 
@@ -175,22 +174,24 @@ namespace grid
 
     // misc functions
   public:
+    inline cellid_t get_cell_vert(cellid_t c)
+    {
+      cellid_t v = c;
+
+      switch(getCellDim(c))
+      {
+        case 3: v = getCellMaxFacetId(v);
+        case 2: v = getCellMaxFacetId(v);
+        case 1: v = getCellMaxFacetId(v);
+      }
+      return v;
+    }
 
     inline cell_fn_t get_cell_fn(cellid_t c)
     {
-      cellid_t f[20];
-
-      uint f_ct = getCellPoints(c,f);
-
-      cell_fn_t ret = m_vert_fns(f[0]/2);
-
-      for(uint i = 1 ;i < f_ct;++i)
-      {
-        ret = std::max(ret,m_vert_fns(f[i]/2));
-      }
-
-      return ret;
+      return m_vert_fns(get_cell_vert(c)/2);
     }
+
 
     inline rect_t get_rect()
     {
@@ -213,13 +214,15 @@ namespace grid
     void log_pair_visits(std::ostream &os = std::cout);
     void log_pair_visits(const std::string &s);
 
+    void log_owner_extrema(eGDIR dir, std::ostream &os = std::cout);
+    void log_owner_extrema(eGDIR dir, const std::string &s);
 
     void log_max_facets();
 
     void extract_vdata_subarray(rect_t r,const std::string &filename);
   };
 
-  inline int dataset_t::getCellDim ( cellid_t c ) const
+  inline int get_cell_dim ( cellid_t c )
   {
     int dim = 0;
 
@@ -229,14 +232,20 @@ namespace grid
     return (dim);
   }
 
-  inline int c_to_i(cellid_t c,const rect_t &r)
+
+  inline int dataset_t::getCellDim ( cellid_t c ) const
+  {
+    return get_cell_dim(c);
+  }
+
+  inline int c_to_i(const rect_t &r,cellid_t c)
   {
     cellid_t s = r.span()+1;
     c = (c - r.lc());
     return (s[0]*s[1]*c[2] + s[0]*c[1] + c[0]);
   }
 
-  inline cellid_t i_to_c(int i,const rect_t &r)
+  inline cellid_t i_to_c(const rect_t &r,int i)
   {
     cellid_t s = r.span()+1;
     cellid_t c = r.lc() + (cellid_t(i%s[0],(i%(s[0]*s[1]))/s[0],i/(s[0]*s[1])));
@@ -244,19 +253,51 @@ namespace grid
     return c;
   }
 
-  inline int c_to_i(cellid_t c,const rect_t &r,const cellid_t &stride)
+  inline int c_to_i2(const rect_t &r,cellid_t c)
   {
-    cellid_t s = divide_ri(r.span()+1,stride);
-    c = (c - r.lc())/stride;
-    return (s[0]*s[1]*c[2] + s[0]*c[1] + c[0]);
+    int X = (r[0].span())/2 +1;
+    int Y = (r[1].span())/2 +1;
+
+    c = (c-r.lc())/2;
+
+    return (X*Y*c[2] + X*c[1] + c[0]);
   }
 
-  inline cellid_t i_to_c(int i,const rect_t &r,const cellid_t &stride)
+  inline cellid_t i_to_c2(const rect_t &r,int i)
   {
-    cellid_t s = divide_ri(r.span()+1,stride);
-    cellid_t c = r.lc() + (cellid_t(i%s[0],(i%(s[0]*s[1]))/s[0],i/(s[0]*s[1]))*stride);
-    ASSERT(r.contains(c));
-    return c;
+    int X = (r[0].span())/2 +1;
+    int Y = (r[1].span())/2 +1;
+
+    return r.lc() + cellid_t(2*(i%X),2*((i%(X*Y))/X),2*(i/(X*Y)));
+  }
+
+  inline int num_cells(const rect_t &r)
+  {
+    return c_to_i(r,r.uc()) + 1;
+  }
+
+  inline int num_cells2(const rect_t &r)
+  {
+    return c_to_i2(r,r.uc()) + 1;
+  }
+
+  inline void get_boundry_rects(const rect_t &r,const rect_t & e,rect_list_t &bnds)
+  {
+    for( int xyz_dir = 0 ; xyz_dir < 3; ++xyz_dir)
+    {
+      for( int lr_dir = 0 ; lr_dir < 2; ++lr_dir)
+      {
+        rect_t bnd = r;
+
+        if(r[xyz_dir][lr_dir] != e[xyz_dir][lr_dir])
+        {
+          bnd[xyz_dir][0] = r[xyz_dir][lr_dir];
+          bnd[xyz_dir][1] = r[xyz_dir][lr_dir];
+
+          bnds.push_back(bnd);
+        }
+      }
+    }
   }
 }
 

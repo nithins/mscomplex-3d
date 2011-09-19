@@ -60,8 +60,9 @@ namespace grid
       m_ext_rect (e),
       m_domain_rect(d),
       m_cell_flags(cellid_t::zero,boost::fortran_storage_order()),
-      m_vert_fns(cellid_t::zero,boost::fortran_storage_order())
-
+      m_vert_fns(cellid_t::zero,boost::fortran_storage_order()),
+      m_owner_maxima(cellid_t::zero,boost::fortran_storage_order()),
+      m_owner_minima(cellid_t::zero,boost::fortran_storage_order())
   {
     // TODO: assert that the given rect is of even size..
     //       since each vertex is in the even positions
@@ -107,20 +108,23 @@ namespace grid
 
     ifs.close();
 
-    cellid_t ex_span = (m_rect.span()/2);
-    m_owner_maxima.resize(ex_span);
-    m_owner_minima.resize(ex_span+1);
+    m_owner_maxima.resize(m_rect.span()/2);
+    m_owner_minima.resize((m_rect.span()/2)+1);
+
+    m_owner_maxima.reindex(m_rect.lc()/2);
+    m_owner_minima.reindex(m_rect.lc()/2);
+
 
   }
 
   void  dataset_t::clear()
   {
-    for(int i = 0 ; i < g_num_threads; ++i)
-      m_critical_cells[i].clear();
-
     m_cell_flags.resize(cellid_t::zero);
 
     m_vert_fns.resize(cellid_t::zero);
+
+    m_owner_maxima.resize(cellid_t::zero);
+    m_owner_minima.resize(cellid_t::zero);
   }
 
   inline cellid_t flag_to_mxfct(cellid_t c,cell_flag_t f)
@@ -439,7 +443,7 @@ namespace grid
 
   void dataset_t::assignMaxFacets_thd(int thid,int dim)
   {
-    cellid_t f[20],c,s(0,0,0),stride(2,2,2);
+    cellid_t f[20],c,s(0,0,0);
 
     for(int i = 0 ; i < dim; ++i)
       s[i] = 1;
@@ -448,11 +452,11 @@ namespace grid
     {
       rect_t rect  = rect_t(m_ext_rect.lc()+s,m_ext_rect.uc()-s);
 
-      int n = c_to_i(rect.uc(),rect,stride) + 1;
+      int N = num_cells2(rect);
 
-      for( int i = thid; i < n; i += g_num_threads)
+      for( int i = thid; i < N; i += g_num_threads)
       {
-        c = i_to_c(i,rect,stride);
+        c = i_to_c2(rect,i);
 
         ASSERT(getCellDim(c) == dim);
 
@@ -466,55 +470,13 @@ namespace grid
     }
   }
 
-  inline bool is_pair_crossing(dataset_const_ptr_t ds,cellid_t p, cellid_t q)
+  void  dataset_t::pairCellsWithinEst_thd(int tid, cellid_list_t *ccells)
   {
-    ASSERT(euclid_norm2(p-q) == 1);
+    int N = num_cells2(m_rect);
 
-    short pd = p[0];
-    short rl = ds->m_rect.lc()[0];
-    short ru = ds->m_rect.uc()[0];
-    short el = ds->m_ext_rect.lc()[0];
-    short eu = ds->m_ext_rect.uc()[0];
-
-    if(p[1] != q[1])
+    for(int i = tid; i < N; i += g_num_threads)
     {
-      pd = p[1];
-      rl = ds->m_rect.lc()[1];
-      ru = ds->m_rect.uc()[1];
-      el = ds->m_ext_rect.lc()[1];
-      eu = ds->m_ext_rect.uc()[1];
-    }
-
-    if(p[2] != q[2])
-    {
-      pd = p[2];
-      rl = ds->m_rect.lc()[2];
-      ru = ds->m_rect.uc()[2];
-      el = ds->m_ext_rect.lc()[2];
-      eu = ds->m_ext_rect.uc()[2];
-    }
-
-    short rt = rl;
-    short et = el;
-
-    if(rt != pd)
-    {
-      rt = ru;
-      et = eu;
-    }
-
-    return ((rt==pd)&&(rt != et));
-  }
-
-  void  dataset_t::pairCellsWithinEst_thd(int thid)
-  {
-    cellid_t stride(2,2,2);
-
-    int n = c_to_i(m_rect.uc(),m_rect,stride)+1;
-
-    for(int i = thid; i < n; i += g_num_threads)
-    {
-      cellid_t c = i_to_c(i,m_rect,stride);
+      cellid_t c = i_to_c2(m_rect,i);
 
       cellid_t est_arr[40];
 
@@ -535,23 +497,7 @@ namespace grid
 
           if(is_adj && is_same_bndry)
           {
-            if(m_rect.contains(p))
-            {
-              pairCells(p,q);
-
-              if(is_pair_crossing(shared_from_this(),p,q))
-              {
-                markCellCritical(p);
-                markCellCritical(q);
-
-                m_critical_cells[thid].push_back(p);
-
-                if(m_rect.contains(q))
-                  m_critical_cells[thid].push_back(q);
-
-              }
-            }
-
+            pairCells(p,q);
             ++j;
             continue;
           }
@@ -560,10 +506,67 @@ namespace grid
         if(m_rect.contains(p))
         {
           markCellCritical(p);
-          m_critical_cells[thid].push_back(p);
+          ccells->push_back(p);
         }
       }
     }
+  }
+
+  void  dataset_t::markBoundry_thd(int tid, rect_t bnd, cellid_list_t *ccells)
+  {
+    int N = num_cells(bnd);
+
+    cellid_t bnd_nrm = bnd.get_normal();
+
+    for(int i = tid ; i < N; i += g_num_threads)
+    {
+      cellid_t c = i_to_c(bnd,i);
+
+      if(!isCellPaired(c))
+        continue;
+
+      cellid_t p = getCellPairId(c);
+
+      if((bnd_nrm != (c-p)) && (bnd_nrm != (p-c)))
+        continue;
+
+      markCellCritical(c);
+      ccells->push_back(c);
+
+      if(!m_rect.contains(p))
+        continue;
+
+      markCellCritical(p);
+      ccells->push_back(p);
+    }
+  }
+
+  void  dataset_t::setupCPs(mscomplex_ptr_t msgraph, cellid_list_t *ccells, int offset)
+  {
+    for(int i = 0 ; i < ccells->size();++i)
+    {
+      cellid_t c = ccells->at(i);
+
+      cellid_t v = get_cell_vert(c);
+
+      msgraph->set_critpt(offset++,c,getCellDim(c),get_cell_fn(c),v);
+
+      if(!isCellPaired(c))
+        continue;
+
+      cellid_t p = getCellPairId(c);
+
+      if(isPairOrientationCorrect(c,p))
+        continue;
+
+      if(!m_rect.contains(p))
+        continue;
+
+      ASSERT(ccells->at(i-1) == p);
+
+      msgraph->pair_cps(offset-1,offset-2);
+    }
+    ccells->clear();
   }
 
   namespace dfs
@@ -810,14 +813,14 @@ namespace grid
     }
   }
 
-  void  dataset_t::saddle_visit(mscomplex_ptr_t msgraph)
+  void  dataset_t::saddle_visit(mscomplex_ptr_t msgraph,eGDIR dir)
   {
+    int idx = (dir == GDIR_DES)?(2):(1);
+
     for(int i = 0 ; i < msgraph->get_num_critpts();++i)
     {
-      if(msgraph->index(i) == 0 ||msgraph->index(i) == gc_grid_dim )
+      if(msgraph->index(i) != idx )
         continue;
-
-      eGDIR dir = (msgraph->index(i) == 2)?(GDIR_DES):(GDIR_ASC);
 
       dfs::do_dfs_mark_visit(shared_from_this(),msgraph->cellid(i),dir);
     }
@@ -834,46 +837,29 @@ namespace grid
     }
   }
 
-  void  dataset_t::setupCriticalPoint_thd(int tid, mscomplex_ptr_t msgraph, int cp_offset)
+  inline void  get_adj_extrema(cellid_t c, cellid_t & e1,cellid_t & e2,eGDIR dir)
   {
-    for(int i = 0 ; i < m_critical_cells[tid].size();++i)
-    {
-      cellid_t c = m_critical_cells[tid][i];
+    ASSERT(dir != GDIR_DES || get_cell_dim(c) == 2 );
+    ASSERT(dir != GDIR_ASC || get_cell_dim(c) == 1 );
 
-      cellid_t v = c;
+    int a = (dir == GDIR_DES)?(1):(0);
 
-      for( int j = 0 ; j < getCellDim(c);++j)
-        v=getCellMaxFacetId(v);
+    e1[0] = c[0] + ((c[0]+a)&1);
+    e1[1] = c[1] + ((c[1]+a)&1);
+    e1[2] = c[2] + ((c[2]+a)&1);
 
-      msgraph->set_critpt(cp_offset++,c,getCellDim(c),get_cell_fn(c),v);
-
-      if(!isCellPaired(c))
-        continue;
-
-      cellid_t p = getCellPairId(c);
-
-      if(isPairOrientationCorrect(c,p))
-        continue;
-
-      if(!m_rect.contains(p))
-        continue;
-
-      ASSERT(m_critical_cells[tid][i-1] == p);
-
-      msgraph->pair_cps(cp_offset-1,cp_offset-2);
-    }
+    e2[0] = c[0] - ((c[0]+a)&1);
+    e2[1] = c[1] - ((c[1]+a)&1);
+    e2[2] = c[2] - ((c[2]+a)&1);
   }
 
   void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
+
 #ifdef BUILD_EXEC_OPENCL
-
     opencl::worker w;
-
     w.assign_gradient(shared_from_this(),msgraph);
-    w.owner_extrema(shared_from_this());
 #else
-
     for(int dim = 1 ; dim <= gc_grid_dim; ++dim)
     {
       boost::thread_group group;
@@ -884,48 +870,99 @@ namespace grid
       group.join_all();
     }
 
+    cellid_list_t ccells[g_num_threads];
+
     {
       boost::thread_group group;
 
       for(int tid = 0 ; tid < g_num_threads; ++tid)
-        group.create_thread(bind(&dataset_t::pairCellsWithinEst_thd,this,tid));
+        group.create_thread(bind(&dataset_t::pairCellsWithinEst_thd,this,tid,ccells+tid));
 
       group.join_all();
     }
+    {
+      rect_list_t bnds;
+
+      get_boundry_rects(m_rect,m_ext_rect,bnds);
+
+      for( int i = 0 ; i < bnds.size() ; ++i)
+      {
+        boost::thread_group group;
+
+        for(int tid = 0 ; tid < g_num_threads; ++tid)
+          group.create_thread(bind(&dataset_t::markBoundry_thd,this,tid,bnds[i],ccells+tid));
+
+        group.join_all();
+      }
+    }
 
     {
-      int cp_offset[g_num_threads+1];
+      int offset[g_num_threads+1];
 
-      cp_offset[0] = 0;
+      offset[0] = 0;
 
       for(int tid = 0 ; tid < g_num_threads; ++tid)
-        cp_offset[tid + 1] = cp_offset[tid] + m_critical_cells[tid].size();
+        offset[tid + 1] = offset[tid] + ccells[tid].size();
 
-      msgraph->resize(cp_offset[g_num_threads]);
+      msgraph->resize(offset[g_num_threads]);
 
       boost::thread_group group;
 
       for(int tid = 0 ; tid < g_num_threads; ++tid)
-        group.create_thread(bind(&dataset_t::setupCriticalPoint_thd,this,tid,msgraph,cp_offset[tid]));
+        group.create_thread(bind(&dataset_t::setupCPs,this,msgraph,ccells+tid,offset[tid]));
 
       group.join_all();
     }
-
 #endif
 
     msgraph->build_id_cp_map();
 
     {
-      boost::thread_group group;
+      boost::thread_group saddle_group;
 
-      cp_producer_ptr_t prd(new cp_producer_t(msgraph,cp_producer_t::extrema_filter));
+      saddle_group.create_thread(bind(&dataset_t::saddle_visit,this,msgraph,GDIR_DES));
+      saddle_group.create_thread(bind(&dataset_t::saddle_visit,this,msgraph,GDIR_ASC));
 
-      for(int tid = 0 ; tid < g_num_threads-1; ++tid)
-        group.create_thread(bind(&dataset_t::extrema_connect_thd,this,msgraph,prd));
+#ifdef BUILD_EXEC_OPENCL
+      w.owner_extrema(shared_from_this(),msgraph);
 
-      saddle_visit(msgraph);
+      {
+        for(int i = 0 ; i < msgraph->get_num_critpts();++i)
+        {
+          if((msgraph->index(i) != 1) && (msgraph->index(i) != 2))
+            continue;
 
-      group.join_all();
+          cellid_t c            = msgraph->cellid(i);
+          eGDIR dir             = (msgraph->index(i) == 2)?(GDIR_DES):(GDIR_ASC);
+          int   dim             = (dir == GDIR_DES)?(3):(0);
+          owner_array_t &ex_own = (dir == GDIR_DES)?(m_owner_maxima):(m_owner_minima);
+
+          if(isCellPaired(c) && getCellDim(getCellPairId(c)) != dim )
+            continue;
+
+          cellid_t e1,e2;
+          get_adj_extrema(c,e1,e2,dir);
+
+          if(m_rect.contains(e1))
+            msgraph->connect_cps(i,ex_own(e1/2));
+
+          if(m_rect.contains(e2))
+            msgraph->connect_cps(i,ex_own(e2/2));
+        }
+      }
+#else
+      {
+        boost::thread_group group;
+
+        cp_producer_ptr_t prd(new cp_producer_t(msgraph,cp_producer_t::extrema_filter));
+
+        for(int tid = 0 ; tid < g_num_threads-2; ++tid)
+          group.create_thread(bind(&dataset_t::extrema_connect_thd,this,msgraph,prd));
+
+        group.join_all();
+      }
+#endif
+      saddle_group.join_all();
     }
 
     {
@@ -1276,6 +1313,47 @@ namespace grid
       }
     }
   }
+
+  void dataset_t::log_owner_extrema(eGDIR dir, std::ostream &os)
+  {
+    static_assert(gc_grid_dim == 3 && "defined for 3-manifolds only");
+
+    rect_t ex_rect               = (dir == GDIR_DES)?(rect_t(m_rect.lc()+1,m_rect.uc()-1)):(m_rect);
+    owner_array_t &owner_extrema = (dir == GDIR_DES)?(m_owner_maxima):(m_owner_minima);
+
+    int X = ex_rect[0].span()/2+1;
+    int Y = ex_rect[1].span()/2+1;
+    int N = num_cells2(ex_rect);
+
+    for( int i = 0 ; i < N; ++i)
+    {
+      cellid_t c = i_to_c2(ex_rect,i);
+
+      os<<owner_extrema(c/2)<<" ";
+
+      if((i+1)%X == 0)
+      {
+        os<<endl;
+
+        if(((i/X)+1)%Y == 0)
+          os<<endl;
+      }
+    }
+
+//    for(c[2] = ex_rect[2][0] ; c[2] <= ex_rect[2][1]; c[2]+=2)
+//    {
+//      os<<"sheet no:: "<<c[2]<<std::endl;
+//      for(c[1] = ex_rect[1][0] ; c[1] <= ex_rect[1][1]; c[1]+=2)
+//      {
+//        for(c[0] = ex_rect[0][0] ; c[0] <= ex_rect[0][1]; c[0]+=2)
+//        {
+//          os<<m_owner_extrema[dir](c/2)<<" ";
+//        }
+//        os<<std::endl;
+//      }
+//    }
+  }
+
 
   void dataset_t::log_pairs(const std::string &s)
   {

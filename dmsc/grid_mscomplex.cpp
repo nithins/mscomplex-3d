@@ -103,23 +103,40 @@ namespace grid
 
   void mscomplex_t::connect_cps(int p, int q)
   {
-    order_pr_by_cp_index(*this,p,q);
+    try
+    {
+      order_pr_by_cp_index(*this,p,q);
 
-    ASSERT(index(p) == index(q)+1);
+      ASSERT(index(p) == index(q)+1);
 
-    // if a d-cp hits a d+-1 cp and the d+-1 cp is paired
-    // then the connection is useful iff the dimension of the pair is d
+      // if a d-cp hits a d+-1 cp and the d+-1 cp is paired
+      // then the connection is useful iff the dimension of the pair is d
 
-    ASSERT(!(is_paired(p) && index(pair_idx(p))!= index(q)));
-    ASSERT(!(is_paired(q) && index(pair_idx(q))!= index(p)));
-    ASSERT(m_des_conn[p].count(q) == m_asc_conn[q].count(p));
+      ASSERT(!(is_paired(p) && index(pair_idx(p))!= index(q)));
+      ASSERT(!(is_paired(q) && index(pair_idx(q))!= index(p)));
+      ASSERT(m_des_conn[p].count(q) == m_asc_conn[q].count(p));
 
-    if(m_des_conn[p].count(q) == 2)
-      return;
+      if(m_des_conn[p].count(q) == 2)
+        return;
 
-    m_des_conn[p].insert(q);
-    m_asc_conn[q].insert(p);
+      m_des_conn[p].insert(q);
+      m_asc_conn[q].insert(p);
+    }
+    catch(assertion_error e)
+    {
+      e.push(_FFL);
 
+      e.push(SVAR(cp_info(p)));
+      if(is_paired(p))
+        e.push(SVAR(cp_info(pair_idx(p))));
+
+      e.push(SVAR(cp_info(q)));
+      if(is_paired(q))
+        e.push(SVAR(cp_info(pair_idx(q))));
+
+
+      throw;
+    }
   }
 
   void mscomplex_t::dir_connect_cps(cellid_t c1,cellid_t c2)
@@ -181,45 +198,48 @@ namespace grid
       ASSERT(is_canceled(q) == false);
       ASSERT(m_des_conn[p].count(q) == 1);
       ASSERT(m_asc_conn[q].count(p) == 1);
+
+      conn_iter_t i,j;
+
+      m_des_conn[p].erase(q);
+      m_asc_conn[q].erase(p);
+
+      // cps in lower of u except l
+      for(i = m_des_conn[p].begin();i != m_des_conn[p].end();++i)
+        for(j = m_asc_conn[q].begin();j != m_asc_conn[q].end();++j)
+        {
+          ASSERT(is_canceled(*i) == false);
+          ASSERT(is_canceled(*j) == false);
+
+          connect_cps(*i,*j);
+        }
+
+      for(j = m_des_conn[p].begin();j != m_des_conn[p].end();++j)
+        m_asc_conn[*j].erase(p);
+
+      for(j = m_asc_conn[p].begin();j != m_asc_conn[p].end();++j)
+        m_des_conn[*j].erase(p);
+
+      for(j = m_des_conn[q].begin();j != m_des_conn[q].end();++j)
+        m_asc_conn[*j].erase(q);
+
+      for(j = m_asc_conn[q].begin();j != m_asc_conn[q].end();++j)
+        m_des_conn[*j].erase(q);
+
+      set_is_canceled(p,true);
+      set_is_canceled(q,true);
+
+      m_asc_conn[p].clear();
+      m_des_conn[q].clear();
     }
     catch (assertion_error ex)
     {
       ex.push(_FFL).push(SVAR(cp_info(p))).push(SVAR(cp_info(q)));
+      ex.PUSHVAR(m_des_conn[p].count(q));
+      ex.PUSHVAR(m_asc_conn[q].count(p));
       throw;
     }
 
-    conn_iter_t i,j;
-
-    m_des_conn[p].erase(q);
-    m_asc_conn[q].erase(p);
-
-    // cps in lower of u except l
-    for(i = m_des_conn[p].begin();i != m_des_conn[p].end();++i)
-      for(j = m_asc_conn[q].begin();j != m_asc_conn[q].end();++j)
-      {
-        ASSERT(is_canceled(*i) == false);
-        ASSERT(is_canceled(*j) == false);
-
-        connect_cps(*i,*j);
-      }
-
-    for(j = m_des_conn[p].begin();j != m_des_conn[p].end();++j)
-      m_asc_conn[*j].erase(p);
-
-    for(j = m_asc_conn[p].begin();j != m_asc_conn[p].end();++j)
-      m_des_conn[*j].erase(p);
-
-    for(j = m_des_conn[q].begin();j != m_des_conn[q].end();++j)
-      m_asc_conn[*j].erase(q);
-
-    for(j = m_asc_conn[q].begin();j != m_asc_conn[q].end();++j)
-      m_des_conn[*j].erase(q);
-
-    set_is_canceled(p,true);
-    set_is_canceled(q,true);
-
-    m_asc_conn[p].clear();
-    m_des_conn[q].clear();
   }
 
   void mscomplex_t::uncancel_pair(int p, int q)
