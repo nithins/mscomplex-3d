@@ -25,8 +25,11 @@ cl::KernelFunctor s_assign_pairs;
 
 cl::KernelFunctor s_mark_cps;
 cl::KernelFunctor s_mark_boundry_cps;
+cl::KernelFunctor s_count_cps;
+cl::KernelFunctor s_count_boundry_cps;
 cl::KernelFunctor s_save_boundry_cps;
 cl::KernelFunctor s_save_cps;
+
 cl::KernelFunctor s_scan_local_sums;
 cl::KernelFunctor s_scan_group_sums;
 cl::KernelFunctor s_scan_update_sums;
@@ -114,8 +117,6 @@ namespace grid
       return rect_t(from_cell(r.lo),from_cell(r.hi));
     }
 
-
-
     inline cell_t to_cell(int x , int y , int z)
     {
       cell_t a;
@@ -145,6 +146,22 @@ namespace grid
       a[2] = z;
 
       return a;
+    }
+
+    inline cl::size_t<3> get_size(const cell_pair_t &p)
+    {
+      cl::size_t<3> s;
+
+      s[0] = p.hi.x -p.lo.x +1;
+      s[1] = p.hi.y -p.lo.y +1;
+      s[2] = p.hi.z -p.lo.z +1;
+
+      return s;
+    }
+
+    inline int num_cells(const cell_pair_t &p)
+    {
+      return grid::num_cells(from_cell_pair(p));
     }
 
     template<typename T>
@@ -256,10 +273,16 @@ namespace grid
         s_mark_cps = cl::Kernel(program2, "mark_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
+        s_count_cps = cl::Kernel(program2, "count_cps").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
         s_save_cps = cl::Kernel(program2, "save_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
         s_mark_boundry_cps = cl::Kernel(program2, "mark_boundry_cps").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+
+        s_count_boundry_cps = cl::Kernel(program2, "count_boundry_cps").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
         s_save_boundry_cps = cl::Kernel(program2, "save_boundry_cps").
@@ -327,24 +350,18 @@ namespace grid
     }
 
     void __assign_gradient
-      ( rect_t rect,
-        rect_t ext_rect,
-        rect_t domain_rect,
+      ( cell_pair_t rct,
+        cell_pair_t ext,
+        cell_pair_t dom,
         cl::Image3D &func_img,
         cl::Image3D &flag_img,
-        cl::Buffer  &cp_offset_buf,
-        int &num_cps,
         cell_fn_t   *h_func,
         cell_flag_t *h_flag)
     {
-      cell_pair_t rct = to_cell_pair(rect);
-      cell_pair_t ext = to_cell_pair(ext_rect);
-      cell_pair_t dom = to_cell_pair(domain_rect);
+      cl::size_t<3> func_size = to_size(from_cell_pair(ext).span()/2+ 1);
+      cl::size_t<3> flag_size = get_size(ext);
 
-      cl::size_t<3> func_size = to_size(ext_rect.span()/2+ 1);
-      cl::size_t<3> flag_size = to_size(ext_rect.span()  + 1);
-
-      int flag_size_bytes = flag_size[0]*flag_size[1]*flag_size[2]*sizeof(cell_flag_t);
+      int cell_ct = num_cells(ext);
 
       try
       {
@@ -356,7 +373,7 @@ namespace grid
                                cl::ImageFormat(CL_R,CL_UNSIGNED_INT8),
                                flag_size[0],flag_size[1],flag_size[2],0,0);
 
-        cl::Buffer   flag_buf(s_context,CL_MEM_READ_WRITE,flag_size_bytes);
+        cl::Buffer flag_buf(s_context,CL_MEM_READ_WRITE,cell_ct*sizeof(cell_flag_t));
 
         s_assign_max_facet_edge
             (func_img,flag_img,rct.lo,rct.hi,ext.lo,ext.hi,dom.lo,dom.hi,flag_buf);
@@ -386,33 +403,22 @@ namespace grid
             (func_img,flag_img,rct.lo,rct.hi,ext.lo,ext.hi,dom.lo,dom.hi,flag_buf);
         s_queue.finish();
 
-        cp_offset_buf = cl::Buffer(s_context,CL_MEM_READ_WRITE,sizeof(int)*WG_SIZE);
-        cl::Buffer group_sums_buf(s_context,CL_MEM_READ_WRITE,sizeof(int)*(WG_NUM));
-
-        s_mark_cps(rct,ext,dom,flag_buf,cp_offset_buf);
+        s_mark_cps(rct,ext,dom,flag_buf);
 
         rect_list_t bnds;
 
-        get_boundry_rects(rect,ext_rect,bnds);
+        get_boundry_rects(from_cell_pair(rct),from_cell_pair(ext),bnds);
 
         for( int i = 0 ; i < bnds.size(); ++i)
         {
-          s_mark_boundry_cps(rct,ext,dom,to_cell_pair(bnds[i]),
-                             to_cell(bnds[i].get_normal()),
-                             flag_buf,cp_offset_buf);
+          cell_pair_t bnd = to_cell_pair(bnds[i]);
+          cell_t  bnd_dir = to_cell(bnds[i].get_normal());
+
+          s_mark_boundry_cps(rct,ext,dom,bnd,bnd_dir,flag_buf);
         }
 
-        s_scan_local_sums(cp_offset_buf,group_sums_buf);
-        s_scan_group_sums(group_sums_buf);
-        s_scan_update_sums(cp_offset_buf,group_sums_buf);
-        s_queue.finish();
-
-        s_queue.enqueueCopyBufferToImage
-            (flag_buf,flag_img,0,to_size(0,0,0),flag_size);
-        s_queue.enqueueReadBuffer(flag_buf,false,0,flag_size_bytes,h_flag);
-        s_queue.enqueueReadBuffer(group_sums_buf,false,sizeof(int)*(WG_NUM-1),sizeof(int),&num_cps);
-
-        s_queue.finish();
+        s_queue.enqueueCopyBufferToImage(flag_buf,flag_img,0,to_size(0,0,0),flag_size);
+        s_queue.enqueueReadBuffer(flag_buf,false,0,cell_ct*sizeof(cell_flag_t),h_flag);
       }
       catch(cl::Error err)
       {
@@ -422,24 +428,63 @@ namespace grid
       }
     }
 
-    void __save_to_msgraph
-      (rect_t rect,
-       rect_t ext_rect,
-       rect_t domain_rect,
-       cl::Image3D &func_img,
-       cl::Image3D &flag_img,
-       cl::Buffer  &cp_offset_buf,
-       int num_cps,
-       cellid_t   *h_cellid,
-       cellid_t   *h_vertid,
-       int        *h_pair_idx,
-       char       *h_index,
-       cell_fn_t  *h_func)
+    void __count_and_scan_cps
+    ( cell_pair_t rct,
+      cell_pair_t ext,
+      cell_pair_t dom,
+      cl::Image3D &flag_img,
+      cl::Buffer  &cp_count_buf,
+      int &num_cps)
     {
-      cell_pair_t rct = to_cell_pair(rect);
-      cell_pair_t ext = to_cell_pair(ext_rect);
-      cell_pair_t dom = to_cell_pair(domain_rect);
+      try
+      {
+        cp_count_buf = cl::Buffer(s_context,CL_MEM_READ_WRITE,sizeof(int)*WG_SIZE);
+        cl::Buffer group_sums_buf(s_context,CL_MEM_READ_WRITE,sizeof(int)*(WG_NUM));
 
+        s_count_cps(rct,ext,dom,flag_img,cp_count_buf);
+
+        rect_list_t bnds;
+
+        get_boundry_rects(from_cell_pair(rct),from_cell_pair(ext),bnds);
+
+        for( int i = 0 ; i < bnds.size(); ++i)
+        {
+          cell_pair_t bnd = to_cell_pair(bnds[i]);
+          cell_t  bnd_dir = to_cell(bnds[i].get_normal());
+
+          s_count_boundry_cps(rct,ext,dom,bnd,bnd_dir,flag_img,cp_count_buf);
+        }
+
+        s_scan_local_sums(cp_count_buf,group_sums_buf);
+        s_scan_group_sums(group_sums_buf);
+        s_scan_update_sums(cp_count_buf,group_sums_buf);
+        s_queue.finish();
+        s_queue.enqueueReadBuffer(group_sums_buf,false,sizeof(int)*(WG_NUM-1),sizeof(int),&num_cps);
+        s_queue.finish();
+
+      }
+      catch(cl::Error err)
+      {
+        std::cerr<<_FFL<<std::endl;
+        std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
+        throw;
+      }
+    }
+
+    void __save_cps
+      ( cell_pair_t rct,
+        cell_pair_t ext,
+        cell_pair_t dom,
+        cl::Image3D &func_img,
+        cl::Image3D &flag_img,
+        cl::Buffer  &cp_offset_buf,
+        int num_cps,
+        cellid_t   *h_cellid,
+        cellid_t   *h_vertid,
+        int        *h_pair_idx,
+        char       *h_index,
+        cell_fn_t  *h_func)
+    {
       try
       {
         cl::Buffer cp_cellid_buf(s_context,CL_MEM_READ_WRITE,sizeof(cellid_t)*num_cps);
@@ -448,17 +493,20 @@ namespace grid
         cl::Buffer cp_index_buf(s_context,CL_MEM_READ_WRITE,sizeof(char)*num_cps);
         cl::Buffer cp_func_buf(s_context,CL_MEM_READ_WRITE,sizeof(cell_fn_t)*num_cps);
 
-        s_save_cps(func_img,flag_img,rct,ext,dom,cp_offset_buf,cp_cellid_buf,
+        s_save_cps(rct,ext,dom,func_img,flag_img,cp_offset_buf,cp_cellid_buf,
                    cp_index_buf,cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
 
         rect_list_t bnds;
 
-        get_boundry_rects(rect,ext_rect,bnds);
+        get_boundry_rects(from_cell_pair(rct),from_cell_pair(ext),bnds);
 
         for( int i = 0 ; i < bnds.size(); ++i)
         {
-          s_save_boundry_cps(func_img,flag_img,rct,ext,dom,
-                             to_cell_pair(bnds[i]),to_cell(bnds[i].get_normal()),
+          cell_pair_t bnd = to_cell_pair(bnds[i]);
+          cell_t  bnd_dir = to_cell(bnds[i].get_normal());
+
+
+          s_save_boundry_cps(rct,ext,dom,bnd,bnd_dir,func_img,flag_img,
                              cp_offset_buf,cp_cellid_buf,cp_index_buf,
                              cp_pair_idx_buf,cp_vertid_buf,cp_func_buf);
         }
@@ -481,23 +529,40 @@ namespace grid
       }
     }
 
+    void worker::assign_gradient(dataset_ptr_t ds)
+    {
+      cl::Image3D  func_img;
+      cell_pair_t rct = to_cell_pair(ds->m_rect);
+      cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
+      cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
+
+      __assign_gradient(rct,ext,dom,func_img,flag_img,
+                        ds->m_vert_fns.data(),ds->m_cell_flags.data());
+    }
+
+
     void worker::assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc)
     {
-      cl::Buffer cp_offset_buf;
       cl::Image3D  func_img;
+      cell_pair_t rct = to_cell_pair(ds->m_rect);
+      cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
+      cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
+
+      __assign_gradient(rct,ext,dom,func_img,flag_img,
+                        ds->m_vert_fns.data(),ds->m_cell_flags.data());
+
+
+      cl::Buffer cp_offset_buf;
       int          num_cps;
 
-      __assign_gradient(ds->m_rect,ds->m_ext_rect,ds->m_domain_rect,
-                        func_img,flag_img,cp_offset_buf,num_cps,
-                        ds->m_vert_fns.data(),ds->m_cell_flags.data());
+      __count_and_scan_cps(rct,ext,dom,flag_img,cp_offset_buf,num_cps);
 
       msc->resize(num_cps);
 
-      __save_to_msgraph(ds->m_rect,ds->m_ext_rect,ds->m_domain_rect,
-                        func_img,flag_img,cp_offset_buf,num_cps,
-                        msc->m_cp_cellid.data(),msc->m_cp_vertid.data(),
-                        msc->m_cp_pair_idx.data(),msc->m_cp_index.data(),
-                        msc->m_cp_fn.data());
+      __save_cps(rct,ext,dom,func_img,flag_img,cp_offset_buf,num_cps,
+                 msc->m_cp_cellid.data(),msc->m_cp_vertid.data(),
+                 msc->m_cp_pair_idx.data(),msc->m_cp_index.data(),
+                 msc->m_cp_fn.data());
     }
 
     void __owner_extrema

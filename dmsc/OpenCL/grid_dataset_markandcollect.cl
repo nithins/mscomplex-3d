@@ -78,16 +78,12 @@ __kernel void mark_cps
   cell_pair_t rct,
   cell_pair_t ext,
   cell_pair_t dom,
-  __global flag_t   * flag_buf,
-  __global int      * cp_count_buf
-
+  __global flag_t   * flag_buf
 )
 {
   dataset_t ds = make_dataset2(rct,ext,dom);
 
   int N = num_cells(ds.r);
-
-  int n_cp = 0;
 
   for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
   {
@@ -99,11 +95,7 @@ __kernel void mark_cps
       continue;
 
     flag_buf[c_to_i(ds.e,c)] |= CELLFLAG_CRITICAL;
-    n_cp++;
-
   }
-
-  cp_count_buf[get_global_id(0)] = n_cp;
 }
 
 __kernel void mark_boundry_cps
@@ -113,15 +105,12 @@ __kernel void mark_boundry_cps
   cell_pair_t dom,
   cell_pair_t bnd_,
   cell_t      bnd_dir,
-  __global flag_t   * flag_buf,
-  __global int      * cp_count_buf
+  __global flag_t   * flag_buf
 )
 {
   dataset_t ds = make_dataset2(rct,ext,dom);
   rect_t  bnd  = make_rect2(bnd_);
   int N        = num_cells(bnd);
-
-  int n_cp = cp_count_buf[get_global_id(0)];
 
   for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
   {
@@ -139,6 +128,71 @@ __kernel void mark_boundry_cps
 
     flag_buf[c_to_i(ds.e,c)] = fg|CELLFLAG_CRITICAL;
     flag_buf[c_to_i(ds.e,p)] = pair_to_flag(p,c)|mxfct_to_flag(p,c)|CELLFLAG_CRITICAL;
+
+    if(!contains(ds.r,p))
+      continue;
+  }
+}
+
+__kernel void count_cps
+( cell_pair_t rct,
+  cell_pair_t ext,
+  cell_pair_t dom,
+  __read_only image3d_t  flag_img,
+  __global int          *cp_count_buf
+)
+{
+  dataset_t ds = make_dataset2(rct,ext,dom);
+
+  int N = num_cells(ds.r);
+
+  int n_cp = 0;
+
+  for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
+  {
+    cell_t c = i_to_c(ds.r,i);
+
+    flag_t fg = read_imageui(flag_img, flag_sampler, to_int4(c-ds.e.lc)).x;
+
+    if(is_paired(fg))
+      continue;
+
+    n_cp++;
+  }
+
+  cp_count_buf[get_global_id(0)] = n_cp;
+}
+
+__kernel void count_boundry_cps
+(
+  cell_pair_t rct,
+  cell_pair_t ext,
+  cell_pair_t dom,
+  cell_pair_t bnd_,
+  cell_t      bnd_dir,
+  __read_only image3d_t  flag_img,
+  __global int    * cp_count_buf
+)
+{
+  dataset_t ds = make_dataset2(rct,ext,dom);
+  rect_t  bnd  = make_rect2(bnd_);
+  int N        = num_cells(bnd);
+
+  int n_cp = cp_count_buf[get_global_id(0)];
+
+  for( int i = get_global_id(0) ; i < N; i += get_global_size(0))
+  {
+    cell_t c = i_to_c(bnd,i);
+
+    flag_t fg = read_imageui(flag_img, flag_sampler, to_int4(c-ds.e.lc)).x;
+
+    if(!is_paired(fg))
+      continue;
+
+    cell_t p = flag_to_pair(c,fg);
+
+    if( (!is_same_cell(p+bnd_dir,c)) && (!is_same_cell(c+bnd_dir,p)))
+      continue;
 
     n_cp ++;
 
@@ -166,11 +220,11 @@ inline cell_t get_max_vert(const cell_t c, const dataset_t ds, __read_only image
 
 __kernel void save_cps
 (
-  __read_only image3d_t  func_img,
-  __read_only image3d_t  flag_img,
   cell_pair_t rct,
   cell_pair_t ext,
   cell_pair_t dom,
+  __read_only image3d_t  func_img,
+  __read_only image3d_t  flag_img,
   __global int    * cp_offset_buf,
   __global short  * cp_cellid_buf,
   __global char   * cp_index_buf,
@@ -217,13 +271,13 @@ __kernel void save_cps
 
 __kernel void save_boundry_cps
 (
-  __read_only image3d_t  func_img,
-  __read_only image3d_t  flag_img,
   cell_pair_t rct,
   cell_pair_t ext,
   cell_pair_t dom,
   cell_pair_t bnd_,
   cell_t      bnd_dir,
+  __read_only image3d_t  func_img,
+  __read_only image3d_t  flag_img,
   __global int    * cp_offset_buf,
   __global short  * cp_cellid_buf,
   __global char   * cp_index_buf,
