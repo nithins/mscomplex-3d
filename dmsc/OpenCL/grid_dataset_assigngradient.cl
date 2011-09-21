@@ -275,6 +275,9 @@ inline bool is_pairable
   if(!contains(ds.e,q))
     return false;
 
+  if(is_boundry(ds.d,p) != is_boundry(ds.d,q))
+    return false;
+
   flag_t fg = read_imageui(flag_img, flag_sampler, to_int4(q-ds.e.lc)).x;
   return (is_same_cell(flag_to_mxfct(q,fg),p));
 }

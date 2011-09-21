@@ -782,7 +782,7 @@ namespace grid
         m_conn[dir^1][*j].insert(i);
       }
 
-      m_conn[dir][i].clear();
+//      m_conn[dir][i].clear();
     }
   }
 

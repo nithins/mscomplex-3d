@@ -58,6 +58,7 @@ namespace grid
     typedef boost::multi_array<cell_flag_t,gc_grid_dim>     cellflag_array_t;
     typedef boost::multi_array<cell_fn_t,gc_grid_dim>       varray_t;
     typedef boost::multi_array<int,gc_grid_dim>             owner_array_t;
+    typedef cellid_list_t                                   mfold_t;
 
 
   public:
@@ -109,9 +110,9 @@ namespace grid
 
     void  saddle_connect_thd(mscomplex_ptr_t msgraph,cp_producer_ptr_t p);
 
-    template<typename mfold_t>
     void  get_mfold(mfold_t * mfold,mscomplex_const_ptr_t msc,int i,int dir) const;
 
+    void  mark_extrema_owner_thd(mscomplex_ptr_t msgraph,cp_producer_ptr_t p);
   // dataset interface
   public:
 
@@ -299,6 +300,23 @@ namespace grid
       }
     }
   }
+
+  inline void  get_adj_extrema(cellid_t c, cellid_t & e1,cellid_t & e2,eGDIR dir)
+  {
+    ASSERT(dir != GDIR_DES || get_cell_dim(c) == 2 );
+    ASSERT(dir != GDIR_ASC || get_cell_dim(c) == 1 );
+
+    int a = (dir == GDIR_DES)?(1):(0);
+
+    e1[0] = c[0] + ((c[0]+a)&1);
+    e1[1] = c[1] + ((c[1]+a)&1);
+    e1[2] = c[2] + ((c[2]+a)&1);
+
+    e2[0] = c[0] - ((c[0]+a)&1);
+    e2[1] = c[1] - ((c[1]+a)&1);
+    e2[2] = c[2] - ((c[2]+a)&1);
+  }
+
 }
 
 //namespace boost

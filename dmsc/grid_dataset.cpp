@@ -837,22 +837,6 @@ namespace grid
     }
   }
 
-  inline void  get_adj_extrema(cellid_t c, cellid_t & e1,cellid_t & e2,eGDIR dir)
-  {
-    ASSERT(dir != GDIR_DES || get_cell_dim(c) == 2 );
-    ASSERT(dir != GDIR_ASC || get_cell_dim(c) == 1 );
-
-    int a = (dir == GDIR_DES)?(1):(0);
-
-    e1[0] = c[0] + ((c[0]+a)&1);
-    e1[1] = c[1] + ((c[1]+a)&1);
-    e1[2] = c[2] + ((c[2]+a)&1);
-
-    e2[0] = c[0] - ((c[0]+a)&1);
-    e2[1] = c[1] - ((c[1]+a)&1);
-    e2[2] = c[2] - ((c[2]+a)&1);
-  }
-
   void  dataset_t::computeMsGraph(mscomplex_ptr_t msgraph)
   {
 
@@ -925,31 +909,6 @@ namespace grid
 
 #ifdef BUILD_EXEC_OPENCL
       w.owner_extrema(shared_from_this(),msgraph);
-
-      {
-        for(int i = 0 ; i < msgraph->get_num_critpts();++i)
-        {
-          if((msgraph->index(i) != 1) && (msgraph->index(i) != 2))
-            continue;
-
-          cellid_t c            = msgraph->cellid(i);
-          eGDIR dir             = (msgraph->index(i) == 2)?(GDIR_DES):(GDIR_ASC);
-          int   dim             = (dir == GDIR_DES)?(3):(0);
-          owner_array_t &ex_own = (dir == GDIR_DES)?(m_owner_maxima):(m_owner_minima);
-
-          if(isCellPaired(c) && getCellDim(getCellPairId(c)) != dim )
-            continue;
-
-          cellid_t e1,e2;
-          get_adj_extrema(c,e1,e2,dir);
-
-          if(m_rect.contains(e1))
-            msgraph->connect_cps(i,ex_own(e1/2));
-
-          if(m_rect.contains(e2))
-            msgraph->connect_cps(i,ex_own(e2/2));
-        }
-      }
 #else
       {
         boost::thread_group group;
@@ -977,7 +936,6 @@ namespace grid
     }
   }
 
-  template<typename mfold_t>
   void  dataset_t::get_mfold
       (mfold_t *mfold, mscomplex_const_ptr_t msc, int i, int dir) const
   {
@@ -1006,6 +964,35 @@ namespace grid
       e.push(SVAR(m_ext_rect));
 
       throw;
+    }
+  }
+
+  namespace dfs
+  {
+    void mark_owner_extrema(cellid_t c, const stack_t &,dataset_t::owner_array_t * own_arr,int i)
+    {
+      (*own_arr)(c/2) = i;
+    }
+
+    void do_dfs_mark_owner_extrema
+        (dataset_ptr_t ds,cellid_t c,int i)
+    {
+
+      ASSERT(get_cell_dim(c) == 0 || get_cell_dim(c) == 3);
+
+      eGDIR dir = (get_cell_dim(c) == 3)?(GDIR_DES):(GDIR_ASC);
+
+      dataset_t::owner_array_t *own_arr = (dir == GDIR_DES)?(&ds->m_owner_maxima):(&ds->m_owner_minima);
+
+      do_dfs(ds,c,dir,pass_can_visit,bind(mark_owner_extrema,_1,_2,own_arr,i),pass_visit);
+    }
+  }
+
+  void  dataset_t::mark_extrema_owner_thd(mscomplex_ptr_t msc,cp_producer_ptr_t p)
+  {
+    for ( int i ; p->next(i);++i)
+    {
+      dfs::do_dfs_mark_owner_extrema(shared_from_this(),msc->cellid(i),msc->surv_extrema(i));
     }
   }
 
@@ -1043,7 +1030,7 @@ namespace grid
 
   namespace save_mfolds
   {
-    typedef cellid_list_t                                     mfold_t;
+    typedef dataset_t::mfold_t                                mfold_t;
     typedef boost::shared_ptr<mfold_t>                        mfold_ptr_t;
     typedef boost::tuples::tuple<int,mfold_ptr_t,mfold_ptr_t> cp_no_mfolds_t;
     typedef producer_consumer_t<cp_no_mfolds_t>               mfolds_queue_t;
@@ -1062,8 +1049,8 @@ namespace grid
         mfold_ptr_t des_mfold(new mfold_t);
         mfold_ptr_t asc_mfold(new mfold_t);
 
-        ds->get_mfold<mfold_t>(des_mfold.get(),msc,i,GDIR_DES);
-        ds->get_mfold<mfold_t>(asc_mfold.get(),msc,i,GDIR_ASC);
+        ds->get_mfold(des_mfold.get(),msc,i,GDIR_DES);
+        ds->get_mfold(asc_mfold.get(),msc,i,GDIR_ASC);
 
         mque->put(make_tuple(i,des_mfold,asc_mfold));
       }
@@ -1135,12 +1122,12 @@ namespace grid
     }
 
 
-    void save(std::ostream & os,
+    void save_saddles(std::ostream & os,
               dataset_const_ptr_t ds,
               mscomplex_const_ptr_t msc)
     {
       cp_producer_ptr_t prd
-          (new cp_producer_t(msc,cp_producer_t::unpaired_cp_filter));
+          (new cp_producer_t(msc,cp_producer_t::unpaired_saddle_filter));
 
       int num_cps = prd->count();
 
@@ -1165,7 +1152,7 @@ namespace grid
   {
     std::ofstream fs(s.c_str());
     ensure(fs.is_open(),"unable to open file");
-    save_mfolds::save(fs,shared_from_this(),msc);
+    save_mfolds::save_saddles(fs,shared_from_this(),msc);
     fs.close();
   }
 

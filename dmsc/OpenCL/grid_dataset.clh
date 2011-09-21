@@ -133,8 +133,8 @@ inline int c_to_i2(const rect_t r, const cell_t c)
 
 inline cell_t i_to_c2(const rect_t r, const int i)
 {
-  const short X = (r.uc.x - r.lc.x)/2 +1;
-  const short Y = (r.uc.y - r.lc.y)/2 +1;
+  const int X = (r.uc.x - r.lc.x)/2 +1;
+  const int Y = (r.uc.y - r.lc.y)/2 +1;
 
   return to_cell(r.lc.x + 2*(i%X),r.lc.y + 2*((i%(X*Y))/X),r.lc.z + 2*(i/(X*Y)));
 }
@@ -235,6 +235,11 @@ inline int boundryCount(const rect_t r,const cell_t c)
   return ((c.x == r.lc.x || c.x == r.uc.x)?(1):(0)) +
          ((c.y == r.lc.y || c.y == r.uc.y)?(1):(0)) +
          ((c.z == r.lc.z || c.z == r.uc.z)?(1):(0));
+}
+
+inline int is_boundry(const rect_t r,const cell_t c)
+{
+  return (boundryCount(r,c) != 0);
 }
 
 inline bool is_paired (const flag_t f)

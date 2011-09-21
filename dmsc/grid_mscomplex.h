@@ -108,6 +108,8 @@ namespace grid
     inline cell_fn_t& fn(int i);
     inline const cell_fn_t& fn(int i) const;
 
+    inline int surv_extrema(int i) const;
+
   public:
 
     void simplify(int_pair_list_t &,double simplification_treshold);
@@ -286,6 +288,24 @@ namespace grid
     catch(assertion_error e){e.push(_FFL).push(SVAR(i));throw;}
 
     return m_cp_fn[i];
+  }
+
+  inline int mscomplex_t::surv_extrema(int i) const
+  {
+    if(is_paired(i) == false)
+      return i;
+
+    ASSERT(index(i) == 0 || index(i) == 3);
+
+    eGDIR dir = (index(i) == 3)?(GDIR_ASC):(GDIR_DES);
+
+    ASSERT(m_conn[dir][pair_idx(i)].size() == 1);
+
+    int j = *m_conn[dir][pair_idx(i)].begin();
+
+    ASSERT(!is_paired(j));
+
+    return j;
   }
 
   inline std::string mscomplex_t::cp_info (int cp_no) const

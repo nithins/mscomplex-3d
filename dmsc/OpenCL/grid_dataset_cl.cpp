@@ -165,7 +165,26 @@ namespace grid
     }
 
     template<typename T>
-    void log_buffer(cl::Buffer buf,int n,int nlrepeat = -1,std::ostream &os=cout)
+    void log_buffer(T*  buf_cpu,int n,int xrepeat = -1, int yrepeat = -1,std::ostream &os=cout)
+    {
+      for( int i = 0 ; i < n; ++i)
+      {
+        if( (xrepeat > 0)  && (i%xrepeat == 0))
+        {
+          os<<endl;
+
+          if((yrepeat > 0 ) && ((i/xrepeat)%yrepeat == 0))
+            os<<"sheet no" << i/(xrepeat*yrepeat)<<endl;
+        }
+
+        os << buf_cpu[i]<< " ";
+      }
+
+      os<<endl;
+    }
+
+    template<typename T>
+    void log_buffer(cl::Buffer buf,int n,int xrepeat = -1, int yrepeat = -1,std::ostream &os=cout)
     {
       std::vector<T> buf_cpu(n);
 
@@ -173,15 +192,7 @@ namespace grid
 
       s_queue.enqueueReadBuffer(buf,true,0,sizeof(T)*n,buf_cpu.data());
 
-      for( int i = 0 ; i < buf_cpu.size(); ++i)
-      {
-        if( (nlrepeat > 0)  && (i%nlrepeat == 0))
-          cout<<endl;
-
-        os << buf_cpu[i]<< " ";
-      }
-
-      os<<endl;
+      log_buffer<T>(buf_cpu.data(),n,xrepeat,yrepeat,os);
     }
 
     void init(void)
@@ -571,19 +582,16 @@ namespace grid
       cell_pair_t dom,
       cell_pair_t ex_rect,
       cl::Image3D &flag_img,
-      cellid_t *h_cp_cellid,
-      cl_int    num_cps,
-      int      *h_result)
+      cl::Buffer &own_buf1,
+      cl::Buffer &own_buf2)
     {
-      int num_cells = num_cells2(from_cell_pair(ex_rect));
+      int num_ex = num_cells2(from_cell_pair(ex_rect));
 
       try
       {
-        cl::Buffer own_buf1(s_context,CL_MEM_READ_WRITE,num_cells*sizeof(int));
-        cl::Buffer own_buf2(s_context,CL_MEM_READ_WRITE,num_cells*sizeof(int));
+        own_buf1 = cl::Buffer(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
+        own_buf2 = cl::Buffer(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
         cl::Buffer is_updated_buf(s_context,CL_MEM_READ_WRITE,sizeof(int));
-        cl::Buffer cp_cellid_buf(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,
-                                 num_cps*sizeof(cellid_t),h_cp_cellid);
 
         s_init_propagate(rct,ext,dom,ex_rect,flag_img,own_buf1);
 
@@ -604,13 +612,83 @@ namespace grid
         }
         while(is_updated == 1);
 
-        s_init_update_to_cp_no(rct,ext,dom,ex_rect,cp_cellid_buf,num_cps,own_buf1);
-        s_update_to_cp_no(rct,ext,dom,ex_rect,flag_img,own_buf1,own_buf2);
         s_queue.finish();
+      }
+      catch(cl::Error err)
+      {
+        std::cerr<<_FFL<<std::endl;
+        std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
+        throw;
+      }
+    }
 
-        s_queue.enqueueReadBuffer(own_buf2,false,0,num_cells*sizeof(int),h_result);
+    void __compute_extrema_connections
+      (dataset_ptr_t ds,
+       mscomplex_ptr_t msc,
+       cl::Image3D& flag_img,
+       cl::Buffer& cp_cellid_buf,
+       eGDIR dir)
+    {
+      cell_pair_t rct = to_cell_pair(ds->m_rect);
+      cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
+      cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
+
+      rect_t ex_rect      = (dir == GDIR_DES)?(rect_t(ds->m_rect.lc()+1,ds->m_rect.uc()-1)):(ds->m_rect);
+      int   ex_dim        = (dir == GDIR_DES)?(3):(0);
+      int   sad_dim       = (dir == GDIR_DES)?(2):(1);
+      dataset_t::owner_array_t &owner_array = (dir== GDIR_DES)?(ds->m_owner_maxima):(ds->m_owner_minima);
+
+      cl::Buffer own_buf1,own_buf2;
+
+      __owner_extrema(rct,ext,dom,to_cell_pair(ex_rect),flag_img,own_buf1,own_buf2);
+
+      int num_ex = num_cells2(ex_rect);
+
+      try
+      {
+        s_init_update_to_cp_no(rct,ext,dom,to_cell_pair(ex_rect),cp_cellid_buf,msc->get_num_critpts(),own_buf1);
         s_queue.finish();
+        s_queue.enqueueReadBuffer(own_buf1,true,0,num_ex*sizeof(int),owner_array.data());
 
+        for(int i = 0 ; i < msc->get_num_critpts();++i)
+        {
+          if(msc->index(i) != sad_dim )
+            continue;
+
+          cellid_t c = msc->cellid(i);
+
+          if(ds->isCellPaired(c) && ds->getCellDim(ds->getCellPairId(c)) != ex_dim )
+            continue;
+
+          cellid_t e1,e2;
+          get_adj_extrema(c,e1,e2,dir);
+
+          if(ds->m_rect.contains(e1))
+          {
+            int o = owner_array(e1/2);
+
+            if(!ds->isCellCritical(e1))
+            {
+              o = owner_array(i_to_c2(ex_rect,o)/2);
+            }
+
+            msc->connect_cps(i,o);
+          }
+
+          if(ds->m_rect.contains(e2))
+          {
+            int o = owner_array(e2/2);
+
+            if(!ds->isCellCritical(e2))
+            {
+              o = owner_array(i_to_c2(ex_rect,o)/2);
+            }
+
+            msc->connect_cps(i,o);
+          }
+        }
+
+        s_queue.enqueueReadBuffer(own_buf2,true,0,num_ex*sizeof(int),owner_array.data());
       }
       catch(cl::Error err)
       {
@@ -622,22 +700,41 @@ namespace grid
 
     void worker::owner_extrema(dataset_ptr_t ds,mscomplex_ptr_t msc)
     {
+      cl::Buffer cp_cellid_buf(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,
+                               msc->get_num_critpts()*sizeof(cellid_t),msc->m_cp_cellid.data());
+
+      __compute_extrema_connections(ds,msc,flag_img,cp_cellid_buf,GDIR_DES);
+      __compute_extrema_connections(ds,msc,flag_img,cp_cellid_buf,GDIR_ASC);
+      s_queue.finish();
+    }
+
+    void worker::owner_extrema(dataset_ptr_t ds)
+    {
       cell_pair_t rct = to_cell_pair(ds->m_rect);
       cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
       cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
 
-      cell_pair_t max_rect = to_cell_pair(rect_t(ds->m_rect.lc()+1,ds->m_rect.uc()-1));
-      cell_pair_t min_rect = to_cell_pair(ds->m_rect);
+      for(int dir = 0 ; dir < 2 ; ++dir)
+      {
+        try
+        {
+          rect_t ex_rect      = (dir == GDIR_DES)?(rect_t(ds->m_rect.lc()+1,ds->m_rect.uc()-1)):(ds->m_rect);
+          dataset_t::owner_array_t &owner_array = (dir== GDIR_DES)?(ds->m_owner_maxima):(ds->m_owner_minima);
 
-      __owner_extrema(rct,ext,dom,max_rect,flag_img,
-                      msc->m_cp_cellid.data(),msc->get_num_critpts(),
-                      ds->m_owner_maxima.data());
+          cl::Buffer own_buf1,own_buf2;
+          int num_ex = num_cells2(ex_rect);
 
-      __owner_extrema(rct,ext,dom,min_rect,flag_img,
-                      msc->m_cp_cellid.data(),msc->get_num_critpts(),
-                      ds->m_owner_minima.data());
+          __owner_extrema(rct,ext,dom,to_cell_pair(ex_rect),flag_img,own_buf1,own_buf2);
 
-      s_queue.finish();
+          s_queue.enqueueReadBuffer(own_buf1,true,0,num_ex*sizeof(int),owner_array.data());
+        }
+        catch(cl::Error err)
+        {
+          std::cerr<<_FFL<<std::endl;
+          std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
+          throw;
+        }
+      }
     }
   }
 }
