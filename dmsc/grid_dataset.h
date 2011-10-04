@@ -91,7 +91,7 @@ namespace grid
   public:
     void  computeMsGraph(mscomplex_ptr_t msgraph);
 
-    void  saveManifolds(mscomplex_const_ptr_t msgraph,const std::string &);
+    void  saveManifolds(mscomplex_ptr_t msgraph,const std::string &);
 
   // subroutines to main functions
   public:
@@ -193,7 +193,6 @@ namespace grid
       return m_vert_fns(get_cell_vert(c)/2);
     }
 
-
     inline rect_t get_rect()
     {
       return m_rect;
@@ -203,6 +202,8 @@ namespace grid
     {
       return m_ext_rect;
     }
+
+    inline rect_t get_extrema_rect(eGDIR dir);
 
     void log_flags();
 
@@ -222,6 +223,11 @@ namespace grid
 
     void extract_vdata_subarray(rect_t r,const std::string &filename);
   };
+
+  inline rect_t dataset_t::get_extrema_rect(eGDIR dir)
+  {
+    return (dir == GDIR_DES)?(rect_t(m_rect.lc()+1,m_rect.uc()-1)):(m_rect);
+  }
 
   inline int get_cell_dim ( cellid_t c )
   {

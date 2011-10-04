@@ -2,12 +2,13 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
-
 #include <stdexcept>
+
+#include <boost/thread/thread.hpp>
+
 #include <cpputils.h>
 
 #include<grid_dataset_cl.h>
-
 #include<grid_dataset.h>
 #include<grid_mscomplex.h>
 
@@ -36,9 +37,9 @@ cl::KernelFunctor s_scan_update_sums;
 
 cl::KernelFunctor s_init_propagate;
 cl::KernelFunctor s_propagate;
-cl::KernelFunctor s_init_update_to_cp_no;
-cl::KernelFunctor s_update_to_cp_no;
-cl::KernelFunctor s_update_to_surviving_cp_no;
+cl::KernelFunctor s_update_cp_cell_to_cp_no;
+cl::KernelFunctor s_init_update_to_surv_cp_no;
+cl::KernelFunctor s_update_to_surv_cp_no;
 
 
 const char * s_header_file =
@@ -341,14 +342,14 @@ namespace grid
         s_propagate =  cl::Kernel(program3, "propagate").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_init_update_to_cp_no =  cl::Kernel(program3, "init_update_to_cp_no").
+        s_update_cp_cell_to_cp_no =  cl::Kernel(program3, "update_cp_cell_to_cp_no").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-        s_update_to_cp_no = cl::Kernel(program3, "update_to_cp_no").
+        s_init_update_to_surv_cp_no = cl::Kernel(program3, "init_update_to_surv_cp_no").
             bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
-//        s_update_to_surviving_cp_no =  cl::Kernel(program3, "update_to_surviving_cp_no").
-//            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
+        s_update_to_surv_cp_no =  cl::Kernel(program3, "update_to_surv_cp_no").
+            bind(s_queue,cl::NullRange,cl::NDRange(WG_SIZE),cl::NDRange(WI_SIZE));
 
       }
       catch (cl::Error err)
@@ -540,18 +541,6 @@ namespace grid
       }
     }
 
-    void worker::assign_gradient(dataset_ptr_t ds)
-    {
-      cl::Image3D  func_img;
-      cell_pair_t rct = to_cell_pair(ds->m_rect);
-      cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
-      cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
-
-      __assign_gradient(rct,ext,dom,func_img,flag_img,
-                        ds->m_vert_fns.data(),ds->m_cell_flags.data());
-    }
-
-
     void worker::assign_gradient(dataset_ptr_t ds, mscomplex_ptr_t msc)
     {
       cl::Image3D  func_img;
@@ -582,15 +571,14 @@ namespace grid
       cell_pair_t dom,
       cell_pair_t ex_rect,
       cl::Image3D &flag_img,
-      cl::Buffer &own_buf1,
-      cl::Buffer &own_buf2)
+      int * h_ex_own)
     {
       int num_ex = num_cells2(from_cell_pair(ex_rect));
 
       try
       {
-        own_buf1 = cl::Buffer(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
-        own_buf2 = cl::Buffer(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
+        cl::Buffer own_buf1(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
+        cl::Buffer own_buf2(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
         cl::Buffer is_updated_buf(s_context,CL_MEM_READ_WRITE,sizeof(int));
 
         s_init_propagate(rct,ext,dom,ex_rect,flag_img,own_buf1);
@@ -612,6 +600,8 @@ namespace grid
         }
         while(is_updated == 1);
 
+        s_queue.enqueueReadBuffer(own_buf1,true,0,num_ex*sizeof(int),h_ex_own);
+
         s_queue.finish();
       }
       catch(cl::Error err)
@@ -622,6 +612,22 @@ namespace grid
       }
     }
 
+    typedef dataset_t::owner_array_t owner_array_t;
+
+    inline int __get_owner_cp_no
+      ( dataset_const_ptr_t ds,
+        const owner_array_t& owner_array,
+        const cellid_t &c,
+        const rect_t ex_rect)
+    {
+      int o = owner_array(c/2);
+
+      if(!ds->isCellCritical(c))
+        o = owner_array(i_to_c2(ex_rect,o)/2);
+
+      return o;
+    }
+
     void __compute_extrema_connections
       (dataset_ptr_t ds,
        mscomplex_ptr_t msc,
@@ -629,28 +635,49 @@ namespace grid
        cl::Buffer& cp_cellid_buf,
        eGDIR dir)
     {
-      cell_pair_t rct = to_cell_pair(ds->m_rect);
-      cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
-      cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
+      cell_pair_t rct        = to_cell_pair(ds->m_rect);
+      cell_pair_t ext        = to_cell_pair(ds->m_ext_rect);
+      cell_pair_t dom        = to_cell_pair(ds->m_domain_rect);
+      rect_t      ex_rect    = ds->get_extrema_rect(dir);
+      cell_pair_t ex_rect_cl = to_cell_pair(ex_rect);
 
-      rect_t ex_rect      = (dir == GDIR_DES)?(rect_t(ds->m_rect.lc()+1,ds->m_rect.uc()-1)):(ds->m_rect);
-      int   ex_dim        = (dir == GDIR_DES)?(3):(0);
-      int   sad_dim       = (dir == GDIR_DES)?(2):(1);
-      dataset_t::owner_array_t &owner_array = (dir== GDIR_DES)?(ds->m_owner_maxima):(ds->m_owner_minima);
-
-      cl::Buffer own_buf1,own_buf2;
-
-      __owner_extrema(rct,ext,dom,to_cell_pair(ex_rect),flag_img,own_buf1,own_buf2);
-
-      int num_ex = num_cells2(ex_rect);
+      int            ex_dim      = (dir == GDIR_DES)?(3):(0);
+      int            sad_dim     = (dir == GDIR_DES)?(2):(1);
+      owner_array_t &owner_array = (dir == GDIR_DES)?(ds->m_owner_maxima):(ds->m_owner_minima);
+      int            num_ex      = num_cells2(ex_rect);
+      int            num_cps     = msc->get_num_critpts();
 
       try
       {
-        s_init_update_to_cp_no(rct,ext,dom,to_cell_pair(ex_rect),cp_cellid_buf,msc->get_num_critpts(),own_buf1);
+        cl::Buffer own_buf1(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
+        cl::Buffer own_buf2(s_context,CL_MEM_READ_WRITE,num_ex*sizeof(int));
+        cl::Buffer is_updated_buf(s_context,CL_MEM_READ_WRITE,sizeof(int));
+
+        s_init_propagate(rct,ext,dom,ex_rect_cl,flag_img,own_buf1);
+
+        int is_updated;
+
+        do
+        {
+          is_updated = 0;
+
+          s_queue.enqueueWriteBuffer(is_updated_buf,true,0,sizeof(int),&is_updated);
+          s_propagate(rct,ext,dom,ex_rect_cl,own_buf1,own_buf2,is_updated_buf);
+          s_queue.finish();
+
+          s_queue.enqueueReadBuffer(is_updated_buf,true,0,sizeof(int),&is_updated);
+          s_queue.finish();
+
+          std::swap(own_buf1,own_buf2);
+        }
+        while(is_updated == 1);
+
+        s_update_cp_cell_to_cp_no(rct,ext,dom,ex_rect_cl,cp_cellid_buf,num_cps,own_buf1);
         s_queue.finish();
         s_queue.enqueueReadBuffer(own_buf1,true,0,num_ex*sizeof(int),owner_array.data());
+        s_queue.finish();
 
-        for(int i = 0 ; i < msc->get_num_critpts();++i)
+        for(int i = 0 ; i < num_cps;++i)
         {
           if(msc->index(i) != sad_dim )
             continue;
@@ -664,31 +691,15 @@ namespace grid
           get_adj_extrema(c,e1,e2,dir);
 
           if(ds->m_rect.contains(e1))
-          {
-            int o = owner_array(e1/2);
-
-            if(!ds->isCellCritical(e1))
-            {
-              o = owner_array(i_to_c2(ex_rect,o)/2);
-            }
-
-            msc->connect_cps(i,o);
-          }
+            msc->connect_cps(i,__get_owner_cp_no(ds,owner_array,e1,ex_rect));
 
           if(ds->m_rect.contains(e2))
-          {
-            int o = owner_array(e2/2);
+            msc->connect_cps(i,__get_owner_cp_no(ds,owner_array,e2,ex_rect));
 
-            if(!ds->isCellCritical(e2))
-            {
-              o = owner_array(i_to_c2(ex_rect,o)/2);
-            }
-
-            msc->connect_cps(i,o);
-          }
         }
 
         s_queue.enqueueReadBuffer(own_buf2,true,0,num_ex*sizeof(int),owner_array.data());
+        s_queue.finish();
       }
       catch(cl::Error err)
       {
@@ -705,36 +716,130 @@ namespace grid
 
       __compute_extrema_connections(ds,msc,flag_img,cp_cellid_buf,GDIR_DES);
       __compute_extrema_connections(ds,msc,flag_img,cp_cellid_buf,GDIR_ASC);
-      s_queue.finish();
     }
 
-    void worker::owner_extrema(dataset_ptr_t ds)
+    void assign_gradient_and_owner_extrema(dataset_ptr_t ds)
     {
+      cl::Image3D  flag_img;
+
+      cell_pair_t rct      = to_cell_pair(ds->m_rect);
+      cell_pair_t ext      = to_cell_pair(ds->m_ext_rect);
+      cell_pair_t dom      = to_cell_pair(ds->m_domain_rect);
+      cell_pair_t max_rect = to_cell_pair(ds->get_extrema_rect(GDIR_DES));
+      cell_pair_t min_rect = to_cell_pair(ds->get_extrema_rect(GDIR_ASC));
+
+      {
+        cl::Image3D  func_img;
+
+        __assign_gradient(rct,ext,dom,func_img,flag_img,
+                          ds->m_vert_fns.data(),ds->m_cell_flags.data());
+      }
+
+      __owner_extrema(rct,ext,dom,max_rect,flag_img,ds->m_owner_maxima.data());
+      __owner_extrema(rct,ext,dom,min_rect,flag_img,ds->m_owner_minima.data());
+    }
+
+    void __setup_cp_no_thd(mscomplex_ptr_t msc,int tid,int num_thds,int *h_surv_cp_no)
+    {
+      for ( int i = tid; i < msc->get_num_critpts();i+=num_thds)
+      {
+        try
+        {
+          h_surv_cp_no[i] = (msc->is_extrema(i))?(msc->surv_extrema(i)):(-1);
+        }
+        catch(assertion_error e)
+        {
+          e.PUSHVAR(msc->cp_info(i));
+          e.PUSHVAR(msc->cp_conn(i));
+
+          if(msc->is_paired(i))
+          {
+            e.PUSHVAR(msc->cp_info(msc->pair_idx(i)));
+            e.PUSHVAR(msc->cp_conn(msc->pair_idx(i)));
+          }
+
+          throw;
+        }
+      }
+    }
+
+    void __update_to_surv_extrema
+      ( cell_pair_t rct,
+        cell_pair_t ext,
+        cell_pair_t dom,
+        cell_pair_t ex_rect,
+        cl::Buffer &cp_cellid_buf,
+        cl::Buffer &surv_cp_no_buf,
+        int        num_cps,
+        int *      h_ex_own
+       )
+    {
+      int num_ex  = num_cells2(from_cell_pair(ex_rect));
+
+      try
+      {
+        cl::Buffer own_buf1(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,num_ex*sizeof(int),h_ex_own);
+        cl::Buffer own_buf2(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,num_ex*sizeof(int),h_ex_own);
+
+        s_init_update_to_surv_cp_no(rct,ext,dom,ex_rect,cp_cellid_buf,surv_cp_no_buf,num_cps,own_buf1);
+        s_update_to_surv_cp_no(rct,ext,dom,ex_rect,own_buf1,own_buf2);
+
+        s_queue.finish();
+
+        s_queue.enqueueReadBuffer(own_buf2,true,0,num_ex*sizeof(int),h_ex_own);
+      }
+      catch(cl::Error err)
+      {
+        std::cerr<<_FFL<<std::endl;
+        std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
+        throw;
+      }
+    }
+
+    void update_to_surv_extrema(dataset_ptr_t ds,mscomplex_ptr_t msc)
+    {
+      int num_cps = msc->get_num_critpts();
+
+      int_list_t h_surv_cp_no(num_cps);
+
+      {
+        boost::thread_group group;
+        for(int tid = 0 ; tid < g_num_threads; ++tid)
+//          group.create_thread(bind(__setup_cp_no_thd,msc,tid,g_num_threads,h_surv_cp_no.data()));
+          __setup_cp_no_thd(msc,tid,g_num_threads,h_surv_cp_no.data());
+        group.join_all();
+      }
+
       cell_pair_t rct = to_cell_pair(ds->m_rect);
       cell_pair_t ext = to_cell_pair(ds->m_ext_rect);
       cell_pair_t dom = to_cell_pair(ds->m_domain_rect);
 
-      for(int dir = 0 ; dir < 2 ; ++dir)
+      cell_pair_t max_rect = to_cell_pair(ds->get_extrema_rect(GDIR_DES));
+      cell_pair_t min_rect = to_cell_pair(ds->get_extrema_rect(GDIR_ASC));
+
+      cl::Buffer cp_cellid_buf,surv_cp_no_buf;
+
+      try
       {
-        try
-        {
-          rect_t ex_rect      = (dir == GDIR_DES)?(rect_t(ds->m_rect.lc()+1,ds->m_rect.uc()-1)):(ds->m_rect);
-          dataset_t::owner_array_t &owner_array = (dir== GDIR_DES)?(ds->m_owner_maxima):(ds->m_owner_minima);
+        cp_cellid_buf  = cl::Buffer(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,
+                                    num_cps*sizeof(cellid_t),msc->m_cp_cellid.data());
 
-          cl::Buffer own_buf1,own_buf2;
-          int num_ex = num_cells2(ex_rect);
-
-          __owner_extrema(rct,ext,dom,to_cell_pair(ex_rect),flag_img,own_buf1,own_buf2);
-
-          s_queue.enqueueReadBuffer(own_buf1,true,0,num_ex*sizeof(int),owner_array.data());
-        }
-        catch(cl::Error err)
-        {
-          std::cerr<<_FFL<<std::endl;
-          std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
-          throw;
-        }
+        surv_cp_no_buf = cl::Buffer(s_context,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,
+                                    num_cps*sizeof(int),h_surv_cp_no.data());
       }
+      catch(cl::Error err)
+      {
+        std::cerr<<_FFL<<std::endl;
+        std::cerr<< "ERROR: "<< err.what()<< "("<< err.err()<< ")"<< std::endl;
+        throw;
+      }
+
+      __update_to_surv_extrema(rct,ext,dom,max_rect,cp_cellid_buf,surv_cp_no_buf,
+                               msc->get_num_critpts(),ds->m_owner_maxima.data());
+
+      __update_to_surv_extrema(rct,ext,dom,min_rect,cp_cellid_buf,surv_cp_no_buf,
+                               msc->get_num_critpts(),ds->m_owner_minima.data());
+
     }
   }
 }

@@ -109,6 +109,7 @@ namespace grid
     inline const cell_fn_t& fn(int i) const;
 
     inline int surv_extrema(int i) const;
+    inline bool is_extrema(int i) const;
 
   public:
 
@@ -133,6 +134,7 @@ namespace grid
 
 
     inline std::string cp_info (int cp_no) const;
+    inline std::string cp_conn (int cp_no) const;
 
   };
 
@@ -290,12 +292,17 @@ namespace grid
     return m_cp_fn[i];
   }
 
+  inline bool mscomplex_t::is_extrema(int i) const
+  {
+    return (index(i) == 0 || index(i) == 3);
+  }
+
   inline int mscomplex_t::surv_extrema(int i) const
   {
+    ASSERT(is_extrema(i));
+
     if(is_paired(i) == false)
       return i;
-
-    ASSERT(index(i) == 0 || index(i) == 3);
 
     eGDIR dir = (index(i) == 3)?(GDIR_ASC):(GDIR_DES);
 
@@ -321,6 +328,25 @@ namespace grid
 //    ss<<"is_cancelled ::"<<is_canceled(cp_no)<<std::endl;
 //    ss<<"is_paired    ::"<<is_paired(cp_no)<<std::endl;
     ss<<"pair_idx     ::"<<pair_idx(cp_no)<<std::endl;
+    return ss.str();
+  }
+
+  inline std::string mscomplex_t::cp_conn (int i) const
+  {
+    std::stringstream ss;
+
+    ss<<std::endl<<"des = ";
+
+    for(const_conn_iter_t it = m_des_conn[i].begin(); it != m_des_conn[i].end(); ++it)
+      ss<<cellid(*it);
+
+    ss<<std::endl<<"asc = ";
+
+    for(const_conn_iter_t it = m_asc_conn[i].begin(); it != m_asc_conn[i].end(); ++it)
+      ss<<cellid(*it);
+
+    ss<<std::endl;
+
     return ss.str();
   }
 }

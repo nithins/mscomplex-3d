@@ -284,9 +284,8 @@ namespace grid
     for(int i = two_power(m_level_ct)-1 ;i < m_pieces.size(); ++i)
     {
       piece_ptr_t dp = m_pieces[i];
-      string name    = dp->get_basename(m_basename)+".mfold.bin";
       dp->m_msgraph->invert_for_collection();
-      dp->m_dataset->saveManifolds(dp->m_msgraph,name);
+      dp->m_dataset->saveManifolds(dp->m_msgraph,dp->get_basename(m_basename));
     }
   }
 

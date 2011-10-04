@@ -743,31 +743,6 @@ namespace grid
       }
     }
 
-    template<typename MFOLD_T>
-    void add_to_mfold(MFOLD_T *mfold,cellid_t c,const stack_t &);
-
-    template<>
-    void add_to_mfold(std::set<cellid_t> *mfold,cellid_t c,const stack_t &)
-    {
-      mfold->insert(c);
-    }
-
-    template<>
-    void add_to_mfold(cellid_list_t *mfold,cellid_t c,const stack_t &)
-    {
-      mfold->push_back(c);
-    }
-
-    template<typename mfold_t>
-    void do_dfs_collect_manifolds
-        (dataset_const_ptr_t ds,
-         mfold_t *mfold,
-         cellid_t c,
-         eGDIR dir)
-    {
-      do_dfs(ds,c,dir,pass_can_visit,bind(add_to_mfold<mfold_t>,mfold,_1,_2),pass_visit);
-    }
-
     bool visit_if_not_visited(dataset_ptr_t ds,cellid_t c,const stack_t &)
     {
       return (ds->isCellVisited(c) == false);
@@ -936,6 +911,103 @@ namespace grid
     }
   }
 
+  namespace dfs
+  {
+    typedef dataset_t::mfold_t mfold_t;
+    typedef std::map<cellid_t,int> frontier_t;
+    typedef boost::shared_ptr<frontier_t> frontier_ptr_t;
+
+    void do_frontier_traversal
+      (dataset_const_ptr_t ds,cellid_t start_cell,eGDIR dir)
+    {
+      uint dim = ds->getCellDim(start_cell);
+
+      frontier_ptr_t frontier1(new frontier_t);
+      frontier_ptr_t frontier2(new frontier_t);
+
+      (*frontier1)[start_cell] = 1;
+
+      for(int level = 0 ;;++level)
+      {
+        frontier_t &frontier     = ((level&1) == 0)?(*frontier1):(*frontier2);
+        frontier_t &new_frontier = ((level&1) == 1)?(*frontier1):(*frontier2);
+
+        if(frontier.size() == 0)
+          break;
+
+        for(frontier_t::iterator it = frontier.begin() ; it != frontier.end() ;++it)
+        {
+          cellid_t c  = it->first;
+          int      ct = it->second;
+
+          ASSERT(ds->m_rect.contains(c));
+
+          cellid_t      cets[20];
+
+          uint cet_ct = ( ds.get()->*getcets[dir] ) ( c,cets );
+
+          for ( uint i = 0 ; i < cet_ct ; i++ )
+          {
+            if ( ds->isCellExterior ( cets[i] ) )
+              continue;
+
+            if ( ds->isCellCritical ( cets[i] ) )
+              continue;
+
+            cellid_t next_cell = ds->getCellPairId ( cets[i] );
+
+            ASSERT(ds->m_rect.contains(next_cell));
+
+            bool is_dim        = (dim  == ds->getCellDim ( next_cell ));
+            bool is_vnext      = ds->cmp_ftors[dir](next_cell,c);
+
+            if (is_dim && is_vnext)
+            {
+              if(new_frontier.count(next_cell) == 0)
+                new_frontier[next_cell] = 0;
+
+              new_frontier[next_cell] += ct;
+            }
+          }
+        }// end for i in [0,frontier.size)
+
+        frontier.clear();
+      }// end while(frontier.size != 0 )
+    }
+
+    void add_to_mfold(mfold_t *mfold,cellid_t c,const stack_t &)
+    {
+      mfold->push_back(c);
+    }
+
+    void do_dfs_collect_manifolds
+        (dataset_const_ptr_t ds,
+         mfold_t *mfold,
+         cellid_t c,
+         eGDIR dir)
+    {
+      do_frontier_traversal(ds,c,dir);
+    }
+
+    void mark_owner_extrema(cellid_t c, const stack_t &,dataset_t::owner_array_t * own_arr,int i)
+    {
+      (*own_arr)(c/2) = i;
+    }
+
+    void do_dfs_mark_owner_extrema
+        (dataset_ptr_t ds,cellid_t c,int i)
+    {
+
+      ASSERT(get_cell_dim(c) == 0 || get_cell_dim(c) == 3);
+
+      eGDIR dir = (get_cell_dim(c) == 3)?(GDIR_DES):(GDIR_ASC);
+
+      dataset_t::owner_array_t *own_arr = (dir == GDIR_DES)?(&ds->m_owner_maxima):(&ds->m_owner_minima);
+
+      do_dfs(ds,c,dir,pass_can_visit,bind(mark_owner_extrema,_1,_2,own_arr,i),pass_visit);
+    }
+  }
+
   void  dataset_t::get_mfold
       (mfold_t *mfold, mscomplex_const_ptr_t msc, int i, int dir) const
   {
@@ -967,30 +1039,9 @@ namespace grid
     }
   }
 
-  namespace dfs
-  {
-    void mark_owner_extrema(cellid_t c, const stack_t &,dataset_t::owner_array_t * own_arr,int i)
-    {
-      (*own_arr)(c/2) = i;
-    }
-
-    void do_dfs_mark_owner_extrema
-        (dataset_ptr_t ds,cellid_t c,int i)
-    {
-
-      ASSERT(get_cell_dim(c) == 0 || get_cell_dim(c) == 3);
-
-      eGDIR dir = (get_cell_dim(c) == 3)?(GDIR_DES):(GDIR_ASC);
-
-      dataset_t::owner_array_t *own_arr = (dir == GDIR_DES)?(&ds->m_owner_maxima):(&ds->m_owner_minima);
-
-      do_dfs(ds,c,dir,pass_can_visit,bind(mark_owner_extrema,_1,_2,own_arr,i),pass_visit);
-    }
-  }
-
   void  dataset_t::mark_extrema_owner_thd(mscomplex_ptr_t msc,cp_producer_ptr_t p)
   {
-    for ( int i ; p->next(i);++i)
+    for ( int i ; p->next(i);)
     {
       dfs::do_dfs_mark_owner_extrema(shared_from_this(),msc->cellid(i),msc->surv_extrema(i));
     }
@@ -1142,18 +1193,49 @@ namespace grid
       for(int tid = 0 ; tid < g_num_threads; ++tid)
         group.create_thread(bind(process_mfold,ds,msc,prd,mque));
 
+//      process_mfold(ds,msc,prd,mque);
+
       write_mfold(mque,os,cp_order,offsets,num_cps);
 
       write_header(ds,msc,cp_order,offsets,os);
     }
   }
 
-  void  dataset_t::saveManifolds(mscomplex_const_ptr_t msc,const std::string &s)
+  void  dataset_t::saveManifolds(mscomplex_ptr_t msc,const std::string &bn)
   {
-    std::ofstream fs(s.c_str());
+    std::ofstream fs((bn+".mfold.bin").c_str());
     ensure(fs.is_open(),"unable to open file");
     save_mfolds::save_saddles(fs,shared_from_this(),msc);
     fs.close();
+
+#ifdef BUILD_EXEC_OPENCL
+    opencl::update_to_surv_extrema(shared_from_this(),msc);
+#else
+    {
+      cp_producer_ptr_t prd(new cp_producer_t(msc,cp_producer_t::extrema_filter));
+      boost::thread_group group;
+      for(int tid = 0 ; tid < g_num_threads; ++tid)
+        group.create_thread(bind(dataset_t::mark_extrema_owner_thd,msc,prd));
+      group.join_all();
+    }
+#endif
+
+    {
+      int ex_num = num_cells2(rect_t(m_rect.lc()+1,m_rect.uc()-1));
+      std::ofstream fs((bn+".max.raw").c_str());
+      ensure(fs.is_open(),"unable to open file");
+      fs.write((char*)(void*)m_owner_maxima.data(),sizeof(int)*ex_num);
+      fs.close();
+    }
+
+    {
+      int ex_num = num_cells2(m_rect);
+      std::ofstream fs((bn+".min.raw").c_str());
+      ensure(fs.is_open(),"unable to open file");
+      fs.write((char*)(void*)m_owner_maxima.data(),sizeof(int)*ex_num);
+      fs.close();
+    }
+
   }
 
   void dataset_t::log_flags()
